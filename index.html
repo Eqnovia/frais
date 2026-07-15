@@ -770,6 +770,8 @@
         <option value="user2">Soufiane Laraichi</option>
         <option value="user3">Bourzgui Fatima Zahra</option>
         <option value="user4">Larbi</option>
+        <option value="user5">Ibrahime</option>
+        <option value="user6">Hamza</option>
       </select>
     </div>
     <div class="form-group">
@@ -867,9 +869,51 @@
       <button class="btn btn-ghost" onclick="closeJustifModal()">Fermer</button>
     </div>
   </div>
-</div>
-
-<!-- TOP BAR -->
+  </div>
+  
+  <!-- MODAL (user management) -->
+  <div class="modal-overlay" id="userModal" role="dialog" aria-modal="true">
+    <div class="modal" style="max-width:600px;">
+      <div class="modal-header">
+        <h3>👥 Gestion des utilisateurs</h3>
+        <button class="modal-close" onclick="closeUserModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom:16px;">
+          <h4 style="font-size:13px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">Ajouter un utilisateur</h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label" for="newUserName">Nom complet</label>
+              <input type="text" class="form-input" id="newUserName" placeholder="Ex: Jean Dupont" autocomplete="off"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="newUserPassword">Mot de passe</label>
+              <input type="text" class="form-input" id="newUserPassword" placeholder="Mot de passe" autocomplete="off"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="newUserRole">Rôle</label>
+              <select class="form-select" id="newUserRole">
+                <option value="user">Utilisateur</option>
+                <option value="admin">Administrateur</option>
+              </select>
+            </div>
+            <div class="form-group" style="display:flex;align-items:flex-end;">
+              <button class="btn btn-primary" onclick="addNewUser()" style="width:100%;">➕ Ajouter</button>
+            </div>
+          </div>
+        </div>
+        <div style="border-top:1px solid var(--gray-200);padding-top:16px;">
+          <h4 style="font-size:13px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">Liste des utilisateurs</h4>
+          <div id="usersList" style="max-height:300px;overflow-y:auto;"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeUserModal()">Fermer</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- TOP BAR -->
 <header class="topbar" id="appContent" style="display:none;">
   <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()" aria-label="Menu">
     ☰
@@ -923,6 +967,9 @@
   </a>
 
   <span class="nav-label" id="adminOnlyLabel"><span class="nav-label-icon">⚙️</span> Gestion</span>
+  <a class="nav-item" id="adminUsersBtn" data-tooltip="Gestion utilisateurs" onclick="openUserManager()">
+    <span class="nav-icon">👥</span> <span>Utilisateurs</span>
+  </a>
   <a class="nav-item" id="adminClearBtn" data-tooltip="Tout effacer" onclick="confirmClear()" style="color:var(--red);">
     <span class="nav-icon">🗑️</span> <span>Tout effacer</span>
   </a>
@@ -942,6 +989,8 @@
           <option value="user2">👤 Soufiane Laraichi</option>
           <option value="user3">👤 Fatima zahra Bourzgui</option>
           <option value="user4">👤 Larbi</option>
+          <option value="user5">👤 Ibrahime</option>
+          <option value="user6">👤 Hamza</option>
         </select>
         <span class="user-badge admin" id="userBadge">Admin</span>
       </div>
@@ -1117,11 +1166,6 @@
         </select>
         <select class="form-select" id="filterUser" onchange="renderAll()">
           <option value="all">👤 Tous</option>
-          <option value="admin">Admin</option>
-          <option value="user1">Rachid</option>
-          <option value="user2">Soufiane</option>
-          <option value="user3">Fatima</option>
-          <option value="user4">Larbi</option>
         </select>
         <div class="filter-sep"></div>
         <input type="text" class="form-input" id="filterSearch" placeholder="🔍 Recherche…" oninput="renderAll()" style="min-width:100px;"/>
@@ -1170,11 +1214,6 @@
         </select>
         <select class="form-select" id="filterMonthUser" onchange="renderMonthly()" style="height:32px;width:auto;font-size:12px;">
           <option value="all">👤 Tous</option>
-          <option value="admin">Admin</option>
-          <option value="user1">Rachid</option>
-          <option value="user2">Soufiane</option>
-          <option value="user3">Fatima</option>
-          <option value="user4">Larbi</option>
         </select>
       </div>
       <div class="export-group">
@@ -1323,7 +1362,9 @@ const USERS = {
   user1: { password: 'rachid2026', label: 'Rachid Bayed', isAdmin: false },
   user2: { password: 'soufiane2026', label: 'Soufiane Laraichi', isAdmin: false },
   user3: { password: 'fatima2026', label: 'Bourzgui Fatima Zahra', isAdmin: false },
-  user4: { password: 'larbi2026', label: 'Larbi', isAdmin: false }
+  user4: { password: 'larbi2026', label: 'Larbi', isAdmin: false },
+  user5: { password: 'ibrahime2026', label: 'Ibrahime', isAdmin: false },
+  user6: { password: 'hamza2026', label: 'Hamza', isAdmin: false }
 };
 
 // Données de démonstration pour Rachid Bayed
@@ -1432,7 +1473,7 @@ function updateUserUI() {
   const first = userInfo.label.substring(0, 1);
   avatar.textContent = first;
   
-  const adminOnly = document.querySelectorAll('#adminOnlyLabel, #adminClearBtn');
+  const adminOnly = document.querySelectorAll('#adminOnlyLabel, #adminUsersBtn, #adminClearBtn');
   adminOnly.forEach(el => el.style.display = isAdmin ? '' : 'none');
   
   const filterUser = document.getElementById('filterUser');
@@ -1443,6 +1484,149 @@ function updateUserUI() {
   const filterMonthUser = document.getElementById('filterMonthUser');
   if (filterMonthUser) {
     filterMonthUser.style.display = isAdmin ? '' : 'none';
+  }
+}
+
+// ════════════════════════════════════════════
+// USER MANAGEMENT (Admin)
+// ════════════════════════════════════════════
+function openUserManager() {
+  if (!isAdmin) {
+    return toast('Seul l\'administrateur peut gérer les utilisateurs.', 'err');
+  }
+  renderUsersList();
+  document.getElementById('userModal').classList.add('open');
+}
+
+function closeUserModal() {
+  document.getElementById('userModal').classList.remove('open');
+}
+
+document.getElementById('userModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('userModal')) closeUserModal();
+});
+
+function renderUsersList() {
+  const container = document.getElementById('usersList');
+  const users = Object.entries(USERS).filter(([key]) => key !== 'admin');
+  
+  if (!users.length) {
+    container.innerHTML = '<p style="color:var(--gray-400);font-size:13px;text-align:center;padding:20px;">Aucun utilisateur.</p>';
+    return;
+  }
+  
+  container.innerHTML = users.map(([key, u]) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:8px;background:var(--white);">
+      <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+        <div style="width:32px;height:32px;border-radius:50%;background:${u.isAdmin ? 'var(--eq-blue-pale)' : 'var(--gray-100)'};color:${u.isAdmin ? 'var(--eq-blue)' : 'var(--gray-700)'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">
+          ${u.label.substring(0,1).toUpperCase()}
+        </div>
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:13px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(u.label)}</div>
+          <div style="font-size:11px;color:var(--gray-400);">${u.isAdmin ? 'Administrateur' : 'Utilisateur'}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button class="btn-icon edit" onclick="editUser('${key}')" title="Modifier" style="width:28px;height:28px;font-size:12px;">✏️</button>
+        ${key !== 'admin' ? `<button class="btn-icon" onclick="deleteUser('${key}')" title="Supprimer" style="width:28px;height:28px;font-size:12px;color:var(--red);">✕</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function addNewUser() {
+  const nameInput = document.getElementById('newUserName');
+  const pwdInput = document.getElementById('newUserPassword');
+  const roleInput = document.getElementById('newUserRole');
+  
+  const name = sanitizeInput(nameInput.value);
+  const pwd = pwdInput.value.trim();
+  const isAdminRole = roleInput.value === 'admin';
+  
+  if (!name) return toast('Veuillez saisir un nom.', 'err');
+  if (!pwd) return toast('Veuillez saisir un mot de passe.', 'err');
+  if (pwd.length < 4) return toast('Le mot de passe doit contenir au moins 4 caractères.', 'err');
+  
+  // Generate unique key
+  const existingKeys = Object.keys(USERS).filter(k => k.startsWith('user'));
+  const maxNum = existingKeys.reduce((max, k) => {
+    const num = parseInt(k.replace('user', ''), 10);
+    return num > max ? num : max;
+  }, 0);
+  const newKey = 'user' + (maxNum + 1);
+  
+  USERS[newKey] = {
+    password: pwd,
+    label: name,
+    isAdmin: isAdminRole
+  };
+  
+  nameInput.value = '';
+  pwdInput.value = '';
+  roleInput.value = 'user';
+  
+  renderUsersList();
+  updateUserSelector();
+  toast('✅ Utilisateur ajouté : ' + name, 'ok');
+}
+
+function editUser(key) {
+  const user = USERS[key];
+  if (!user) return;
+  
+  const newName = prompt('Nouveau nom pour ' + user.label + ' :', user.label);
+  if (newName === null) return;
+  
+  const sanitizedName = sanitizeInput(newName);
+  if (!sanitizedName) return toast('Le nom ne peut pas être vide.', 'err');
+  
+  const newPwd = prompt('Nouveau mot de passe (laisser vide pour conserver l\'ancien) :', '');
+  if (newPwd === null) return;
+  
+  USERS[key].label = sanitizedName;
+  if (newPwd.trim()) {
+    if (newPwd.trim().length < 4) return toast('Le mot de passe doit contenir au moins 4 caractères.', 'err');
+    USERS[key].password = newPwd.trim();
+  }
+  
+  renderUsersList();
+  updateUserUI();
+  toast('✅ Utilisateur modifié : ' + sanitizedName, 'ok');
+}
+
+function deleteUser(key) {
+  const user = USERS[key];
+  if (!user) return;
+  
+  showModal('Supprimer l\'utilisateur', 'Voulez-vous vraiment supprimer l\'utilisateur "' + user.label + '" ? Cette action est irréversible.', async () => {
+    delete USERS[key];
+    renderUsersList();
+    updateUserSelector();
+    
+    // If deleted user was current, switch to admin
+    if (currentUser === key) {
+      currentUser = 'admin';
+      isAdmin = true;
+      updateUserUI();
+    }
+    
+    toast('🗑️ Utilisateur supprimé.', 'info');
+  });
+}
+
+function updateUserSelector() {
+  const sel = document.getElementById('userSelector');
+  if (!sel) return;
+  
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="admin"> Admin</option>' +
+    Object.entries(USERS)
+      .filter(([k]) => k !== 'admin')
+      .map(([k, u]) => `<option value="${k}">👤 ${esc(u.label)}</option>`)
+      .join('');
+  
+  if (Object.keys(USERS).includes(currentVal)) {
+    sel.value = currentVal;
   }
 }
 
@@ -1924,7 +2108,7 @@ function renderAll() {
 
   const userSel = document.getElementById('filterUser');
   const userVal = userSel.value;
-  const userOptions = isAdmin ? ['admin','user1','user2','user3','user4'] : [currentUser];
+  const userOptions = isAdmin ? Object.keys(USERS) : [currentUser];
   userSel.innerHTML='<option value="all">👤 Tous</option>';
   userOptions.forEach(u=>{
     const o=document.createElement('option');
@@ -2014,6 +2198,15 @@ function renderMonthly() {
   ySel.innerHTML='<option value="all">Toutes années</option>';
   years.forEach(y=>{const o=document.createElement('option');o.value=y;o.textContent=y;ySel.appendChild(o);});
   if(years.includes(yVal)) ySel.value=yVal;
+
+  // Populate user filter dynamically
+  const userSel = document.getElementById('filterMonthUser');
+  const userVal = userSel?.value || 'all';
+  if (userSel && isAdmin) {
+    userSel.innerHTML = '<option value="all">👤 Tous</option>' +
+      Object.keys(USERS).map(u => `<option value="${u}">${u === 'admin' ? 'Admin' : esc(USERS[u].label)}</option>`).join('');
+    if (Object.keys(USERS).includes(userVal)) userSel.value = userVal;
+  }
 
   let filtered = data.filter(e=> yearF==='all'||e.date.substring(0,4)===yearF);
   
