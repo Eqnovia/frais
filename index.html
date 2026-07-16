@@ -1357,7 +1357,8 @@ let isAuthenticated = false;
 // ════════════════════════════════════════════
 // USERS CONFIG
 // ════════════════════════════════════════════
-const USERS = {
+// Comptes par défaut (utilisés au premier lancement et comme référence)
+const DEFAULT_USERS = {
   admin: { password: 'eqnovia-2026', label: 'Administrateur', isAdmin: true },
   user1: { password: 'rachid2026', label: 'Rachid Bayed', isAdmin: false },
   user2: { password: 'soufiane2026', label: 'Soufiane Laraichi', isAdmin: false },
@@ -1366,6 +1367,44 @@ const USERS = {
   user5: { password: 'ibrahime2026', label: 'Ibrahime', isAdmin: false },
   user6: { password: 'hamza2026', label: 'Hamza', isAdmin: false }
 };
+
+const USERS_STORAGE_KEY = 'eqnovia_users_v1';
+
+// Charge les utilisateurs depuis le stockage local (persistance des créations/suppressions)
+function loadUsers() {
+  try {
+    const raw = localStorage.getItem(USERS_STORAGE_KEY);
+    if (raw) {
+      const stored = JSON.parse(raw);
+      if (stored && typeof stored === 'object') {
+        // L'administrateur doit toujours exister et conserver ses privilèges
+        stored.admin = {
+          password: (stored.admin && stored.admin.password) || DEFAULT_USERS.admin.password,
+          label: 'Administrateur',
+          isAdmin: true
+        };
+        return stored;
+      }
+    }
+  } catch (e) {
+    console.warn('Lecture des utilisateurs impossible, utilisation des valeurs par défaut.', e);
+  }
+  // Premier lancement : on utilise les comptes par défaut
+  return JSON.parse(JSON.stringify(DEFAULT_USERS));
+}
+
+// Sauvegarde les utilisateurs dans le stockage local
+function saveUsers() {
+  try {
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(USERS));
+  } catch (e) {
+    console.warn('Sauvegarde des utilisateurs impossible.', e);
+  }
+}
+
+let USERS = loadUsers();
+// Persiste les comptes par défaut dès le premier lancement
+if (!localStorage.getItem(USERS_STORAGE_KEY)) saveUsers();
 
 // Données de démonstration pour Rachid Bayed
 const DEMO_EXPENSES = [
@@ -1560,13 +1599,16 @@ function addNewUser() {
     label: name,
     isAdmin: isAdminRole
   };
-  
+
+  saveUsers();
+
   nameInput.value = '';
   pwdInput.value = '';
   roleInput.value = 'user';
-  
+
   renderUsersList();
   updateUserSelector();
+  updateLoginUserSelect();
   toast('✅ Utilisateur ajouté : ' + name, 'ok');
 }
 
@@ -1588,9 +1630,12 @@ function editUser(key) {
     if (newPwd.trim().length < 4) return toast('Le mot de passe doit contenir au moins 4 caractères.', 'err');
     USERS[key].password = newPwd.trim();
   }
-  
+
+  saveUsers();
+
   renderUsersList();
   updateUserUI();
+  updateLoginUserSelect();
   toast('✅ Utilisateur modifié : ' + sanitizedName, 'ok');
 }
 
@@ -1600,8 +1645,10 @@ function deleteUser(key) {
   
   showModal('Supprimer l\'utilisateur', 'Voulez-vous vraiment supprimer l\'utilisateur "' + user.label + '" ? Cette action est irréversible.', async () => {
     delete USERS[key];
+    saveUsers();
     renderUsersList();
     updateUserSelector();
+    updateLoginUserSelect();
     
     // If deleted user was current, switch to admin
     if (currentUser === key) {
@@ -1628,6 +1675,19 @@ function updateUserSelector() {
   if (Object.keys(USERS).includes(currentVal)) {
     sel.value = currentVal;
   }
+}
+
+// Met à jour la liste déroulante de connexion avec les utilisateurs persistés
+function updateLoginUserSelect() {
+  const sel = document.getElementById('loginUser');
+  if (!sel) return;
+
+  const currentVal = sel.value;
+  sel.innerHTML = Object.entries(USERS)
+    .map(([k, u]) => `<option value="${k}">${u.isAdmin ? 'Administrateur' : esc(u.label)}</option>`)
+    .join('');
+
+  if (USERS[currentVal]) sel.value = currentVal;
 }
 
 function getUserExpenses(data) {
@@ -2758,6 +2818,9 @@ async function init() {
 
 // Démarrer l'application
 document.addEventListener('DOMContentLoaded', function() {
+  // Synchronise les listes déroulantes avec les utilisateurs persistés
+  updateLoginUserSelect();
+  updateUserSelector();
   document.getElementById('loginOverlay').classList.remove('hidden');
 });
 
