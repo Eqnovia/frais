@@ -12,6 +12,8 @@ dist/
 # OS files
 .DS_Store
 Thumbs.db
+*.stackdump
+NUL
 
 # IDE
 .vscode/
@@ -20,3 +22,13 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Capacitor native builds
+android/
+ios/
+*.apk
+*.aab
+
+# Firebase
+.firebase/
+*-debug.log

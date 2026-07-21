@@ -41,7 +41,8 @@ const replacements = {
 Object.entries(replacements).forEach(([envKey, configKey]) => {
   const value = envVars[envKey];
   if (value) {
-    const regex = new RegExp(`("${configKey}":\\s*")[^"]*(")`, 'g');
+    // Support both quoted ("configKey":) and unquoted (configKey:) key formats
+    const regex = new RegExp(`("?${configKey}"?\s*:\s*")[^"]*(")`, 'g');
     html = html.replace(regex, `$1${value}$2`);
   }
 });
@@ -64,7 +65,9 @@ const userPasswordReplacements = {
   '__USER1_PASSWORD__': envVars['VITE_USER_USER1_PASSWORD'],
   '__USER2_PASSWORD__': envVars['VITE_USER_USER2_PASSWORD'],
   '__USER3_PASSWORD__': envVars['VITE_USER_USER3_PASSWORD'],
-  '__USER4_PASSWORD__': envVars['VITE_USER_USER4_PASSWORD']
+  '__USER4_PASSWORD__': envVars['VITE_USER_USER4_PASSWORD'],
+  '__USER5_PASSWORD__': envVars['VITE_USER_USER5_PASSWORD'],
+  '__USER6_PASSWORD__': envVars['VITE_USER_USER6_PASSWORD']
 };
 
 Object.entries(userPasswordReplacements).forEach(([placeholder, password]) => {
@@ -120,9 +123,9 @@ fs.writeFileSync(path.join(distPath, 'index.html'), html);
 // Also copy to root for direct browser access
 fs.writeFileSync(path.join(__dirname, 'index.html'), html);
 
-// Copy PWA files (icons)
-const pwaFiles = ['icon-192.png', 'icon-512.png'];
-pwaFiles.forEach((file) => {
+// Copy static assets (icons, CSS, JS)
+const staticAssets = ['icon-192.png', 'icon-512.png', 'style.css', 'app.js'];
+staticAssets.forEach((file) => {
   const src = path.join(__dirname, file);
   if (fs.existsSync(src)) {
     fs.copyFileSync(src, path.join(distPath, file));

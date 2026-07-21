@@ -1,15 +1,33 @@
 {
   "name": "notes-de-frais",
   "version": "1.0.0",
-  "description": "Application de gestion des notes de frais Eqnovia",
+  "description": "Application de gestion des notes de frais Eqnovia — PWA avec OCR, Firebase, export PDF/Excel",
   "main": "index.html",
+  "private": true,
   "scripts": {
     "build": "node build.js",
+    "start": "npx serve dist -l 3000",
     "serve": "npx serve dist -l 3000",
-    "deploy": "firebase deploy"
+    "dev": "npx serve . -l 3000",
+    "clean": "rm -rf dist",
+    "deploy": "firebase deploy",
+    "deploy:hosting": "firebase deploy --only hosting"
   },
-  "dependencies": {},
+  "dependencies": {
+    "jimp": "^1.6.1"
+  },
   "devDependencies": {
-    "serve": "^14.2.0"
-  }
+    "serve": "^14.2.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "expenses",
+    "notes-de-frais",
+    "eqnovia",
+    "pwa",
+    "firebase",
+    "ocr"
+  ]
 }

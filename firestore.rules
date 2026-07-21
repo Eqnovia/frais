@@ -1,0 +1,238 @@
+/*
+ * ═══════════════════════════════════════════════════════════
+ *  FIRESTORE SECURITY RULES — Eqnovia Notes de Frais v3
+ * ═══════════════════════════════════════════════════════════
+ *
+ *  MODÈLE DE SÉCURITÉ — Firebase Authentication requis
+ *  ─────────────────────────────────────────────────────
+ *  Ces règles utilisent request.auth.uid pour garantir
+ *  l'isolation des données entre utilisateurs.
+ *
+ *  Prérequis :
+ *  1. Firebase Authentication activé (Email/Mot de passe)
+ *  2. Les documents doivent contenir un champ _authUid
+ *     correspondant à l'UID Firebase Auth de l'utilisateur
+ *  3. L'administrateur a un rôle spécial (vérifié par email)
+ *
+ *  Collections :
+ *  - expenses    : Dépenses liées à un utilisateur via _authUid
+ *  - om_history  : Ordres de mission liés via _authUid
+ *  - user_profiles: Profils publics des utilisateurs
+ * ═══════════════════════════════════════════════════════════
+ */
+
+rules_version = '2';
+
+// ── Fonctions utilitaires ─────────────────────────────────
+
+/**
+ * Vérifie que l'utilisateur est authentifié
+ */
+function isAuth() {
+  return request.auth != null && request.auth.uid != null;
+}
+
+/**
+ * Vérifie que le document appartient à l'utilisateur connecté
+ */
+function docBelongsToUser() {
+  return isAuth() && resource.data._authUid == request.auth.uid;
+}
+
+/**
+ * Vérifie que le nouveau document appartient à l'utilisateur connecté
+ */
+function newDocBelongsToUser() {
+  return isAuth() && request.resource.data._authUid == request.auth.uid;
+}
+
+/**
+ * Vérifie que l'utilisateur est administrateur
+ * (basé sur l'email admin@eqnovia.ma)
+ */
+function isAdmin() {
+  return isAuth() && request.auth.token.email == 'admin@eqnovia.ma';
+}
+
+/**
+ * Vérifie que la requête est une lecture
+ */
+function isRead() {
+  return request.method == 'get' || request.method == 'list';
+}
+
+/**
+ * Vérifie qu'un champ est une string non vide (max N caractères)
+ */
+function isValidString(field, maxLen) {
+  return field is string
+    && field.size() > 0
+    && field.size() <= maxLen;
+}
+
+/**
+ * Vérifie qu'un champ est un nombre positif dans une plage
+ */
+function isValidAmount(value) {
+  return value is number
+    && value >= 0.01
+    && value <= 10000000;
+}
+
+/**
+ * Vérifie qu'une date est au format ISO (YYYY-MM-DD)
+ */
+function isValidDate(dateStr) {
+  return dateStr is string
+    && dateStr.matches('^\\\\d{4}-\\\\d{2}-\\\\d{2}$');
+}
+
+/**
+ * Vérifie que la taille d'un document ne dépasse pas la limite (512KB)
+ */
+function isDocSizeValid() {
+  return request.resource.data.size() < 512 * 1024;
+}
+
+
+// ═══════════════════════════════════════════════════════════
+//  RÈGLES PRINCIPALES
+// ═══════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Règle globale par défaut : tout refuser ──
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  COLLECTION : expenses
+    // ═══════════════════════════════════════════════════
+    match /expenses/{docId} {
+
+      // Lecture : ses propres documents (admin voit tout)
+      allow read: if isAuth() && (
+        docBelongsToUser() || isAdmin()
+      );
+
+      // Création : uniquement ses propres documents, avec validation
+      allow create: if isAuth()
+        && newDocBelongsToUser()
+        && isDocSizeValid()
+        && request.resource.data.keys().hasAll([
+          'id', 'date', 'desc', 'amount', 'cat',
+          'mission', 'comment', 'user', 'justif', '_authUid'
+        ])
+        && request.resource.data.id is number
+        && isValidDate(request.resource.data.date)
+        && isValidString(request.resource.data.desc, 500)
+        && isValidAmount(request.resource.data.amount)
+        && isValidString(request.resource.data.cat, 50)
+        && isValidString(request.resource.data.mission, 300)
+        && isValidString(request.resource.data.comment, 500)
+        && isValidString(request.resource.data.user, 20)
+        && (request.resource.data.justif in ['Oui', 'Non'])
+        && (
+          request.resource.data.justif == 'Non'
+          || (request.resource.data.justifData is string
+              && request.resource.data.justifData.size() <= 400 * 1024
+              && isValidString(request.resource.data.justifName, 200))
+        );
+
+      // Mise à jour : ses propres documents (admin peut tout modifier)
+      allow update: if isAuth() && (
+        (docBelongsToUser() || isAdmin())
+      ) && isDocSizeValid()
+        && request.resource.data.desc is string
+        && isValidString(request.resource.data.desc, 500)
+        && isValidAmount(request.resource.data.amount)
+        && isValidDate(request.resource.data.date);
+
+      // Suppression : admin uniquement
+      allow delete: if isAuth() && isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  COLLECTION : om_history
+    // ═══════════════════════════════════════════════════
+    match /om_history/{docId} {
+
+      // Lecture : admin voit tout, utilisateur ses propres OM
+      allow read: if isAuth() && (
+        isAdmin() || docBelongsToUser()
+      );
+
+      // Création : l'OM doit appartenir à l'utilisateur
+      allow create: if isAuth()
+        && newDocBelongsToUser()
+        && isDocSizeValid()
+        && request.resource.data.keys().hasAll([
+          '_localId', 'numero', 'date', 'employe',
+          'objet', 'status', 'user', '_authUid'
+        ])
+        && request.resource.data._localId is number
+        && isValidString(request.resource.data.numero, 50)
+        && isValidDate(request.resource.data.date)
+        && isValidString(request.resource.data.employe, 150)
+        && isValidString(request.resource.data.objet, 500)
+        && (request.resource.data.status in ['pending', 'approved', 'rejected'])
+        && isValidString(request.resource.data.user, 20)
+        && (
+          !('depart' in request.resource.data)
+          || isValidString(request.resource.data.depart, 200)
+        )
+        && (
+          !('arrivee' in request.resource.data)
+          || isValidString(request.resource.data.arrivee, 200)
+        );
+
+      // Mise à jour : admin peut changer le statut
+      allow update: if isAuth()
+        && (isAdmin() || docBelongsToUser())
+        && isDocSizeValid()
+        && (
+          !('status' in request.resource.data)
+          || (request.resource.data.status in ['pending', 'approved', 'rejected'])
+        );
+
+      // Suppression : admin uniquement
+      allow delete: if isAuth() && isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  COLLECTION : user_profiles
+    //  Profils publics des utilisateurs (nom, email, rôle)
+    // ═══════════════════════════════════════════════════
+    match /user_profiles/{userId} {
+
+      // Lecture : tout utilisateur authentifié
+      allow read: if isAuth();
+
+      // Création : uniquement son propre profil
+      allow create: if isAuth()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasAll(['label', 'email', 'isAdmin'])
+        && isValidString(request.resource.data.label, 150)
+        && isValidString(request.resource.data.email, 200);
+
+      // Mise à jour : uniquement son propre profil
+      allow update: if isAuth() && request.auth.uid == userId;
+
+      // Suppression : admin uniquement
+      allow delete: if isAuth() && isAdmin();
+    }
+
+    // ══════════════════════════════════════════════════
+    //  NOTES DE SÉCURITÉ
+    // ══════════════════════════════════════════════════
+    //
+    //  1. L'isolation est basée sur _authUid == request.auth.uid
+    //  2. L'admin (admin@eqnovia.ma) a un accès global
+    //  3. La validation des champs protège contre les données invalides
+    //  4. Taille max document : 512KB (justificatifs : 400KB)
+    //
+    // ══════════════════════════════════════════════════
+  }
+}

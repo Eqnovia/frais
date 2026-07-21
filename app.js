@@ -1,0 +1,3183 @@
+'use strict';
+// ════════════════════════════════════════════
+// CONSTANTS & STATE
+// ════════════════════════════════════════════
+const STORAGE_KEY = 'eqnovia_expenses_v3';
+const MONTHS_FR   = ['Janvier','Février','Mars','Avril','Mai','Juin',
+                     'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+const MONTHS_SHORT= ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+
+let sortCol = 'date', sortDir = -1;
+let activeTab = 'saisie';
+let cache = [];
+let useFirebase = false;
+let ocrText = '';
+let currentUser = 'admin';
+let isAdmin = true;
+let isAuthenticated = false;
+
+// ══ Firebase Auth state ══
+let currentAuthUser = null;     // Firebase Auth user object or null
+let authReady = false;          // True once auth state is initialized
+let useFirebaseAuth = false;    // True if Firebase Auth is available and configured
+
+const FIREBASE_AUTH_EMULATOR = false; // Set to true for local testing with emulator
+
+// ════════════════════════════════════════════
+// USERS CONFIG
+// ════════════════════════════════════════════
+// Comptes par défaut (utilisés au premier lancement et comme référence)
+const DEFAULT_USERS = {
+  admin: { password: 'eqnovia-2026', label: 'Administrateur', isAdmin: true, email: '', tel: '' },
+  user1: { password: 'rachid2026', label: 'Rachid Bayed', isAdmin: false, email: 'rbayed@eqnovia.ma', tel: '0661285981' },
+  user2: { password: 'soufiane2026', label: 'Soufiane Laraichi', isAdmin: false, email: 'slaraichi@eqnovia.ma', tel: '0661376108' },
+  user3: { password: 'fatima2026', label: 'Bourzgui Fatima Zahra', isAdmin: false, email: 'fbourzgui@eqnovia.ma', tel: '0664549777' },
+  user4: { password: 'larbi2026', label: 'Larbi Ramzi', isAdmin: false, email: 'lramzi@eqnovia.ma', tel: '0707088004' },
+  user5: { password: 'ibrahime2026', label: 'Ibrahime', isAdmin: false, email: '', tel: '' },
+  user6: { password: 'hamza2026', label: 'Hamza', isAdmin: false, email: '', tel: '' }
+};
+
+const USERS_STORAGE_KEY = 'eqnovia_users_v1';
+
+// Charge les utilisateurs depuis le stockage local (persistance des créations/suppressions)
+function loadUsers() {
+  try {
+    const raw = localStorage.getItem(USERS_STORAGE_KEY);
+    if (raw) {
+      const stored = JSON.parse(raw);
+      if (stored && typeof stored === 'object') {
+        // L'administrateur doit toujours exister et conserver ses privilèges
+        stored.admin = {
+          password: (stored.admin && stored.admin.password) || DEFAULT_USERS.admin.password,
+          label: 'Administrateur',
+          isAdmin: true,
+          email: '',
+          tel: ''
+        };
+        // Fusionner email/tel depuis DEFAULT_USERS pour les comptes existants
+        for (const k of Object.keys(DEFAULT_USERS)) {
+          if (stored[k]) {
+            if (DEFAULT_USERS[k].email) stored[k].email = DEFAULT_USERS[k].email;
+            if (DEFAULT_USERS[k].tel) stored[k].tel = DEFAULT_USERS[k].tel;
+            if (!stored[k].label) stored[k].label = DEFAULT_USERS[k].label;
+          }
+        }
+        return stored;
+      }
+    }
+  } catch (e) {
+    console.warn('Lecture des utilisateurs impossible, utilisation des valeurs par défaut.', e);
+  }
+  // Premier lancement : on utilise les comptes par défaut
+  return JSON.parse(JSON.stringify(DEFAULT_USERS));
+}
+
+// Sauvegarde les utilisateurs dans le stockage local
+function saveUsers() {
+  try {
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(USERS));
+  } catch (e) {
+    console.warn('Sauvegarde des utilisateurs impossible.', e);
+  }
+}
+
+let USERS = loadUsers();
+// Persiste les comptes par défaut dès le premier lancement
+if (!localStorage.getItem(USERS_STORAGE_KEY)) saveUsers();
+
+// Initialiser l'écouteur Firebase Auth au démarrage
+initFirebaseAuthListener();
+
+// Données de démonstration pour Rachid Bayed
+const DEMO_EXPENSES = [
+  { id: 1001, date: '2026-06-20', desc: 'Taxi Aéroport Casablanca - Rabat', amount: 450.00, cat: 'Transport', mission: 'Mission client OCP', comment: 'Trajet aller', user: 'user1', justif: 'Non', justifData: null, justifName: null },
+  { id: 1002, date: '2026-06-18', desc: 'Déjeuner avec client', amount: 320.50, cat: 'Repas', mission: 'Mission client OCP', comment: 'Restaurant La Table', user: 'user1', justif: 'Non', justifData: null, justifName: null },
+  { id: 1003, date: '2026-06-15', desc: 'Hôtel Ibis Casablanca', amount: 890.00, cat: 'Hébergement', mission: 'Mission client OCP', comment: '2 nuits', user: 'user1', justif: 'Non', justifData: null, justifName: null },
+  { id: 1004, date: '2026-06-10', desc: 'Train Rabat - Casablanca', amount: 120.00, cat: 'Transport', mission: 'Réunion interne', comment: 'Aller-retour', user: 'user1', justif: 'Non', justifData: null, justifName: null },
+  { id: 1005, date: '2026-06-05', desc: 'Achat fournitures bureau', amount: 230.75, cat: 'Matériel', mission: 'Fournitures Q2', comment: 'Papeterie', user: 'user1', justif: 'Non', justifData: null, justifName: null }
+];
+
+// ════════════════════════════════════════════
+// SIDEBAR TOGGLE (MOBILE)
+// ════════════════════════════════════════════
+function toggleSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  const toggle = document.getElementById('menuToggle');
+  if (sidebar && overlay) {
+    const open = sidebar.classList.toggle('open');
+    overlay.classList.toggle('open');
+    if (toggle) toggle.setAttribute('aria-expanded', open);
+    if (open) {
+      // Trap focus: move focus to sidebar when opened
+      const firstNavItem = sidebar.querySelector('.nav-item');
+      if (firstNavItem) firstNavItem.focus();
+    } else {
+      // Return focus to toggle button when closed
+      if (toggle) toggle.focus();
+    }
+  }
+}
+
+// ════════════════════════════════════════════
+// FIREBASE AUTH SERVICE
+// ════════════════════════════════════════════
+
+/**
+ * Obtient l'email Firebase Auth pour un userId local (admin, user1, etc.)
+ */
+function getAuthEmail(userId) {
+  const user = USERS[userId];
+  if (!user) return '';
+  // Utiliser l'email du profil si défini, sinon générer depuis le nom
+  if (user.email) return user.email;
+  // Fallback: userId@eqnovia.ma
+  return userId + '@eqnovia.ma';
+}
+
+/**
+ * Tente une connexion via Firebase Auth (email/password)
+ * Retourne true si réussi, false si échec
+ */
+async function firebaseAuthSignIn(email, password) {
+  if (!window.__auth || !window.__signInWithEmail) {
+    console.warn('Firebase Auth non disponible');
+    return false;
+  }
+  try {
+    const userCredential = await window.__signInWithEmail(window.__auth, email, password);
+    currentAuthUser = userCredential.user;
+    useFirebaseAuth = true;
+    console.log('✅ Firebase Auth connecté:', userCredential.user.uid);
+    return true;
+  } catch (error) {
+    console.warn('❌ Firebase Auth échec:', error.code, error.message);
+    currentAuthUser = null;
+    useFirebaseAuth = false;
+    return false;
+  }
+}
+
+/**
+ * Déconnexion Firebase Auth
+ */
+async function firebaseAuthSignOut() {
+  if (!window.__auth || !window.__signOut) return;
+  try {
+    await window.__signOut(window.__auth);
+    currentAuthUser = null;
+    useFirebaseAuth = false;
+    console.log('✅ Firebase Auth déconnecté');
+  } catch (error) {
+    console.warn('❌ Firebase Auth déconnexion échouée:', error);
+  }
+}
+
+/**
+ * Initialise l'écouteur d'état Firebase Auth
+ */
+function initFirebaseAuthListener() {
+  if (!window.__auth || !window.__onAuthStateChanged) {
+    authReady = true;
+    return;
+  }
+  window.__onAuthStateChanged(window.__auth, (user) => {
+    if (user) {
+      currentAuthUser = user;
+      useFirebaseAuth = true;
+      console.log('🔑 Firebase Auth state: connecté', user.uid);
+    } else {
+      currentAuthUser = null;
+      useFirebaseAuth = false;
+      console.log('🔑 Firebase Auth state: déconnecté');
+    }
+    authReady = true;
+  });
+}
+
+/**
+ * Vérifie si le mode Firebase Auth est disponible
+ */
+function isFirebaseAuthAvailable() {
+  return window.__fbReady && window.__auth && authReady;
+}
+
+/**
+ * Obtient l'UID Firebase Auth actuel (ou null)
+ */
+function getAuthUid() {
+  return (useFirebaseAuth && currentAuthUser) ? currentAuthUser.uid : null;
+}
+
+// ════════════════════════════════════════════
+// SYNC USERS TO FIREBASE AUTH (Admin)
+// ════════════════════════════════════════════
+
+/**
+ * Crée un utilisateur Firebase Auth via l'API REST (nécessite la clé API)
+ * L'admin appelle cette fonction pour synchroniser les comptes locaux
+ */
+async function createFirebaseAuthUser(userId, email, password) {
+  if (!window.__createAuthUser) {
+    console.warn('Firebase Auth createUser non disponible');
+    return { success: false, error: 'SDK non disponible' };
+  }
+  try {
+    // createUserWithEmailAndPassword crée ET connecte l'utilisateur.
+    // On doit donc reconnecter l'admin après la création.
+    const adminEmail = getAuthEmail('admin');
+    const adminPassword = USERS.admin ? USERS.admin.password : '';
+    
+    // Créer le nouvel utilisateur
+    const credential = await window.__createAuthUser(window.__auth, email, password);
+    
+    // Déconnecter le nouvel utilisateur et reconnecter l'admin
+    await window.__signOut(window.__auth);
+    
+    if (adminEmail && adminPassword) {
+      await window.__signInWithEmail(window.__auth, adminEmail, adminPassword);
+    }
+    
+    return { success: true, uid: credential.user.uid };
+  } catch (error) {
+    console.error('❌ Création Firebase Auth échouée:', error.code, error.message);
+    return { success: false, error: error.code };
+  }
+}
+
+/**
+ * Synchronise tous les utilisateurs locaux vers Firebase Auth
+ * Appelé par l'admin depuis l'interface
+ */
+async function seedFirebaseAuthUsers() {
+  if (!isAdmin) {
+    return toast('Seul l\'administrateur peut synchroniser les utilisateurs.', 'err');
+  }
+  if (!isFirebaseAuthAvailable()) {
+    return toast('Firebase Auth n\'est pas disponible. Vérifiez la configuration.', 'err');
+  }
+  
+  const adminEmail = getAuthEmail('admin');
+  const adminPassword = USERS.admin ? USERS.admin.password : '';
+  
+  if (!adminEmail || !adminPassword) {
+    return toast('Email ou mot de passe administrateur manquant.', 'err');
+  }
+  
+  // S'assurer que l'admin est connecté à Firebase Auth
+  if (!useFirebaseAuth || !currentAuthUser) {
+    const ok = await firebaseAuthSignIn(adminEmail, adminPassword);
+    if (!ok) {
+      return toast('Impossible de connecter l\'admin à Firebase Auth. Vérifiez les identifiants.', 'err');
+    }
+  }
+  
+  toast('⏳ Synchronisation des utilisateurs Firebase Auth...', 'info');
+  
+  const results = [];
+  const userEntries = Object.entries(USERS).filter(([id]) => id !== 'admin');
+  
+  for (const [userId, userData] of userEntries) {
+    const email = getAuthEmail(userId);
+    const password = userData.password;
+    
+    if (!email || !password) continue;
+    
+    const result = await createFirebaseAuthUser(userId, email, password);
+    results.push({ userId, email, success: result.success, error: result.error });
+    
+    if (result.success) {
+      console.log(`✅ Utilisateur Firebase Auth créé: ${email}`);
+    } else if (result.error === 'auth/email-already-in-use') {
+      console.log(`ℹ️ Utilisateur existe déjà: ${email}`);
+      results[results.length - 1].success = true; // C'est normal
+    }
+  }
+  
+  // Reconnecter l'admin si nécessaire
+  if (!useFirebaseAuth || !currentAuthUser) {
+    await firebaseAuthSignIn(adminEmail, adminPassword);
+  }
+  
+  const successCount = results.filter(r => r.success).length;
+  const totalCount = results.length;
+  
+  toast(`✅ Synchronisation terminée : ${successCount}/${totalCount} utilisateurs`, successCount > 0 ? 'ok' : 'err');
+  
+  if (successCount < totalCount) {
+    console.warn('Échecs de création:', results.filter(r => !r.success));
+  }
+  
+  return results;
+}
+
+// ════════════════════════════════════════════
+// LOGIN / LOGOUT
+// ════════════════════════════════════════════
+
+async function login() {
+  const pwd = document.getElementById('loginPassword').value.trim();
+  const user = document.getElementById('loginUser').value;
+  
+  if (!USERS[user]) {
+    document.getElementById('loginError').style.display = 'block';
+    document.getElementById('loginPassword').value = '';
+    document.getElementById('loginPassword').focus();
+    toast('❌ Utilisateur inconnu', 'err');
+    return;
+  }
+  
+  // 1. Essayer Firebase Auth d'abord (si disponible)
+  if (isFirebaseAuthAvailable()) {
+    const email = getAuthEmail(user);
+    const fbOk = await firebaseAuthSignIn(email, pwd);
+    
+    if (fbOk) {
+      // Firebase Auth réussi
+      completeLogin(user);
+      return;
+    }
+    
+    // Firebase Auth échoué -> vérifier si le mode local est un fallback acceptable
+    // Si l'utilisateur existe dans Firebase Auth mais pas avec ce mot de passe,
+    // on ne tombe pas sur le mode local
+    console.warn('Firebase Auth échoué, tentative locale...');
+  }
+  
+  // 2. Fallback : authentification locale
+  if (USERS[user].password === pwd) {
+    completeLogin(user);
+    toast('ℹ️ Mode local — Les données ne sont pas synchronisées', 'info');
+  } else {
+    document.getElementById('loginError').style.display = 'block';
+    document.getElementById('loginPassword').value = '';
+    document.getElementById('loginPassword').focus();
+    toast('❌ Mot de passe incorrect', 'err');
+  }
+}
+
+function completeLogin(user) {
+  isAuthenticated = true;
+  currentUser = user;
+  isAdmin = USERS[user].isAdmin;
+  
+  document.getElementById('loginOverlay').classList.add('hidden');
+  document.querySelectorAll('#appContent').forEach(el => el.style.display = '');
+  
+  document.getElementById('userSelector').value = user;
+  updateUserUI();
+  
+  // Initialize bottom nav active state
+  TABS.forEach(id => {
+    document.getElementById(`bnav-${id}`)?.classList.toggle('active', id === activeTab);
+  });
+  
+  const modeText = useFirebaseAuth ? '☁️ Cloud' : '💻 Local';
+  toast(`✅ Connexion réussie ! Bienvenue ${USERS[user].label} (${modeText})`, 'ok');
+  init();
+}
+
+async function logout() {
+  if (confirm('Voulez-vous vraiment vous déconnecter ?')) {
+    isAuthenticated = false;
+    
+    // Déconnexion Firebase Auth si actif
+    if (useFirebaseAuth) {
+      await firebaseAuthSignOut();
+    }
+    
+    document.querySelectorAll('#appContent').forEach(el => el.style.display = 'none');
+    document.getElementById('loginOverlay').classList.remove('hidden');
+    document.getElementById('loginPassword').value = '';
+    document.getElementById('loginError').style.display = 'none';
+    // Close sidebar on mobile
+    document.querySelector('.sidebar')?.classList.remove('open');
+    document.getElementById('sidebarOverlay')?.classList.remove('open');
+    // Reset bottom nav active state
+    TABS.forEach(id => {
+      document.getElementById(`bnav-${id}`)?.classList.remove('active');
+    });
+    toast('👋 Déconnexion réussie', 'info');
+  }
+}
+
+document.getElementById('loginPassword').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') login();
+});
+
+// ════════════════════════════════════════════
+// USER MANAGEMENT
+// ════════════════════════════════════════════
+function switchUser(userId) {
+  if (!isAdmin) {
+    toast('Seul l\'administrateur peut changer d\'utilisateur.', 'err');
+    document.getElementById('userSelector').value = currentUser;
+    return;
+  }
+  currentUser = userId;
+  isAdmin = USERS[userId].isAdmin;
+  updateUserUI();
+  updateKPIs();
+  renderAll();
+  renderMonthly();
+  renderYearly();
+  toast('👤 Changement vers ' + USERS[userId].label, 'info');
+}
+
+function updateUserUI() {
+  const badge = document.getElementById('userBadge');
+  const avatar = document.getElementById('avatarDisplay');
+  const userInfo = USERS[currentUser];
+  
+  badge.textContent = userInfo.label;
+  badge.className = 'user-badge ' + (isAdmin ? 'admin' : 'user');
+  
+  const first = userInfo.label.substring(0, 1);
+  avatar.textContent = first;
+  
+  const adminOnly = document.querySelectorAll('#adminOnlyLabel, #adminUsersBtn, #adminClearBtn, #adminOMBtn, #tab-admin-om');
+  adminOnly.forEach(el => el.style.display = isAdmin ? '' : 'none');
+  
+  const filterUser = document.getElementById('filterUser');
+  if (filterUser) {
+    filterUser.style.display = isAdmin ? '' : 'none';
+  }
+  
+  const filterMonthUser = document.getElementById('filterMonthUser');
+  if (filterMonthUser) {
+    filterMonthUser.style.display = isAdmin ? '' : 'none';
+  }
+}
+
+// ════════════════════════════════════════════
+// USER MANAGEMENT (Admin)
+// ════════════════════════════════════════════
+function openUserManager() {
+  if (!isAdmin) {
+    return toast('Seul l\'administrateur peut gérer les utilisateurs.', 'err');
+  }
+  renderUsersList();
+  document.getElementById('userModal').classList.add('open');
+}
+
+function closeUserModal() {
+  document.getElementById('userModal').classList.remove('open');
+}
+
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('open');
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('open');
+}
+
+document.getElementById('userModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('userModal')) closeUserModal();
+});
+
+function renderUsersList() {
+  const container = document.getElementById('usersList');
+  const users = Object.entries(USERS).filter(([key]) => key !== 'admin');
+  
+  if (!users.length) {
+    container.innerHTML = '<p style="color:var(--gray-400);font-size:13px;text-align:center;padding:20px;">Aucun utilisateur.</p>';
+    return;
+  }
+  
+  const fbAuthAvailable = isFirebaseAuthAvailable();
+  
+  container.innerHTML = users.map(([key, u]) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:8px;background:var(--white);">
+      <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+        <div style="width:32px;height:32px;border-radius:50%;background:${u.isAdmin ? 'var(--eq-blue-pale)' : 'var(--gray-100)'};color:${u.isAdmin ? 'var(--eq-blue)' : 'var(--gray-700)'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">
+          ${u.label.substring(0,1).toUpperCase()}
+        </div>
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:13px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(u.label)}</div>
+          <div style="font-size:11px;color:var(--gray-400);">${u.isAdmin ? 'Administrateur' : 'Utilisateur'} ${u.email ? '• ' + esc(u.email) : ''}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        ${fbAuthAvailable ? `<button class="btn-icon" onclick="seedFirebaseAuthUsers()" title="Sync Firebase Auth" style="width:28px;height:28px;font-size:12px;color:var(--eq-blue);">☁️</button>` : ''}
+        <button class="btn-icon edit" onclick="editUser('${key}')" title="Modifier" style="width:28px;height:28px;font-size:12px;">✏️</button>
+        ${key !== 'admin' ? `<button class="btn-icon" onclick="deleteUser('${key}')" title="Supprimer" style="width:28px;height:28px;font-size:12px;color:var(--red);">✕</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function addNewUser() {
+  const nameInput = document.getElementById('newUserName');
+  const pwdInput = document.getElementById('newUserPassword');
+  const roleInput = document.getElementById('newUserRole');
+  
+  const name = sanitizeInput(nameInput.value);
+  const pwd = pwdInput.value.trim();
+  const isAdminRole = roleInput.value === 'admin';
+  
+  if (!name) return toast('Veuillez saisir un nom.', 'err');
+  if (!pwd) return toast('Veuillez saisir un mot de passe.', 'err');
+  if (pwd.length < 4) return toast('Le mot de passe doit contenir au moins 4 caractères.', 'err');
+  
+  // Generate unique key
+  const existingKeys = Object.keys(USERS).filter(k => k.startsWith('user'));
+  const maxNum = existingKeys.reduce((max, k) => {
+    const num = parseInt(k.replace('user', ''), 10);
+    return num > max ? num : max;
+  }, 0);
+  const newKey = 'user' + (maxNum + 1);
+  
+  USERS[newKey] = {
+    password: pwd,
+    label: name,
+    isAdmin: isAdminRole
+  };
+
+  saveUsers();
+
+  nameInput.value = '';
+  pwdInput.value = '';
+  roleInput.value = 'user';
+
+  renderUsersList();
+  updateUserSelector();
+  updateLoginUserSelect();
+  toast('✅ Utilisateur ajouté : ' + name, 'ok');
+}
+
+function editUser(key) {
+  const user = USERS[key];
+  if (!user) return;
+  
+  const newName = prompt('Nouveau nom pour ' + user.label + ' :', user.label);
+  if (newName === null) return;
+  
+  const sanitizedName = sanitizeInput(newName);
+  if (!sanitizedName) return toast('Le nom ne peut pas être vide.', 'err');
+  
+  const newPwd = prompt('Nouveau mot de passe (laisser vide pour conserver l\'ancien) :', '');
+  if (newPwd === null) return;
+  
+  USERS[key].label = sanitizedName;
+  if (newPwd.trim()) {
+    if (newPwd.trim().length < 4) return toast('Le mot de passe doit contenir au moins 4 caractères.', 'err');
+    USERS[key].password = newPwd.trim();
+  }
+
+  saveUsers();
+
+  renderUsersList();
+  updateUserUI();
+  updateLoginUserSelect();
+  toast('✅ Utilisateur modifié : ' + sanitizedName, 'ok');
+}
+
+function deleteUser(key) {
+  const user = USERS[key];
+  if (!user) return;
+  
+  showModal('Supprimer l\'utilisateur', 'Voulez-vous vraiment supprimer l\'utilisateur "' + user.label + '" ? Cette action est irréversible.', async () => {
+    delete USERS[key];
+    saveUsers();
+    renderUsersList();
+    updateUserSelector();
+    updateLoginUserSelect();
+    
+    // If deleted user was current, switch to admin
+    if (currentUser === key) {
+      currentUser = 'admin';
+      isAdmin = true;
+      updateUserUI();
+    }
+    
+    toast('🗑️ Utilisateur supprimé.', 'info');
+  });
+}
+
+function updateUserSelector() {
+  const sel = document.getElementById('userSelector');
+  if (!sel) return;
+  
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="admin"> Admin</option>' +
+    Object.entries(USERS)
+      .filter(([k]) => k !== 'admin')
+      .map(([k, u]) => `<option value="${k}">👤 ${esc(u.label)}</option>`)
+      .join('');
+  
+  if (Object.keys(USERS).includes(currentVal)) {
+    sel.value = currentVal;
+  }
+}
+
+// Met à jour la liste déroulante de connexion avec les utilisateurs persistés
+function updateLoginUserSelect() {
+  const sel = document.getElementById('loginUser');
+  if (!sel) return;
+
+  const currentVal = sel.value;
+  sel.innerHTML = Object.entries(USERS)
+    .map(([k, u]) => `<option value="${k}">${u.isAdmin ? 'Administrateur' : esc(u.label)}</option>`)
+    .join('');
+
+  if (USERS[currentVal]) sel.value = currentVal;
+}
+
+function getUserExpenses(data) {
+  if (isAdmin) return data;
+  return data.filter(e => e.user === currentUser);
+}
+
+// ════════════════════════════════════════════
+// FIREBASE BRIDGE
+// ════════════════════════════════════════════
+async function fbAdd(expense) {
+  if (!useFirebase) return;
+  try {
+    const { collection, addDoc, serverTimestamp } = window.__fs;
+    await addDoc(collection(window.__db, 'expenses'), {
+      ...expense,
+      _authUid: getAuthUid(),
+      createdAt: serverTimestamp()
+    });
+  } catch(e) { console.warn('FB add failed', e); }
+}
+
+async function fbDelete(id) {
+  if (!useFirebase) return;
+  try {
+    const { collection, getDocs, deleteDoc, doc, query, where } = window.__fs;
+    const q = query(collection(window.__db, 'expenses'), where('id', '==', id));
+    const snap = await getDocs(q);
+    for (const d of snap.docs) {
+      await deleteDoc(doc(window.__db, 'expenses', d.id));
+    }
+  } catch(e) { console.warn('FB delete failed', e); }
+}
+
+async function fbLoad() {
+  if (!useFirebase) return null;
+  try {
+    const { collection, getDocs, query, orderBy, where } = window.__fs;
+    // Si Firebase Auth est actif, filtrer par auth_uid pour l'isolation
+    let q;
+    if (isFirebaseAuthAvailable() && useFirebaseAuth && currentAuthUser) {
+      if (isAdmin) {
+        // Admin voit tout
+        q = query(collection(window.__db,'expenses'), orderBy('createdAt','asc'));
+      } else {
+        // Utilisateur ne voit que ses propres documents
+        q = query(collection(window.__db,'expenses'), 
+          where('_authUid', '==', currentAuthUser.uid),
+          orderBy('createdAt','asc'));
+      }
+    } else {
+      q = query(collection(window.__db,'expenses'), orderBy('createdAt','asc'));
+    }
+    const snap = await getDocs(q);
+    const arr  = [];
+    snap.forEach(d => arr.push({ ...d.data() }));
+    return arr;
+  } catch(e) { console.warn('FB load failed', e); return null; }
+}
+
+// ════════════════════════════════════════════
+// FIREBASE — ORDRES DE MISSION
+// ════════════════════════════════════════════
+async function fbAddOM(om) {
+  if (!useFirebase) return;
+  try {
+    const { collection, addDoc, serverTimestamp } = window.__fs;
+    await addDoc(collection(window.__db, 'om_history'), {
+      ...om,
+      _authUid: getAuthUid(),
+      _savedAt: serverTimestamp()
+    });
+  } catch(e) { console.warn('FB OM add failed', e); }
+}
+
+async function fbDeleteOM(localId) {
+  if (!useFirebase) return;
+  try {
+    const { collection, getDocs, deleteDoc, doc, query, where } = window.__fs;
+    const q = query(collection(window.__db, 'om_history'), where('_localId', '==', localId));
+    const snap = await getDocs(q);
+    for (const d of snap.docs) {
+      await deleteDoc(doc(window.__db, 'om_history', d.id));
+    }
+  } catch(e) { console.warn('FB OM delete failed', e); }
+}
+
+async function fbLoadOM() {
+  if (!useFirebase) return null;
+  try {
+    const { collection, getDocs, query, orderBy } = window.__fs;
+    const q = query(collection(window.__db, 'om_history'), orderBy('_savedAt', 'asc'));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ _firebaseId: d.id, ...d.data() }));
+  } catch(e) { console.warn('FB OM load failed', e); return null; }
+}
+
+// ════════════════════════════════════════════
+// LOCAL STORAGE
+// ════════════════════════════════════════════
+function lsLoad() { 
+  try { 
+    const data = localStorage.getItem(STORAGE_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch(e) { 
+    console.warn('localStorage read failed:', e);
+    return []; 
+  }
+}
+
+function lsSave(d) { 
+  try { 
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); 
+  } catch(e) { 
+    console.warn('localStorage save failed:', e);
+  }
+}
+
+// ════════════════════════════════════════════
+// DATA LAYER
+// ════════════════════════════════════════════
+async function dataLoad() {
+  if (useFirebase) {
+    const fb = await fbLoad();
+    if (fb !== null) {
+      cache = fb;
+      // Si cache vide, ajouter les données de démonstration
+      if (cache.length === 0) {
+        cache = DEMO_EXPENSES;
+        try { lsSave(cache); } catch(e) {}
+        // Ajouter à Firebase
+        for (const exp of cache) {
+          await fbAdd(exp);
+        }
+      }
+      try { lsSave(cache); } catch(e) {}
+      return;
+    }
+  }
+  cache = lsLoad();
+  // Si cache vide, ajouter les données de démonstration
+  if (cache.length === 0) {
+    cache = DEMO_EXPENSES;
+    try { lsSave(cache); } catch(e) {}
+  }
+}
+
+async function dataAdd(exp) {
+  cache.push(exp);
+  try { lsSave(cache); } catch(e) {}
+  await fbAdd(exp);
+}
+
+async function dataDelete(id) {
+  cache = cache.filter(e => e.id !== id);
+  try { lsSave(cache); } catch(e) {}
+  await fbDelete(id);
+}
+
+function dataAll() { return [...cache]; }
+
+// ════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════
+function fmtDH(n) {
+  return n.toLocaleString('fr-MA', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' DH';
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const [y,m,d] = iso.split('-');
+  return `${d} ${MONTHS_FR[parseInt(m,10)-1].substring(0,3)}. ${y}`;
+}
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function today() { return new Date().toISOString().split('T')[0]; }
+function sanitizeInput(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/[<>\"']/g, '').trim();
+}
+function validateAmount(val) {
+  const n = parseFloat(val);
+  return !isNaN(n) && n >= 0 && n <= 10000000;
+}
+
+function validateDate(dateStr) {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const tenYearsAgo = new Date(now.getFullYear() - 10, now.getMonth(), now.getDate());
+  return !isNaN(d.getTime()) && d <= now && d >= tenYearsAgo;
+}
+
+// ════════════════════════════════════════════
+// TOAST
+// ════════════════════════════════════════════
+function toast(msg, type='ok') {
+  const t=document.getElementById('toast'),
+        icon=document.getElementById('toastIcon'),
+        msgEl=document.getElementById('toastMsg'),
+        bar=document.getElementById('toastBar');
+  icon.textContent={'ok':'✓','err':'✕','info':'ℹ'}[type]||'✓';
+  icon.className=`toast-icon ${type}`;
+  msgEl.textContent=msg;
+  t.className='toast show'+(type==='err'?' err':'');
+  bar.style.animation='none'; void bar.offsetWidth; bar.style.animation='';
+  clearTimeout(t._tid);
+  t._tid=setTimeout(()=>t.classList.remove('show'),3400);
+}
+
+// ════════════════════════════════════════════
+// EMAILJS — NOTIFICATIONS EMAIL
+// ════════════════════════════════════════════
+const EMAILJS_CONFIG = {
+  publicKey: '61_cDBW62XgV1dpqN',
+  serviceID: 'service_265zocr',
+  templateID: 'template_xcl',
+};
+
+// Initialiser EmailJS au chargement
+try { emailjs.init(EMAILJS_CONFIG.publicKey); } catch(e) { /* EmailJS non disponible */ }
+
+function cleanPhone(p) {
+  return (p || '').replace(/[\s\.\-\/\\()]/g, '');
+}
+
+// ══ Trouver l'email d'un collaborateur depuis USERS ══
+function findUserEmail(employeName) {
+  if (!employeName || employeName === '—') return '';
+  const name = employeName.toLowerCase().trim();
+  for (const k of Object.keys(USERS)) {
+    const u = USERS[k];
+    if (u.label && u.label.toLowerCase().trim() === name) {
+      return u.email || '';
+    }
+  }
+  // Fallback: recherche partielle
+  for (const k of Object.keys(USERS)) {
+    const u = USERS[k];
+    if (u.label && name.includes(u.label.toLowerCase().trim().split(' ')[0])) {
+      return u.email || '';
+    }
+  }
+  return '';
+}
+
+function notifyOMByWhatsApp(om, status, comment) {
+  const phone = cleanPhone(om.tel || '');
+  if (!phone || phone === '—' || phone.length < 6) return null;
+  
+  const statusLabel = {approved:'✅ Approuvé', rejected:'❌ Rejeté', pending:'⏳ En attente'}[status] || status;
+  const message = `Eqnovia - Ordre de mission ${om.numero || 'N/A'}\n\nBonjour ${om.employe || 'Collaborateur'},\n\nVotre ordre de mission N° ${om.numero} a été ${statusLabel}.${comment ? `\n\nMessage : ${comment}` : ''}\n\nDocument : ${om.date || ''} | ${om.objet || ''}\nÉquipe Eqnovia`;
+  
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+function notifyOMByEmail(om, status, comment) {
+  if (!window.emailjs || EMAILJS_CONFIG.serviceID.includes('xxxxxxx')) {
+    console.warn('EmailJS non configuré — modifiez EMAILJS_CONFIG avec vos IDs');
+    return;
+  }
+  
+  const statusLabel = {approved:'Approuvé ✅', rejected:'Rejeté ❌', pending:'En attente ⏳'}[status] || status;
+  
+  const recipient = om.email || findUserEmail(om.employe) || '';
+  if (!recipient) {
+    console.warn('📧 Aucun email trouvé pour', om.employe);
+    toast('⚠️ Aucun email trouvé pour ' + (om.employe || 'ce collaborateur'), 'err');
+    return;
+  }
+  emailjs.send(EMAILJS_CONFIG.serviceID, EMAILJS_CONFIG.templateID, {
+    numero: om.numero || 'N/A',
+    employe: om.employe || 'Collaborateur',
+    status: status,
+    status_label: statusLabel,
+    comment: comment || '—',
+    date: om.date || new Date().toLocaleDateString('fr-FR'),
+    objet: om.objet || '—',
+    depart: om.depart || '—',
+    arrivee: om.arrivee || '—',
+    transport: om.transport || '—',
+    to_email: recipient
+  })
+  .then(() => {
+    console.log('📧 Email envoyé avec succès à', recipient);
+    toast('📧 Email envoyé à ' + (om.employe || 'collaborateur'), 'ok');
+  })
+  .catch(err => {
+    console.warn('📧 Échec envoi email:', err);
+    toast('❌ Échec envoi email à ' + (om.employe || 'collaborateur'), 'err');
+  });
+}
+
+// ════════════════════════════════════════════
+// JUSTIFICATIF PREVIEW
+// ════════════════════════════════════════════
+function previewJustificatif(event) {
+  const file = event.target.files?.[0];
+  const preview = document.getElementById('justifPreview');
+  const previewImg = document.getElementById('justifPreviewImg');
+  const fileName = document.getElementById('justifFileName');
+  const clearBtn = document.getElementById('justifClearBtn');
+  if (!file) { preview.style.display='none'; fileName.textContent=''; clearBtn.style.display='none'; return; }
+  fileName.textContent = `📄 ${file.name} (${(file.size/1024).toFixed(1)} Ko)`;
+  clearBtn.style.display = '';
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = (e) => { previewImg.src=e.target.result; preview.style.display=''; };
+    reader.readAsDataURL(file);
+  } else { preview.style.display='none'; previewImg.src=''; }
+}
+function clearJustificatif() {
+  document.getElementById('justifInput').value='';
+  document.getElementById('justifPreview').style.display='none';
+  document.getElementById('justifPreviewImg').src='';
+  document.getElementById('justifFileName').textContent='';
+  document.getElementById('justifClearBtn').style.display='none';
+}
+
+// ════════════════════════════════════════════
+// MODAL
+// ════════════════════════════════════════════
+function showModal(title,msg,cb){
+  document.getElementById('modalTitle').textContent=title;
+  document.getElementById('modalMsg').textContent=msg;
+  document.getElementById('modalOk').onclick=()=>{closeModal();cb&&cb();};
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal(){ document.getElementById('modal').classList.remove('open'); }
+document.getElementById('modal').addEventListener('click',e=>{
+  if(e.target===document.getElementById('modal')) closeModal();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    // Close sidebar overlay if open
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (sidebar && sidebar.classList.contains('open')) {
+      toggleSidebar();
+    }
+    // Close any open modal
+    ['modal','editModal','justifModal','userModal'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.classList.contains('open')) {
+        if (id === 'modal') closeModal();
+        if (id === 'editModal') closeEditModal();
+        if (id === 'justifModal') closeJustifModal();
+        if (id === 'userModal') closeUserModal();
+      }
+    });
+  }
+});
+
+// ════════════════════════════════════════════
+// JUSTIFICATIF MODAL
+// ════════════════════════════════════════════
+function closeJustifModal() {
+  document.getElementById('justifModal').classList.remove('open');
+}
+
+document.getElementById('justifModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('justifModal')) closeJustifModal();
+});
+
+function viewJustificatif(id) {
+  const exp = cache.find(e => e.id === id);
+  if (!exp) return toast('Dépense introuvable.', 'err');
+  
+  const body = document.getElementById('justifBody');
+  
+  if (exp.justifData) {
+    body.innerHTML = `<img src="${exp.justifData}" alt="Justificatif" style="max-width:100%;border-radius:8px;border:1px solid var(--gray-200);max-height:450px;object-fit:contain;"/>
+    <p style="margin-top:10px;font-size:12px;color:var(--gray-400);">
+      ${exp.justifName ? '📎 ' + esc(exp.justifName) : 'Justificatif'}
+    </p>`;
+  } else {
+    body.innerHTML = `<p style="color:var(--gray-400);font-size:14px;">📭 Aucun justificatif pour cette dépense.</p>`;
+  }
+  
+  document.getElementById('justifModal').classList.add('open');
+}
+
+// ════════════════════════════════════════════
+// TAB SWITCHING
+// ════════════════════════════════════════════
+const TABS = ['saisie','all','monthly','yearly','trimestre','comparison','mission','admin-om','policy'];
+function switchTab(t) {
+  activeTab = t;
+  TABS.forEach(id=>{
+    document.getElementById(`tab-content-${id}`).style.display = id===t?'block':'none';
+    const tabBtn = document.getElementById(`tab-${id}`);
+    tabBtn?.classList.toggle('active', id===t);
+    if (tabBtn) tabBtn.setAttribute('aria-selected', id===t ? 'true' : 'false');
+    document.getElementById(`nav-${id}`)?.classList.toggle('active', id===t);
+    document.getElementById(`bnav-${id}`)?.classList.toggle('active', id===t);
+    // Show/hide mobile section headers
+    document.querySelectorAll(`.mobile-section-header`).forEach(el => el.style.display = 'none');
+    const header = document.querySelector(`#tab-content-${t} .mobile-section-header`);
+    if (header) header.style.display = 'flex';
+  });
+  if (t==='all')        renderAll();
+  if (t==='monthly')    renderMonthly();
+  if (t==='yearly')     renderYearly();
+  if (t==='trimestre')  renderTrimester();
+  if (t==='comparison') renderComparison();
+  if (t==='admin-om')   loadAdminOM();
+}
+
+// ════════════════════════════════════════════
+// ORDRE DE MISSION
+// ════════════════════════════════════════════
+function getOMValue(id) {
+  return sanitizeInput(document.getElementById(id).value);
+}
+
+function generateMissionOrder() {
+  const numero  = getOMValue('omNumero');
+  const date    = document.getElementById('omDate').value;
+  const employe = getOMValue('omEmploye');
+  const objet   = getOMValue('omObjet');
+
+  if (!numero || !date || !employe || !objet) {
+    toast('⚠️ Veuillez remplir les champs obligatoires (N°, date, collaborateur, objet).', 'error');
+    return;
+  }
+
+  const depart    = getOMValue('omDepart') || '—';
+  const arrivee   = getOMValue('omArrivee') || '—';
+  const debut     = document.getElementById('omDebut').value || '—';
+  const fin       = document.getElementById('omFin').value || '—';
+  const transport = document.getElementById('omTransport').value;
+  const remarques = getOMValue('omRemarques') || '—';
+  const telephone = getOMValue('omTel') || '—';
+
+  const fiche = document.getElementById('omFiche');
+  fiche.innerHTML = `
+    <div class="om-header">
+      <div class="om-brand"><img src="logo.PNG" alt="Eqnovia" class="om-logo"/></div>
+      <div class="om-title">ORDRE DE MISSION<small>N° ${esc(numero)}</small></div>
+    </div>
+    <div class="om-grid">
+      <div class="om-field"><span class="om-label">Date d'émission</span><span class="om-value">${esc(date)}</span></div>
+      <div class="om-field"><span class="om-label">Collaborateur</span><span class="om-value">${esc(employe)}</span></div>
+      <div class="om-field"><span class="om-label">Lieu de départ</span><span class="om-value">${esc(depart)}</span></div>
+      <div class="om-field"><span class="om-label">Lieu de destination</span><span class="om-value">${esc(arrivee)}</span></div>
+      <div class="om-field"><span class="om-label">Date de début</span><span class="om-value">${esc(debut)}</span></div>
+      <div class="om-field"><span class="om-label">Date de fin</span><span class="om-value">${esc(fin)}</span></div>
+      <div class="om-field"><span class="om-label">Mode de transport</span><span class="om-value">${esc(transport)}</span></div>
+      <div class="om-field"><span class="om-label">📱 Téléphone</span><span class="om-value om-phone-print">${esc(telephone)}</span></div>
+    </div>
+    <div class="om-objet">
+      <span class="om-label">Objet de la mission</span>
+      <span class="om-value">${esc(objet)}</span>
+    </div>
+    <div class="om-field full" style="margin-bottom:14px;">
+      <span class="om-label">Remarques / instructions</span>
+      <span class="om-value" style="font-weight:500;white-space:pre-wrap;">${esc(remarques)}</span>
+    </div>
+    <div class="om-sign">
+      <div class="om-sign-box"><div class="om-sign-line">Le collaborateur</div></div>
+      <div class="om-sign-box"><div class="om-sign-line">Le responsable</div></div>
+    </div>
+    <div class="om-footer">Document généré par Eqnovia — Notes de Frais • ${esc(numero)}</div>
+
+  `;
+
+  // Look up status & comment from history (if saved)
+  const history = loadOMHistory();
+  const saved = history.find(h => h.numero === numero && h.employe === employe);
+  const status = (saved && saved._status) || 'pending';
+  const comment = (saved && saved._comment) || '';
+  
+  const statusHtml = {
+    approved: '<span class="status-badge approved">✅ Approuvé</span>',
+    rejected: '<span class="status-badge rejected">❌ Rejeté</span>',
+    pending: '<span class="status-badge pending">⏳ En attente de validation</span>'
+  }[status] || '<span class="status-badge pending">⏳ En attente de validation</span>';
+  
+  // Append status after the sign section
+  fiche.innerHTML += `
+    <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--gray-200);text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Statut de la mission</div>
+      ${statusHtml}
+      ${comment ? `<div style="margin-top:8px;padding:8px 14px;background:var(--gray-50);border-radius:var(--radius-md);font-size:11px;color:var(--gray-500);text-align:left;border-left:3px solid ${status === 'approved' ? 'var(--green)' : status === 'rejected' ? 'var(--red)' : 'var(--gray-300)'};"><strong>Message de l'administration :</strong><br>${esc(comment)}</div>` : ''}
+      ${telephone && telephone !== '—' ? `<div style="margin-top:10px;" class="no-print"><a class="btn btn-primary" href="https://wa.me/${cleanPhone(telephone)}?text=${encodeURIComponent('Eqnovia - Ordre de mission N° ' + numero + '\n\nCollaborateur : ' + employe + '\nDate : ' + date + '\nTrajet : ' + depart + ' → ' + arrivee + '\nObjet : ' + objet + '\nTransport : ' + transport + '\n' + (remarques !== '—' ? 'Remarques : ' + remarques : ''))}" target="_blank" style="text-decoration:none;font-size:12px;padding:6px 16px;">💬 Envoyer par WhatsApp</a></div>` : ''}
+    </div>
+  `;
+
+  document.getElementById('omPrintBtn').disabled = false;
+  toast('✅ Fiche d\'ordre de mission générée.', 'success');
+}
+
+function resetMissionForm() {
+  ['omNumero','omDate','omEmploye','omDepart','omArrivee','omDebut','omFin','omObjet','omTel','omRemarques'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('omTransport').value = 'Voiture';
+  document.getElementById('omFiche').innerHTML =
+    '<p style="color:var(--gray-400);font-size:13px;text-align:center;padding:40px 0;">🗒️ Remplissez le formulaire et cliquez sur « Générer la fiche » pour afficher la fiche d\'ordre de mission.</p>';
+  document.getElementById('omPrintBtn').disabled = true;
+}
+
+function printMissionOrder() {
+  if (document.getElementById('omPrintBtn').disabled) return;
+  window.print();
+}
+
+// ════════════════════════════════════════════════════
+// ORDRE DE MISSION — SAUVEGARDE & HISTORIQUE
+// ════════════════════════════════════════════════════
+const OM_STORAGE_KEY = 'eqnovia_om_history';
+
+function loadOMHistory() {
+  try { return JSON.parse(localStorage.getItem(OM_STORAGE_KEY)) || []; } catch(e) { return []; }
+}
+function saveOMHistory(history) {
+  // Mark + sync last new item to Firebase BEFORE saving to localStorage
+  const last = history[history.length - 1];
+  if (useFirebase && last && !last._syncedToFB) {
+    last._syncedToFB = true;
+    last._localId = last._localId || (Date.now() + '_' + history.length);
+    fbAddOM(last);
+  }
+  localStorage.setItem(OM_STORAGE_KEY, JSON.stringify(history));
+}
+
+function renderOMHistory() {
+  const history = loadOMHistory();
+  const container = document.getElementById('omHistoryList');
+  if (!container) return;
+  if (!history.length) {
+    container.innerHTML = '<p style="font-size:12px;color:var(--gray-400);padding:8px 0;">Aucun ordre de mission enregistré.</p>';
+    return;
+  }
+  container.innerHTML = history.slice().reverse().map((om, i) => {
+    const idx = history.length - 1 - i;
+    const s = om._status || 'pending';
+    const statusIcon = {approved:'✅', rejected:'❌', pending:'⏳'}[s] || '⏳';
+    const statusCls = {approved:'approved', rejected:'rejected', pending:'pending'}[s] || 'pending';
+    return `
+    <div class="om-history-item">
+      <div>
+        <div class="om-h-num">${esc(om.numero)}</div>
+        <div class="om-h-employe">${esc(om.employe)}</div>
+        <div class="om-h-date" style="margin-top:2px;">${esc(om.date)}</div>
+      </div>
+      <div style="text-align:right;">
+        <span class="status-badge ${statusCls}" style="font-size:9px;padding:1px 8px;">${statusIcon} ${s === 'approved' ? 'Approuvé' : s === 'rejected' ? 'Rejeté' : 'En attente'}</span>
+      </div>
+      <div class="om-h-actions">
+        <button class="om-h-action view" onclick="event.stopPropagation();viewOM(${idx})" title="Consulter">👁️</button>
+        <button class="om-h-action edit" onclick="event.stopPropagation();editOM(${idx})" title="Modifier">✏️</button>
+        <button class="om-h-action pdf" onclick="event.stopPropagation();exportSingleOMPDF(${idx})" title="Télécharger PDF">📄</button>
+        <button class="om-h-action del" onclick="event.stopPropagation();deleteOM(${idx})" title="Supprimer">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function editOM(index) {
+  const history = loadOMHistory();
+  const om = history[index];
+  if (!om) return toast('Ordre de mission introuvable.', 'err');
+  
+  // Load data into the form fields
+  document.getElementById('omNumero').value = om.numero || '';
+  document.getElementById('omDate').value = om.date || '';
+  document.getElementById('omEmploye').value = om.employe || '';
+  document.getElementById('omDepart').value = om.depart || '';
+  document.getElementById('omArrivee').value = om.arrivee || '';
+  document.getElementById('omDebut').value = om.debut || '';
+  document.getElementById('omFin').value = om.fin || '';
+  document.getElementById('omTransport').value = om.transport || 'Voiture';
+  document.getElementById('omObjet').value = om.objet || '';
+  document.getElementById('omTel').value = om.tel || '';
+  document.getElementById('omRemarques').value = om.remarques || '';
+  
+  // Switch to the mission tab
+  switchTab('mission');
+  // Scroll to the top of the OM panel
+  document.getElementById('omNumero')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  toast('✏️ Ordre de mission chargé dans le formulaire.', 'ok');
+}
+
+function viewOM(index) {
+  const history = loadOMHistory();
+  const om = history[index];
+  if (!om) return toast('Ordre de mission introuvable.', 'err');
+  
+  // Load into form, generate the fiche, and scroll to it
+  editOM(index);
+  generateMissionOrder();
+  document.getElementById('omFiche')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  toast('👁️ Fiche affichée.', 'ok');
+}
+
+function exportSingleOMPDF(index) {
+  const history = loadOMHistory();
+  const om = history[index];
+  if (!om) return toast('Ordre de mission introuvable.', 'err');
+  
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    
+    // Logo
+    try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch(e) { /* fallback */ }
+    
+    // Title
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`ORDRE DE MISSION N° ${om.numero || 'N/A'}`, 105, 22, { align: 'center' });
+    
+    // Separator
+    doc.setDrawColor(11, 79, 158);
+    doc.setLineWidth(0.8);
+    doc.line(14, 27, 196, 27);
+    
+    // Info box
+    const leftX = 18;
+    let y = 33;
+    doc.setFontSize(10);
+    
+    const fields = [
+      ['Date d\'émission', om.date || '—'],
+      ['Collaborateur', om.employe || '—'],
+      ['Lieu de départ', om.depart || '—'],
+      ['Lieu de destination', om.arrivee || '—'],
+      ['Date de début', om.debut || '—'],
+      ['Date de fin', om.fin || '—'],
+      ['Mode de transport', om.transport || '—'],
+      ['Téléphone', om.tel || '—'],
+    ];
+    
+    fields.forEach(([label, value], fi) => {
+      const col = fi % 2;
+      const row = Math.floor(fi / 2);
+      const x = col === 0 ? leftX : 105;
+      const yy = y + row * 8;
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(142, 151, 168);
+      doc.text(label.toUpperCase(), x, yy);
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(53, 61, 79);
+      doc.text(value, x, yy + 4);
+      
+      // Underline
+      doc.setDrawColor(221, 225, 234);
+      doc.setLineWidth(0.3);
+      doc.line(x, yy + 5.5, col === 0 ? 100 : 196, yy + 5.5);
+    });
+    
+    const objY = y + Math.ceil(fields.length / 2) * 8 + 6;
+    
+    // Object box
+    doc.setFillColor(235, 243, 251);
+    doc.setDrawColor(200, 223, 245);
+    doc.roundedRect(leftX - 2, objY, 176, 16, 2, 2, 'FD');
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(11, 79, 158);
+    doc.text('OBJET DE LA MISSION', leftX + 2, objY + 5);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(53, 61, 79);
+    doc.text(om.objet || '—', leftX + 2, objY + 12);
+    
+    // Remarks
+    let lines;
+    if (om.remarques && om.remarques !== '—') {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(142, 151, 168);
+      doc.text('REMARQUES / INSTRUCTIONS', leftX, objY + 23);
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(53, 61, 79);
+      lines = doc.splitTextToSize(om.remarques, 175);
+      doc.text(lines, leftX, objY + 30);
+    }
+    
+    // Status
+    const statusLabel = {approved:'APPROUVÉ ✅', rejected:'REJETÉ ❌', pending:'EN ATTENTE ⏳'}[om._status] || 'EN ATTENTE';
+    const linesHeight = (om.remarques && om.remarques !== '—' && lines) ? lines.length * 4 : 0;
+    const statusY = objY + (om.remarques && om.remarques !== '—' ? 34 + linesHeight : 28);
+    
+    doc.setDrawColor(221, 225, 234);
+    doc.setLineWidth(0.5);
+    doc.line(leftX, statusY, 196, statusY);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(142, 151, 168);
+    doc.text('STATUT', 105, statusY + 7, { align: 'center' });
+    
+    doc.setFontSize(11);
+    doc.setTextColor(11, 79, 158);
+    doc.text(statusLabel, 105, statusY + 14, { align: 'center' });
+    
+    // Comment
+    let commentLines;
+    if (om._comment) {
+      doc.setFontSize(9);
+      doc.setTextColor(99, 110, 130);
+      commentLines = doc.splitTextToSize(`Message : ${om._comment}`, 170);
+      doc.text(commentLines, 105, statusY + 21, { align: 'center' });
+    }
+    
+    // Signature section
+    const commentHeight = (om._comment && commentLines) ? commentLines.length * 4 : 0;
+    const sigY = statusY + (om._comment ? 26 + commentHeight : 22);
+    doc.setDrawColor(142, 151, 168);
+    doc.setLineWidth(0.3);
+    
+    // Left signature line
+    doc.line(30, sigY + 12, 85, sigY + 12);
+    doc.setFontSize(8);
+    doc.setTextColor(142, 151, 168);
+    doc.text('Le collaborateur', 57.5, sigY + 17, { align: 'center' });
+    
+    // Right signature line
+    doc.setLineWidth(0.3);
+    doc.line(110, sigY + 12, 165, sigY + 12);
+    doc.text('Le responsable', 137.5, sigY + 17, { align: 'center' });
+    
+    // Footer
+    const footerY = 285;
+    doc.setDrawColor(221, 225, 234);
+    doc.setLineWidth(0.3);
+    doc.line(14, footerY, 196, footerY);
+    doc.setFontSize(7);
+    doc.setTextColor(142, 151, 168);
+    doc.text(`Document généré par Eqnovia — Notes de Frais • ${om.numero || 'N/A'}`, 105, footerY + 5, { align: 'center' });
+    doc.text(`Date: ${om.date || '—'}`, 105, footerY + 10, { align: 'center' });
+    
+    doc.save(`Ordre_Mission_${om.numero || 'sans_numero'}.pdf`);
+    toast('📄 PDF téléchargé.', 'ok');
+  } catch (e) {
+    console.warn('PDF export failed:', e);
+    toast('❌ Erreur lors de la création du PDF.', 'err');
+  }
+}
+
+function deleteOM(index) {
+  const history = loadOMHistory();
+  const removed = history.splice(index, 1)[0];
+  saveOMHistory(history);
+  // Also delete from Firebase if it was synced
+  if (useFirebase && removed && removed._localId) {
+    fbDeleteOM(removed._localId);
+  }
+  renderOMHistory();
+  toast('🗑️ Ordre de mission supprimé.', 'ok');
+}
+
+
+// Override generateMissionOrder to save history
+const _origGenerate = generateMissionOrder;
+generateMissionOrder = function() {
+  _origGenerate();
+  // Only save if generation succeeded (print button enabled = fiche generated)
+  if (document.getElementById('omPrintBtn').disabled) return;
+  const history = loadOMHistory();
+  history.push({
+    numero: document.getElementById('omNumero').value,
+    date: document.getElementById('omDate').value,
+    employe: document.getElementById('omEmploye').value,
+    depart: document.getElementById('omDepart').value,
+    arrivee: document.getElementById('omArrivee').value,
+    debut: document.getElementById('omDebut').value,
+    fin: document.getElementById('omFin').value,
+    transport: document.getElementById('omTransport').value,
+    objet: document.getElementById('omObjet').value,
+    remarques: document.getElementById('omRemarques').value,
+    email: findUserEmail(document.getElementById('omEmploye').value),
+    tel: document.getElementById('omTel').value
+  });
+  saveOMHistory(history);
+  renderOMHistory();
+};
+
+// ════════════════════════════════════════════
+// ADD EXPENSE
+// ════════════════════════════════════════════
+async function addExpense() {
+  const date    = document.getElementById('dateInput').value;
+  const desc    = sanitizeInput(document.getElementById('descInput').value);
+  const amount  = parseFloat(document.getElementById('amountInput').value);
+  const cat     = document.getElementById('catInput').value;
+  const mission = sanitizeInput(document.getElementById('missionInput').value);
+  const comment = sanitizeInput(document.getElementById('commentInput').value);
+  const justifFile = document.getElementById('justifInput');
+
+  if (!date)                    return toast('Veuillez saisir une date.','err');
+  if (!desc)                    return toast('Veuillez saisir une description.','err');
+  if (!validateDate(date))      return toast('Date invalide (doit être dans le passé et <= 10 ans).','err');
+  if (!validateAmount(amount))  return toast('Montant TTC invalide (0 < montant <= 10 000 000).','err');
+
+  const btn = document.getElementById('addBtn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Enregistrement…';
+
+  let justifData = null;
+  let justifName = '';
+
+  if (justifFile.files && justifFile.files.length > 0) {
+    const file = justifFile.files[0];
+    if (file.type.startsWith('image/')) {
+      try {
+        const reader = new FileReader();
+        const data = await new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        justifData = data;
+        justifName = file.name;
+      } catch (e) {
+        console.warn('Error reading justificatif:', e);
+      }
+    } else {
+      toast('Le justificatif doit être une image.', 'err');
+      btn.disabled=false; btn.innerHTML='➕ Ajouter la dépense';
+      return;
+    }
+  }
+
+  const exp = { 
+    id: Date.now(), 
+    date, 
+    desc, 
+    amount, 
+    cat, 
+    mission: mission || '',
+    comment, 
+    user: currentUser,
+    justif: justifData ? 'Oui' : 'Non',
+    justifData: justifData || null,
+    justifName: justifName || null
+  };
+  await dataAdd(exp);
+
+  btn.disabled=false; btn.innerHTML='➕ Ajouter la dépense';
+  
+  document.getElementById('descInput').value='';
+  document.getElementById('amountInput').value='';
+  document.getElementById('missionInput').value='';
+  document.getElementById('commentInput').value='';
+  document.getElementById('justifInput').value='';
+  
+  updateKPIs();
+  if (activeTab!=='saisie') switchTab(activeTab); else renderAll();
+  toast('Dépense enregistrée dans la base de données ✔');
+}
+
+// ════════════════════════════════════════════
+// EDIT
+// ════════════════════════════════════════════
+let editingId = null;
+
+function editRow(id) {
+  const exp = cache.find(e => e.id === id);
+  if (!exp) return toast('Dépense introuvable.', 'err');
+  
+  if (!isAdmin && exp.user !== currentUser) {
+    return toast('Vous ne pouvez modifier que vos propres dépenses.', 'err');
+  }
+  
+  editingId = id;
+  document.getElementById('editDate').value    = exp.date;
+  document.getElementById('editAmount').value  = exp.amount;
+  document.getElementById('editDesc').value    = exp.desc;
+  document.getElementById('editCat').value     = exp.cat || 'Autre';
+  document.getElementById('editMission').value = exp.mission || '';
+  document.getElementById('editComment').value = exp.comment || '';
+  
+  document.getElementById('editModal').classList.add('open');
+}
+
+function closeEditModal() {
+  document.getElementById('editModal').classList.remove('open');
+  editingId = null;
+}
+
+document.getElementById('editModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('editModal')) closeEditModal();
+});
+
+async function saveEdit() {
+  if (editingId === null) return;
+  
+  const idx = cache.findIndex(e => e.id === editingId);
+  if (idx === -1) return toast('Dépense introuvable.', 'err');
+  
+  if (!isAdmin && cache[idx].user !== currentUser) {
+    return toast('Vous ne pouvez modifier que vos propres dépenses.', 'err');
+  }
+  
+  const date    = document.getElementById('editDate').value;
+  const desc    = sanitizeInput(document.getElementById('editDesc').value);
+  const amount  = parseFloat(document.getElementById('editAmount').value);
+  const cat     = document.getElementById('editCat').value;
+  const mission = sanitizeInput(document.getElementById('editMission').value);
+  const comment = sanitizeInput(document.getElementById('editComment').value);
+
+  if (!date)                    return toast('Veuillez saisir une date.', 'err');
+  if (!desc)                    return toast('Veuillez saisir une description.', 'err');
+  if (!validateDate(date))      return toast('Date invalide (doit être dans le passé et <= 10 ans).', 'err');
+  if (!validateAmount(amount))  return toast('Montant TTC invalide (0 < montant <= 10 000 000).', 'err');
+
+  const btn = document.getElementById('editSaveBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Enregistrement…';
+
+  cache[idx] = { ...cache[idx], date, desc, amount, cat, mission, comment };
+  try { lsSave(cache); } catch(e) {}
+  
+  if (useFirebase) {
+    try {
+      const { collection, getDocs, deleteDoc, doc, addDoc, serverTimestamp, query, where } = window.__fs;
+      const q = query(collection(window.__db, 'expenses'), where('id', '==', editingId));
+      const snap = await getDocs(q);
+      for (const d of snap.docs) {
+        await deleteDoc(doc(window.__db, 'expenses', d.id));
+      }
+      await addDoc(collection(window.__db, 'expenses'), { ...cache[idx], createdAt: serverTimestamp() });
+    } catch(e) { console.warn('FB edit failed', e); }
+  }
+
+  btn.disabled = false; btn.innerHTML = '💾 Enregistrer les modifications';
+  closeEditModal();
+  updateKPIs();
+  if (activeTab === 'monthly') renderMonthly();
+  else if (activeTab === 'yearly') renderYearly();
+  else renderAll();
+  toast('Dépense modifiée avec succès ✔');
+}
+
+// ════════════════════════════════════════════
+// DELETE
+// ════════════════════════════════════════════
+function deleteRow(id) {
+  const exp = cache.find(e => e.id === id);
+  if (!exp) return toast('Dépense introuvable.', 'err');
+  
+  if (!isAdmin) {
+    return toast('Seul l\'administrateur peut supprimer des dépenses.', 'err');
+  }
+  
+  showModal('Supprimer la dépense','Cette action est irréversible. Continuer ?', async()=>{
+    await dataDelete(id);
+    updateKPIs();
+    if (activeTab==='monthly') renderMonthly();
+    else if (activeTab==='yearly') renderYearly();
+    else renderAll();
+    toast('Dépense supprimée.');
+  });
+}
+
+// ════════════════════════════════════════════
+// CLEAR ALL
+// ════════════════════════════════════════════
+function confirmClear(){
+  if (!isAdmin) {
+    return toast('Seul l\'administrateur peut effacer toutes les données.', 'err');
+  }
+  showModal('⚠️ Supprimer tout','Toutes les dépenses seront effacées de la base de données. Continuer ?', async()=>{
+    if (useFirebase) {
+      try {
+        const { collection, getDocs, deleteDoc, doc } = window.__fs;
+        const snap = await getDocs(collection(window.__db,'expenses'));
+        await Promise.all(snap.docs.map(d => deleteDoc(doc(window.__db,'expenses',d.id))));
+      } catch(e){ console.warn(e); }
+    }
+    cache=[];
+    try { lsSave([]); } catch(e) {}
+    updateKPIs();
+    renderAll(); renderMonthly(); renderYearly();
+    toast('Toutes les dépenses ont été supprimées.');
+  });
+}
+
+// ════════════════════════════════════════════
+// GLOBAL SEARCH
+// ════════════════════════════════════════════
+function handleGlobalSearch(query) {
+  const q = (query || '').toLowerCase().trim();
+  if (!q) {
+    if (activeTab !== 'all') switchTab('all');
+    resetFilters();
+    return;
+  }
+  if (activeTab !== 'all') switchTab('all');
+  document.getElementById('filterSearch').value = q;
+  renderAll();
+}
+
+// ════════════════════════════════════════════
+// KPIs
+// ════════════════════════════════════════════
+function updateKPIs() {
+  const all   = dataAll();
+  const userData = getUserExpenses(all);
+  const now   = new Date();
+  const ym    = now.toISOString().substring(0,7);
+  const mData = userData.filter(e=>e.date.startsWith(ym));
+  const total = userData.reduce((s,e)=>s+e.amount,0);
+
+  document.getElementById('kpiTotal').textContent      = fmtDH(total);
+  document.getElementById('kpiCount').textContent      = userData.length + ' dépense(s)';
+  document.getElementById('kpiMonth').textContent      = fmtDH(mData.reduce((s,e)=>s+e.amount,0));
+  document.getElementById('kpiMonthLabel').textContent = MONTHS_FR[now.getMonth()] + ' ' + now.getFullYear();
+}
+
+// ════════════════════════════════════════════
+// SORT
+// ════════════════════════════════════════════
+function sortBy(col){
+  if(sortCol===col) sortDir*=-1; else{sortCol=col;sortDir=-1;}
+  renderAll();
+}
+
+// ════════════════════════════════════════════
+// RENDER ALL
+// ════════════════════════════════════════════
+function renderAll() {
+  const allData = dataAll();
+  const data = getUserExpenses(allData);
+  const yearF   = document.getElementById('filterYear').value;
+  const monthF  = document.getElementById('filterMonth').value;
+  const catF    = document.getElementById('filterCat').value;
+  const userF   = document.getElementById('filterUser').value;
+  const search  = (document.getElementById('filterSearch').value||'').toLowerCase();
+
+  const years = [...new Set(allData.map(e=>e.date.substring(0,4)))].sort().reverse();
+  const ySel  = document.getElementById('filterYear');
+  const yVal  = ySel.value;
+  ySel.innerHTML='<option value="all">📅 Toutes années</option>';
+  years.forEach(y=>{const o=document.createElement('option');o.value=y;o.textContent=y;ySel.appendChild(o);});
+  if(years.includes(yVal)) ySel.value=yVal;
+
+  const userSel = document.getElementById('filterUser');
+  const userVal = userSel.value;
+  const userOptions = isAdmin ? Object.keys(USERS) : [currentUser];
+  userSel.innerHTML='<option value="all">👤 Tous</option>';
+  userOptions.forEach(u=>{
+    const o=document.createElement('option');
+    o.value=u;
+    o.textContent=USERS[u].label;
+    userSel.appendChild(o);
+  });
+  if(userOptions.includes(userVal)) userSel.value=userVal;
+
+  let rows = data.filter(e=>{
+    const y=e.date.substring(0,4), m=e.date.substring(5,7);
+    const userMatch = userF==='all' || e.user === userF;
+    return (yearF==='all'||y===yearF)
+        && (monthF==='all'||m===monthF)
+        && (catF==='all'||(e.cat||'Autre')===catF)
+        && userMatch
+        && (!search||e.desc.toLowerCase().includes(search)||(e.cat||'').toLowerCase().includes(search)||(e.mission||'').toLowerCase().includes(search));
+  }).sort((a,b)=>{
+    if(sortCol==='amount') return (a.amount-b.amount)*sortDir;
+    return a.date.localeCompare(b.date)*sortDir;
+  });
+
+  const tbody=document.getElementById('tbody');
+
+  if(!rows.length){
+    tbody.innerHTML=`<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">🗂️</div><h3>Aucune dépense trouvée</h3><p>Ajustez vos filtres ou saisissez une nouvelle dépense.</p></div></td></tr>`;
+    document.getElementById('grandTotal').innerHTML='💰 Total : <strong>0,00 DH</strong>';
+    document.getElementById('rowCount').textContent='0 ligne(s)';
+    return;
+  }
+
+  let total=0, html='';
+  rows.forEach((e,i)=>{
+    total+=e.amount;
+
+    const justifBadge = e.justifData 
+      ? `<span class="badge badge-justif" onclick="viewJustificatif(${e.id})" title="Voir le justificatif">📎 Oui</span>`
+      : `<span class="badge badge-no">❌ Non</span>`;
+    
+    const userLabel = USERS[e.user] ? USERS[e.user].label : e.user;
+    const isOwner = e.user === currentUser;
+    const canEdit = isAdmin || isOwner;
+    const canDelete = isAdmin;
+
+    html+=`<tr>
+      <td style="color:var(--gray-400);font-size:11px;">${i+1}</td>
+      <td class="td-date">${fmtDate(e.date)}</td>
+      <td class="td-desc"><span title="${esc(e.desc)}">${esc(e.desc)}</span></td>
+      <td><span class="badge badge-cat">${esc(e.cat||'Autre')}</span></td>
+      <td class="td-amount">${fmtDH(e.amount)}</td>
+      <td class="td-desc"><span title="${esc(e.mission || '')}">${esc(e.mission || '—')}</span></td>
+      <td class="td-desc"><span title="${esc(e.comment || '')}">${esc(e.comment || '—')}</span></td>
+      <td class="td-user"><span class="badge badge-user">${esc(userLabel)}</span></td>
+      <td>${justifBadge}</td>
+      <td><div class="action-btns">
+        <button class="btn-icon edit ${!canEdit ? 'disabled' : ''}" onclick="${canEdit ? 'editRow('+e.id+')' : ''}" title="${canEdit ? 'Modifier' : 'Non autorisé'}">✏️</button>
+        <button class="btn-icon ${!canDelete ? 'disabled' : ''}" onclick="${canDelete ? 'deleteRow('+e.id+')' : ''}" title="${canDelete ? 'Supprimer' : 'Non autorisé'}">✕</button>
+      </div></td>
+    </tr>`;
+  });
+  tbody.innerHTML=html;
+  document.getElementById('grandTotal').innerHTML=`💰 Total TTC : <strong>${fmtDH(total)}</strong>`;
+  document.getElementById('rowCount').textContent=rows.length+' ligne(s) — Total TTC : '+fmtDH(total);
+}
+
+function resetFilters(){
+  ['filterYear','filterMonth','filterCat','filterUser'].forEach(id=>{
+    const el = document.getElementById(id);
+    if (el) el.value='all';
+  });
+  document.getElementById('filterSearch').value='';
+  renderAll();
+}
+
+// ════════════════════════════════════════════
+// RENDER MONTHLY
+// ════════════════════════════════════════════
+function renderMonthly() {
+  const allData = dataAll();
+  const data = getUserExpenses(allData);
+  const yearF  = document.getElementById('filterYearMonth').value;
+  const userF  = document.getElementById('filterMonthUser')?.value || 'all';
+
+  const years=[...new Set(allData.map(e=>e.date.substring(0,4)))].sort().reverse();
+  const ySel=document.getElementById('filterYearMonth');
+  const yVal=ySel.value;
+  ySel.innerHTML='<option value="all">Toutes années</option>';
+  years.forEach(y=>{const o=document.createElement('option');o.value=y;o.textContent=y;ySel.appendChild(o);});
+  if(years.includes(yVal)) ySel.value=yVal;
+
+  // Populate user filter dynamically
+  const userSel = document.getElementById('filterMonthUser');
+  const userVal = userSel?.value || 'all';
+  if (userSel && isAdmin) {
+    userSel.innerHTML = '<option value="all">👤 Tous</option>' +
+      Object.keys(USERS).map(u => `<option value="${u}">${u === 'admin' ? 'Admin' : esc(USERS[u].label)}</option>`).join('');
+    if (Object.keys(USERS).includes(userVal)) userSel.value = userVal;
+  }
+
+  let filtered = data.filter(e=> yearF==='all'||e.date.substring(0,4)===yearF);
+  
+  if (!isAdmin) {
+    filtered = filtered.filter(e => e.user === currentUser);
+  } else if (userF !== 'all') {
+    filtered = filtered.filter(e => e.user === userF);
+  }
+
+  const groups={};
+  filtered.forEach(e=>{
+    const key=e.date.substring(0,7);
+    if(!groups[key]) groups[key]=[];
+    groups[key].push(e);
+  });
+
+  const keys=Object.keys(groups).sort().reverse();
+  const container=document.getElementById('monthlyGroups');
+
+  if(!keys.length){
+    container.innerHTML=`<div class="panel"><div class="empty-state"><div class="empty-icon">📭</div><h3>Aucune dépense</h3><p>Aucune dépense enregistrée pour cette période.</p></div></div>`;
+    return;
+  }
+
+  container.innerHTML = keys.map(key=>{
+    const [y,m]=key.split('-');
+    const label=`${MONTHS_FR[parseInt(m,10)-1]} ${y}`;
+    const items=groups[key].sort((a,b)=>b.date.localeCompare(a.date));
+    const total=items.reduce((s,e)=>s+e.amount,0);
+    
+    const rows=items.map((e,i)=>{
+      const justifBadge = e.justifData 
+        ? `<span class="badge badge-justif" onclick="viewJustificatif(${e.id})" title="Voir le justificatif">📎 Oui</span>`
+        : `<span class="badge badge-no">❌ Non</span>`;
+      const userLabel = USERS[e.user] ? USERS[e.user].label : e.user;
+      const isOwner = e.user === currentUser;
+      const canEdit = isAdmin || isOwner;
+      const canDelete = isAdmin;
+      
+      return `<tr>
+        <td style="color:var(--gray-400);font-size:11px;padding:8px 12px;">${i+1}</td>
+        <td class="td-date" style="padding:8px 12px;">${fmtDate(e.date)}</td>
+        <td class="td-desc" style="padding:8px 12px;"><span title="${esc(e.desc)}">${esc(e.desc)}</span></td>
+        <td style="padding:8px 12px;"><span class="badge badge-cat">${esc(e.cat||'Autre')}</span></td>
+        <td class="td-amount" style="padding:8px 12px;">${fmtDH(e.amount)}</td>
+        <td class="td-desc" style="padding:8px 12px;"><span title="${esc(e.mission || '')}">${esc(e.mission || '—')}</span></td>
+        <td class="td-desc" style="padding:8px 12px;"><span title="${esc(e.comment || '')}">${esc(e.comment || '—')}</span></td>
+        <td class="td-user" style="padding:8px 12px;"><span class="badge badge-user">${esc(userLabel)}</span></td>
+        <td style="padding:8px 12px;">${justifBadge}</td>
+        <td style="padding:8px 12px;"><div class="action-btns">
+          <button class="btn-icon edit ${!canEdit ? 'disabled' : ''}" onclick="${canEdit ? 'editRow('+e.id+')' : ''}" title="${canEdit ? 'Modifier' : 'Non autorisé'}">✏️</button>
+          <button class="btn-icon ${!canDelete ? 'disabled' : ''}" onclick="${canDelete ? 'deleteRow('+e.id+')' : ''}" title="${canDelete ? 'Supprimer' : 'Non autorisé'}">✕</button>
+        </div></td>
+      </tr>`;
+    }).join('');
+
+    return `<div class="history-group">
+      <div class="history-group-header" onclick="toggleGroup('${key}')">
+        <div class="history-group-title">
+          <span style="font-size:18px;">📅</span>
+          <span>${label}</span>
+          <span style="font-size:11px;color:var(--gray-400);font-weight:500;">${items.length} dépense(s)</span>
+        </div>
+        <div class="history-group-badge">
+          <span class="group-total">${fmtDH(total)}</span>
+          <span class="group-toggle" id="toggle-${key}">▼</span>
+        </div>
+      </div>
+      <div class="history-group-body open" id="body-${key}">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>#</th><th>Date</th><th>Description</th><th>Type</th>
+              <th>Total</th><th>Mission</th><th>Commentaires</th><th>User</th><th>Justif</th><th></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <div style="display:flex;justify-content:flex-end;padding:10px 16px;background:var(--gray-50);border-top:1px solid var(--gray-100);gap:12px;">
+          <div class="total-amount">💰 Total TTC : <strong>${fmtDH(total)}</strong></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleGroup(key){
+  const body=document.getElementById(`body-${key}`);
+  const tog=document.getElementById(`toggle-${key}`);
+  body.classList.toggle('open');
+  tog.classList.toggle('open');
+}
+
+// ════════════════════════════════════════════
+// RENDER YEARLY
+// ════════════════════════════════════════════
+function renderYearly() {
+  const allData = dataAll();
+  const data = getUserExpenses(allData);
+  const groups={};
+  data.forEach(e=>{
+    const y=e.date.substring(0,4);
+    if(!groups[y]) groups[y]={total:0, count:0, byMonth:{}, byCat:{}, users:new Set()};
+    groups[y].total+=e.amount;
+    groups[y].count++;
+    groups[y].users.add(e.user);
+    const m=parseInt(e.date.substring(5,7),10)-1;
+    groups[y].byMonth[m]=(groups[y].byMonth[m]||0)+e.amount;
+    const c=e.cat||'Autre';
+    groups[y].byCat[c]=(groups[y].byCat[c]||0)+e.amount;
+  });
+
+  const years=Object.keys(groups).sort().reverse();
+  const container=document.getElementById('yearlyGroups');
+
+  if(!years.length){
+    container.innerHTML=`<div class="panel"><div class="empty-state"><div class="empty-icon">📭</div><h3>Aucune dépense</h3><p>Aucune dépense enregistrée.</p></div></div>`;
+    return;
+  }
+
+  container.innerHTML=years.map(y=>{
+    const g=groups[y];
+    const vals=Object.values(g.byMonth);
+    const maxVal=Math.max(...vals,1);
+    const bars=Array.from({length:12},(_,i)=>{
+      const v=g.byMonth[i]||0;
+      const h=Math.max(Math.round((v/maxVal)*60),v>0?3:0);
+      return `<div class="bar-wrap">
+        <div class="bar-value">${v>0?Math.round(v/1000)+'k':''}</div>
+        <div class="bar-fill" style="height:${h}px;opacity:${v>0?1:.2};"></div>
+        <div class="bar-label">${MONTHS_SHORT[i]}</div>
+      </div>`;
+    }).join('');
+
+    const userList = Array.from(g.users).map(u => USERS[u]?.label || u).join(', ');
+    const catRows=Object.entries(g.byCat).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--gray-100);">
+        <span class="badge badge-cat">${esc(cat)}</span>
+        <span style="font-weight:700;color:var(--eq-blue);font-size:12px;">${fmtDH(amt)}</span>
+      </div>`).join('');
+
+    return `<div class="history-group">
+      <div class="history-group-header" onclick="toggleGroup('y${y}')">
+        <div class="history-group-title">
+          <span style="font-size:20px;">📆</span>
+          <span>Année ${y}</span>
+          <span style="font-size:11px;color:var(--gray-400);font-weight:500;">${g.count} dépense(s)</span>
+        </div>
+        <div class="history-group-badge">
+          <span class="group-total">${fmtDH(g.total)}</span>
+          <span class="group-toggle open" id="toggle-y${y}">▼</span>
+        </div>
+      </div>
+      <div class="history-group-body open" id="body-y${y}">
+        <div class="year-chart">
+          <h4>Répartition mensuelle (DH) ${isAdmin ? '— ' + userList : ''}</h4>
+          <div class="bar-chart">${bars}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
+          <div style="padding:14px 18px;border-right:1px solid var(--gray-100);">
+            <h4 style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Par catégorie</h4>
+            ${catRows}
+          </div>
+          <div style="padding:14px 18px;">
+            <h4 style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Résumé ${y}</h4>
+            <div style="font-size:24px;font-weight:800;color:var(--eq-blue);margin-bottom:3px;">${fmtDH(g.total)}</div>
+            <div style="font-size:12px;color:var(--gray-400);">${g.count} dépenses · Moy. ${fmtDH(g.total/g.count)}</div>
+            <div style="margin-top:12px;">
+              <button class="btn btn-primary" style="height:32px;font-size:11px;" onclick="switchTab('monthly');document.getElementById('filterYearMonth').value='${y}';renderMonthly();">
+                📅 Voir mois par mois
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════
+// OCR
+// ════════════════════════════════════════════
+function onFileChosen(e) {
+  const f = e.target.files[0];
+  document.getElementById('fileName').textContent = f ? '📎 ' + f.name : 'Aucun fichier';
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.add('drag-over');
+}
+
+function handleDragLeave() {
+  document.getElementById('uploadZone').classList.remove('drag-over');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) {
+    const dt = new DataTransfer();
+    dt.items.add(f);
+    document.getElementById('fileInput').files = dt.files;
+    document.getElementById('fileName').textContent = '📎 ' + f.name;
+    toast('Image prête pour OCR !');
+  } else {
+    toast('Veuillez déposer un fichier image.', 'err');
+  }
+}
+
+async function runOCR() {
+  const fileInput = document.getElementById('fileInput');
+  const out = document.getElementById('ocrOutput');
+  const bar = document.getElementById('ocrBar');
+  const prog = document.getElementById('ocrProgress');
+  const btn = document.getElementById('ocrBtn');
+
+  if (!fileInput.files || !fileInput.files.length) {
+    return toast('Choisissez d\'abord une image.', 'err');
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Lecture en cours…';
+  prog.style.display = 'block';
+  bar.style.width = '0%';
+  out.textContent = '⏳ Initialisation de Tesseract…';
+
+  try {
+    const file = fileInput.files[0];
+    
+    if (typeof Tesseract === 'undefined') {
+      throw new Error('Tesseract.js n\'est pas chargé. Vérifiez votre connexion internet.');
+    }
+
+    const imageUrl = URL.createObjectURL(file);
+    
+    const result = await Tesseract.recognize(imageUrl, 'fra', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const progress = Math.round(m.progress * 100);
+          bar.style.width = Math.min(progress, 100) + '%';
+          out.textContent = `⏳ Reconnaissance en cours... ${progress}%`;
+        }
+        if (m.status === 'loading tesseract core') {
+          out.textContent = '⏳ Chargement du moteur OCR...';
+        }
+        if (m.status === 'initializing tesseract') {
+          out.textContent = '⏳ Initialisation...';
+        }
+        if (m.status === 'loading language traineddata') {
+          out.textContent = '⏳ Chargement du dictionnaire français...';
+        }
+      }
+    });
+
+    URL.revokeObjectURL(imageUrl);
+
+    ocrText = result.data.text || '';
+    bar.style.width = '100%';
+    
+    if (ocrText.trim()) {
+      out.textContent = ocrText;
+      toast('✅ Texte extrait avec succès !');
+    } else {
+      out.textContent = '⚠️ Aucun texte détecté. Vérifiez que l\'image est lisible.';
+      toast('Aucun texte détecté.', 'err');
+    }
+  } catch (error) {
+    console.error('OCR Error:', error);
+    out.textContent = '❌ Erreur OCR: ' + (error.message || 'Erreur inconnue');
+    toast('Erreur lors de la lecture OCR.', 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔍 Lire et extraire';
+    setTimeout(() => {
+      prog.style.display = 'none';
+      bar.style.width = '0%';
+    }, 1000);
+  }
+}
+
+function fillFormFromOCR() {
+  if (!ocrText || ocrText.trim().length === 0) {
+    return toast('Lancez d\'abord l\'OCR.', 'err');
+  }
+
+  const lines = ocrText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  
+  const datePatterns = [
+    /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/,
+    /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})/,
+    /(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/
+  ];
+  
+  const amountPatterns = [
+    /(\d[\d\s,.]*[,.]\d{2})\s*(?:DH|Dhs|MAD)?/i,
+    /(?:total|ttc|montant|prix)[\s:]*(\d[\d\s,.]*[,.]\d{2})/i,
+    /(\d{1,3}(?:[\s.,]\d{3})*[,.]\d{2})/
+  ];
+
+  let foundDate = '';
+  let foundAmount = '';
+  let foundDesc = '';
+
+  for (const line of lines) {
+    for (const pattern of datePatterns) {
+      const match = line.match(pattern);
+      if (match) {
+        if (pattern === datePatterns[0]) {
+          const [_, d, m, y] = match;
+          foundDate = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+        } else if (pattern === datePatterns[1]) {
+          const [_, d, m, y] = match;
+          const year = parseInt(y) > 30 ? '19' + y : '20' + y;
+          foundDate = `${year}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+        } else if (pattern === datePatterns[2]) {
+          const [_, y, m, d] = match;
+          foundDate = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+        }
+        break;
+      }
+    }
+    if (foundDate) break;
+  }
+
+  for (const line of lines) {
+    for (const pattern of amountPatterns) {
+      const match = line.match(pattern);
+      if (match) {
+        let amt = match[1].replace(/\s/g, '').replace(',', '.');
+        const num = parseFloat(amt);
+        if (!isNaN(num) && num > 0 && num < 1000000) {
+          foundAmount = num;
+          break;
+        }
+      }
+    }
+    if (foundAmount) break;
+  }
+
+  let bestDesc = '';
+  let bestDescLength = 0;
+  for (const line of lines) {
+    if (line.length > 5 && 
+        !line.match(/^(facture|invoice|total|montant|date|client|tva|ht|ttc|ref|n°)/i) &&
+        !line.match(/^\d+$/) &&
+        !line.match(/^[\d\s,.]*$/) &&
+        !line.match(/^[A-Z]{2,}$/)) {
+      if (line.length > bestDescLength) {
+        bestDescLength = line.length;
+        bestDesc = line.substring(0, 80);
+      }
+    }
+  }
+
+  if (bestDesc) foundDesc = bestDesc;
+
+  let filled = 0;
+  if (foundDate) {
+    document.getElementById('dateInput').value = foundDate;
+    filled++;
+  }
+  if (foundAmount) {
+    document.getElementById('amountInput').value = foundAmount;
+    filled++;
+  }
+  if (foundDesc) {
+    document.getElementById('descInput').value = foundDesc;
+    filled++;
+  }
+
+  toast(filled > 0 ? 
+    `${filled} champ(s) rempli(s) — Vérifiez les valeurs avant d'ajouter.` : 
+    'Aucun champ détecté. Vérifiez que l\'image contient une facture lisible.', 
+    filled > 0 ? 'ok' : 'err'
+  );
+}
+
+// ════════════════════════════════════════════
+// EXPORTS (avec filtres actifs)
+// ════════════════════════════════════════════
+function getFilteredDataForExport() {
+  const allData = dataAll();
+  const data = getUserExpenses(allData);
+  
+  const yearF = document.getElementById('filterYear')?.value || 'all';
+  const monthF = document.getElementById('filterMonth')?.value || 'all';
+  const catF = document.getElementById('filterCat')?.value || 'all';
+  const userF = document.getElementById('filterUser')?.value || 'all';
+  const search = (document.getElementById('filterSearch')?.value || '').toLowerCase();
+
+  return data.filter(e => {
+    const y = e.date.substring(0,4);
+    const m = e.date.substring(5,7);
+    const userMatch = userF === 'all' || e.user === userF;
+    return (yearF === 'all' || y === yearF)
+      && (monthF === 'all' || m === monthF)
+      && (catF === 'all' || (e.cat || 'Autre') === catF)
+      && userMatch
+      && (!search || e.desc.toLowerCase().includes(search) || (e.cat || '').toLowerCase().includes(search) || (e.mission || '').toLowerCase().includes(search));
+  });
+}
+
+function exportExcel() {
+  if (!window.XLSX) return toast('Bibliothèque Excel non chargée.', 'err');
+  const data = getFilteredDataForExport();
+  if (!data.length) return toast('Aucune dépense à exporter avec ces filtres.', 'err');
+  
+  const employeeRows = [
+    ['NOTE DE FRAIS', ''],
+    ['Date d\'export', new Date().toLocaleDateString('fr-FR')],
+    ['Utilisateur connecté', USERS[currentUser].label],
+    ['Filtres actifs', 'Oui'],
+    [],
+  ];
+  const headers = ['N°', 'Date', 'Description', 'Type', 'Total TTC (DH)', 'Objet mission', 'Commentaires', 'Utilisateur', 'Justificatif'];
+  const sorted = [...data].sort((a, b) => b.date.localeCompare(a.date));
+  const dataRows = sorted.map((e, i) => [
+    i + 1, e.date, e.desc, e.cat || 'Autre', e.amount, e.mission || '', e.comment || '',
+    USERS[e.user]?.label || e.user,
+    e.justifData ? 'Oui' : 'Non'
+  ]);
+  const totalTTC = sorted.reduce((s, e) => s + e.amount, 0);
+  const footerRows = [[], ['', '', 'TOTAL', '', totalTTC, '', '', '', '']];
+  const allRows = [...employeeRows, headers, ...dataRows, ...footerRows];
+  const ws = XLSX.utils.aoa_to_sheet(allRows);
+  ws['!cols'] = [{ wch: 5 }, { wch: 14 }, { wch: 35 }, { wch: 18 }, { wch: 15 }, { wch: 25 }, { wch: 30 }, { wch: 15 }, { wch: 12 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Notes de Frais');
+  XLSX.writeFile(wb, `note-de-frais_${USERS[currentUser].label.replace(/ /g, '_')}_${today()}.xlsx`);
+  toast('Export Excel téléchargé !');
+}
+
+function exportPDF() {
+  if (!window.jspdf) return toast('Bibliothèque PDF non chargée.', 'err');
+  const data = getFilteredDataForExport();
+  if (!data.length) return toast('Aucune dépense à exporter avec ces filtres.', 'err');
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const W = 297;
+  
+  const logoUrl = 'logo.PNG';
+  try {
+    doc.addImage(logoUrl, 'PNG', 14, 4, 20, 18);
+  } catch (e) {
+    console.warn('Logo not found in PDF export', e);
+  }
+  
+  doc.setFillColor(11, 79, 158);
+  doc.rect(0, 0, W, 22, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(255, 255, 255);
+  doc.text('eqnovia', 38, 14);
+  doc.setFillColor(247, 147, 30);
+  doc.circle(38 + doc.getTextWidth('eqnovia') - 2, 8, 1.5, 'F');
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(200, 223, 245);
+  doc.text('Note de Frais — Document officiel', 14, 20);
+  const now = new Date();
+  doc.setFontSize(9);
+  doc.text(`Édité le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`, W - 14, 14, { align: 'right' });
+  doc.setTextColor(11, 79, 158);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text('Récapitulatif des dépenses professionnelles', 14, 30);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(53, 61, 79);
+  doc.text(`Utilisateur : ${USERS[currentUser].label}`, 14, 36);
+  doc.text(`Filtres actifs : Oui`, 180, 36);
+  
+  const sorted = [...data].sort((a, b) => b.date.localeCompare(a.date));
+  const total = sorted.reduce((s, e) => s + e.amount, 0);
+  const head = [['#', 'Date', 'Description', 'Type', 'Total TTC', 'Mission', 'Commentaires', 'User', 'Justif']];
+  const body = sorted.map((e, i) => [
+    i + 1, fmtDate(e.date), e.desc, e.cat || 'Autre', fmtDH(e.amount), e.mission || '—', e.comment || '—',
+    USERS[e.user]?.label || e.user,
+    e.justifData ? 'Oui' : 'Non'
+  ]);
+  doc.autoTable({
+    head, body, startY: 40,
+    styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 2.5, valign: 'middle' },
+    headStyles: { fillColor: [11, 79, 158], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    alternateRowStyles: { fillColor: [235, 243, 251] },
+    columnStyles: {
+      0: { cellWidth: 6, halign: 'center', textColor: [100, 110, 130] },
+      1: { cellWidth: 18, textColor: [100, 110, 130] },
+      2: { cellWidth: 38 },
+      3: { cellWidth: 20 },
+      4: { cellWidth: 22, halign: 'right', fontStyle: 'bold', textColor: [11, 79, 158] },
+      5: { cellWidth: 28 },
+      6: { cellWidth: 25 },
+      7: { cellWidth: 18 },
+      8: { cellWidth: 14, halign: 'center' }
+    },
+    foot: [['', '', '', 'TOTAL', fmtDH(total), '', '', '', '']],
+    footStyles: { fillColor: [235, 243, 251], fontStyle: 'bold' },
+    margin: { left: 10, right: 10 }
+  });
+  const fy = doc.lastAutoTable.finalY + 8;
+  doc.setFillColor(247, 147, 30);
+  doc.rect(10, fy, 6, 6, 'F');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 110, 130);
+  doc.text(`Eqnovia · ${sorted.length} dépense(s) · Total TTC : ${fmtDH(total)}`, 20, fy + 4);
+  doc.save(`note-de-frais_${USERS[currentUser].label.replace(/ /g, '_')}_${today()}.pdf`);
+  toast('Export PDF téléchargé !');
+}
+
+// ════════════════════════════════════════════════════
+// RAPPORTS TRIMESTRIELS
+// ════════════════════════════════════════════════════
+function getTrimester(m) {
+  const month = parseInt(m);
+  if (month >= 1 && month <= 3) return 1;
+  if (month >= 4 && month <= 6) return 2;
+  if (month >= 7 && month <= 9) return 3;
+  return 4;
+}
+function getTrimesterLabel(t) {
+  const labels = {1:'T1 · Jan–Mar',2:'T2 · Avr–Juin',3:'T3 · Jui–Sep',4:'T4 · Oct–Déc'};
+  return labels[t] || `T${t}`;
+}
+function getTrimesterMonths(t) {
+  const m = {1:['01','02','03'],2:['04','05','06'],3:['07','08','09'],4:['10','11','12']};
+  return m[t] || [];
+}
+
+function renderTrimester() {
+  const container = document.getElementById('trimesterContent');
+  if (!container) return;
+
+  const data = getFilteredExpenses();
+  const yearSel = document.getElementById('triYearFilter');
+  const userSel = document.getElementById('triUserFilter');
+
+  // Populate year filter
+  const years = [...new Set(data.map(e=>e.date?.substring(0,4)).filter(Boolean))].sort();
+  yearSel.innerHTML = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+  if (!yearSel.value && years.length) yearSel.value = years[years.length-1];
+
+  // Populate user filter
+  const users = [...new Set(data.map(e=>e.user).filter(Boolean))];
+  userSel.innerHTML = '<option value="">Tous les collaborateurs</option>' + users.map(u => `<option value="${u}">${USERS[u]?.label||u}</option>`).join('');
+
+  const selectedYear = yearSel.value;
+  const selectedUser = userSel.value;
+
+  let filtered = data;
+  if (selectedYear) filtered = filtered.filter(e => e.date?.substring(0,4) === selectedYear);
+  if (selectedUser) filtered = filtered.filter(e => e.user === selectedUser);
+
+  if (!filtered.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><h3>Aucune dépense</h3><p>Aucune dépense trouvée pour cette période.</p></div>';
+    return;
+  }
+
+  // Group by trimester
+  const triData = {1: {expenses:[], total:0, count:0}, 2: {expenses:[], total:0, count:0}, 3: {expenses:[], total:0, count:0}, 4: {expenses:[], total:0, count:0}};
+  filtered.forEach(e => {
+    const m = e.date?.substring(5,7);
+    if (!m) return;
+    const t = getTrimester(m);
+    triData[t].expenses.push(e);
+    triData[t].total += parseFloat(e.amount) || 0;
+    triData[t].count++;
+  });
+
+  const grandTotal = Object.values(triData).reduce((s,d) => s + d.total, 0);
+  const maxTotal = Math.max(...Object.values(triData).map(d => d.total), 1);
+
+  // Build trimester cards
+  let cardsHtml = '<div class="tri-grid">';
+  [1,2,3,4].forEach(t => {
+    const d = triData[t];
+    const pct = grandTotal > 0 ? ((d.total / grandTotal) * 100).toFixed(1) : 0;
+    cardsHtml += `
+      <div class="tri-card">
+        <div class="tri-top">
+          <div class="tri-icon t${t}">T${t}</div>
+          <div>
+            <div class="tri-label">${getTrimesterLabel(t)}</div>
+            <div class="tri-count">${d.count} dépense${d.count>1?'s':''}</div>
+          </div>
+        </div>
+        <div class="tri-amount">${fmtDH(d.total)}</div>
+        <div class="tri-count">${pct}% du total</div>
+        <div style="margin-top:6px;height:4px;background:var(--gray-100);border-radius:4px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:var(--eq-blue);border-radius:4px;transition:width .5s;"></div>
+        </div>
+      </div>`;
+  });
+  cardsHtml += '</div>';
+
+  // Build detail table
+  let tableHtml = '<div class="table-wrap"><table class="tri-table"><thead><tr><th>Trimestre</th><th>Mois</th><th>Montant</th><th>Dépenses</th><th>Moy./mois</th></tr></thead><tbody>';
+  [1,2,3,4].forEach(t => {
+    const d = triData[t];
+    if (d.count === 0) return;
+    const months = getTrimesterMonths(t);
+    const monthlyAvg = months.length > 0 ? d.total / months.length : 0;
+    tableHtml += `<tr><td><strong>T${t}</strong><span class="tri-sub">${getTrimesterLabel(t)}</span></td>`;
+    tableHtml += `<td>${months.map(m => {
+      const monthNames = ['Jan','Fév','Mar','Avr','Mai','Juin','Jui','Aoû','Sep','Oct','Nov','Déc'];
+      return monthNames[parseInt(m)-1];
+    }).join(', ')}</td>`;
+    tableHtml += `<td class="td-amount">${fmtDH(d.total)}</td>`;
+    tableHtml += `<td>${d.count}</td>`;
+    tableHtml += `<td class="td-amount">${fmtDH(monthlyAvg)}</td></tr>`;
+  });
+  tableHtml += `</tbody></table></div>`;
+  tableHtml += `<div class="table-footer"><span class="total-info">Total annuel</span><span class="total-amount">${fmtDH(grandTotal)}</span></div>`;
+
+  container.innerHTML = cardsHtml + '<div style="margin-top:10px;">' + tableHtml + '</div>';
+}
+
+// ════════════════════════════════════════════════════
+// COMPARAISON DE PÉRIODES
+// ════════════════════════════════════════════════════
+function renderComparison() {
+  const container = document.getElementById('comparisonContent');
+  if (!container) return;
+
+  const data = getFilteredExpenses();
+  const period1 = document.getElementById('cmpPeriod1').value;
+  const period2 = document.getElementById('cmpPeriod2').value;
+  const userF = document.getElementById('cmpUserFilter').value;
+
+  // Populate date selectors FIRST, then read values
+  function populateDates(selId) {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    const p = selId.includes('Date1') ? period1 : period2;
+    const years = [...new Set(data.map(e=>e.date?.substring(0,4)).filter(Boolean))].sort();
+    let options = [];
+    if (p === 'month') {
+      years.forEach(y => {
+        for (let m = 1; m <= 12; m++) {
+          const val = `${y}-${String(m).padStart(2,'0')}`;
+          const monthNames = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+          options.push({val, label: `${monthNames[m-1]} ${y}`});
+        }
+      });
+    } else if (p === 'trimestre') {
+      years.forEach(y => {
+        [1,2,3,4].forEach(t => options.push({val: `${y}-T${t}`, label: `${y} · T${t} (${getTrimesterLabel(t)})`}));
+      });
+    } else {
+      years.forEach(y => options.push({val: y, label: y}));
+    }
+    sel.innerHTML = options.map(o => `<option value="${o.val}">${o.label}</option>`).join('');
+    if (options.length > 0) sel.value = options[options.length-1].val;
+  }
+
+  populateDates('cmpDate1');
+  populateDates('cmpDate2');
+
+  // Read dates AFTER populating
+  const date1 = document.getElementById('cmpDate1').value;
+  const date2 = document.getElementById('cmpDate2').value;
+
+  // Populate user filter
+  const users = [...new Set(data.map(e=>e.user).filter(Boolean))];
+  const uSel = document.getElementById('cmpUserFilter');
+  uSel.innerHTML = '<option value="">Tous</option>' + users.map(u => `<option value="${u}">${USERS[u]?.label||u}</option>`).join('');
+
+  if (!date1 || !date2) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📈</div><h3>Sélectionnez deux périodes</h3><p>Choisissez deux périodes à comparer.</p></div>';
+    return;
+  }
+
+  // Filter by period
+  let filteredData = userF ? data.filter(e => e.user === userF) : data;
+  const set1 = _filterByPeriod(filteredData, period1, date1);
+  const set2 = _filterByPeriod(filteredData, period2, date2);
+
+  const total1 = set1.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
+  const total2 = set2.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
+  const count1 = set1.length;
+  const count2 = set2.length;
+  const avg1 = count1 > 0 ? total1 / count1 : 0;
+  const avg2 = count2 > 0 ? total2 / count2 : 0;
+
+  function fmtChange(current, previous) {
+    if (previous === 0) return {pct: 'N/A', cls: 'same', arrow: '—'};
+    const chg = ((current - previous) / previous) * 100;
+    const arrow = chg > 0 ? '↑' : chg < 0 ? '↓' : '→';
+    return {pct: `${arrow} ${Math.abs(chg).toFixed(1)}%`, cls: chg > 0 ? 'up' : chg < 0 ? 'down' : 'same', arrow};
+  }
+
+  const totalChg = fmtChange(total1, total2);
+  const countChg = fmtChange(count1, count2);
+  const avgChg = fmtChange(avg1, avg2);
+
+  // Category breakdown
+  const cats1 = {}, cats2 = {};
+  set1.forEach(e => { const c = e.cat||'Autre'; cats1[c] = (cats1[c]||0) + (parseFloat(e.amount)||0); });
+  set2.forEach(e => { const c = e.cat||'Autre'; cats2[c] = (cats2[c]||0) + (parseFloat(e.amount)||0); });
+  const allCats = [...new Set([...Object.keys(cats1), ...Object.keys(cats2)])];
+  const maxCat = Math.max(...allCats.map(c => Math.max(cats1[c]||0, cats2[c]||0)), 1);
+
+  container.innerHTML = `
+    <div class="cmp-grid">
+      <!-- Carte: Total -->
+      <div class="cmp-card">
+        <div class="cmp-header"><div class="cmp-icon blue">💰</div> Comparaison des totaux</div>
+        <div class="cmp-body">
+          <div class="cmp-stat">
+            <span class="cmp-stat-label">${date1}</span>
+            <span class="cmp-stat-val">${fmtDH(total1)}</span>
+            <span class="cmp-stat-chg ${totalChg.cls}">${totalChg.pct}</span>
+          </div>
+          <div class="cmp-stat">
+            <span class="cmp-stat-label">${date2}</span>
+            <span class="cmp-stat-val">${fmtDH(total2)}</span>
+            <span class="cmp-stat-chg ${totalChg.cls}">—</span>
+          </div>
+          <div class="cmp-stat">
+            <span class="cmp-stat-label">Nombre de dépenses</span>
+            <span class="cmp-stat-val">${count1} → ${count2}</span>
+            <span class="cmp-stat-chg ${countChg.cls}">${countChg.pct}</span>
+          </div>
+          <div class="cmp-stat">
+            <span class="cmp-stat-label">Moyenne par dépense</span>
+            <span class="cmp-stat-val">${fmtDH(avg1)} → ${fmtDH(avg2)}</span>
+            <span class="cmp-stat-chg ${avgChg.cls}">${avgChg.pct}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Carte: Par catégorie -->
+      <div class="cmp-card">
+        <div class="cmp-header"><div class="cmp-icon orange">📂</div> Par catégorie</div>
+        <div class="cmp-body">
+          ${allCats.map(c => {
+            const v1 = cats1[c]||0, v2 = cats2[c]||0;
+            const chg = fmtChange(v2, v1);
+            return `<div class="cmp-stat">
+              <span class="cmp-stat-label">${c}</span>
+              <span class="cmp-stat-val">${fmtDH(v1)} → ${fmtDH(v2)}</span>
+              <span class="cmp-stat-chg ${chg.cls}">${chg.pct}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- Carte: Graphique barres -->
+      <div class="cmp-card">
+        <div class="cmp-header"><div class="cmp-icon green">📊</div> Distribution par catégorie</div>
+        <div class="cmp-body">
+          <div style="display:flex;gap:12px;margin-bottom:10px;">
+            <span style="font-size:11px;display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:var(--eq-blue);display:inline-block;"></span> ${date1}</span>
+            <span style="font-size:11px;display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:var(--eq-orange);display:inline-block;"></span> ${date2}</span>
+          </div>
+          <div class="cmp-bar-wrap" style="height:120px;">
+            ${allCats.map((c, i) => `
+              <div class="cmp-bar-item">
+                <div class="cmp-bar-value">${fmtDH(cats2[c]||0)}</div>
+                <div class="cmp-bar-fill b2" style="height:${((cats2[c]||0)/maxCat*100).toFixed(0)}%;"></div>
+                <div class="cmp-bar-fill b1" style="height:${((cats1[c]||0)/maxCat*100).toFixed(0)}%;"></div>
+                <div class="cmp-bar-value">${fmtDH(cats1[c]||0)}</div>
+                <div class="cmp-bar-label">${c.substring(0,6)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+
+      <!-- Carte: Recommandations -->
+      <div class="cmp-card">
+        <div class="cmp-header"><div class="cmp-icon red">💡</div> Recommandations</div>
+        <div class="cmp-body">
+          <div style="font-size:12px;color:var(--gray-700);line-height:1.7;">
+            ${total2 > total1
+              ? `<p>⚠️ Les dépenses ont <strong>augmenté de ${Math.abs(((total2-total1)/total1*100)).toFixed(1)}%</strong> entre les deux périodes.</p>`
+              : total2 < total1
+              ? `<p>✅ Les dépenses ont <strong>baissé de ${Math.abs(((total2-total1)/total1*100)).toFixed(1)}%</strong> entre les deux périodes. Bonne tendance !</p>`
+              : `<p>➡️ Les dépenses sont stables entre les deux périodes.</p>`
+            }
+            ${allCats.filter(c => {
+              const v1 = cats1[c]||0, v2 = cats2[c]||0;
+              return v1 > 0 && v2 > v1 * 1.2;
+            }).length > 0
+              ? `<p>🔴 Catégories en hausse : ${allCats.filter(c => { const v1=cats1[c]||0,v2=cats2[c]||0; return v1>0&&v2>v1*1.2; }).join(', ')}</p>`
+              : ''
+            }
+            ${count2 > count1 * 1.2
+              ? `<p>📌 Le nombre de dépenses a augmenté de ${((count2-count1)/count1*100).toFixed(0)}%. Vérifiez si toutes sont justifiées.</p>`
+              : ''
+            }
+            ${avg2 > avg1 * 1.1
+              ? `<p>💸 Le montant moyen par dépense a augmenté. Envisagez des plafonds par catégorie.</p>`
+              : avg2 < avg1 * 0.9
+              ? `<p>👍 Le montant moyen par dépense diminue. Les efforts de réduction des coûts portent leurs fruits.</p>`
+              : ''
+            }
+            <p style="margin-top:8px;font-size:11px;color:var(--gray-400);">Analyse générée le ${new Date().toLocaleDateString('fr-FR')}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ════════════════════════════════════════════════════
+// EXPORTS AMÉLIORÉS AVEC LOGO EQNOVIA
+// ════════════════════════════════════════════════════
+function exportPDFTrimestre() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p','mm','a4');
+  
+  // Header with logo
+  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch(e) { /* fallback */ }
+  doc.setFontSize(8); doc.setTextColor(247,147,30); doc.setFont(undefined,'normal');
+  doc.text('Notes de Frais', 38, 22);
+  
+  doc.setFontSize(14); doc.setTextColor(53,61,79); doc.setFont(undefined,'bold');
+  doc.text('Rapport trimestriel', 105, 20, {align:'center'});
+  doc.setFontSize(8); doc.setTextColor(142,151,168); doc.setFont(undefined,'normal');
+  doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${USERS[currentUser]?.label||''}`, 105, 26, {align:'center'});
+  
+  doc.setDrawColor(11,79,158); doc.line(20, 30, 190, 30);
+
+  // Data
+  const data = getFilteredExpenses();
+  const yearSel = document.getElementById('triYearFilter');
+  const year = yearSel?.value || '';
+  let filtered = year ? data.filter(e => e.date?.substring(0,4) === year) : data;
+
+  const triData = {1:[],2:[],3:[],4:[]};
+  filtered.forEach(e => {
+    const m = e.date?.substring(5,7);
+    if (!m) return;
+    triData[getTrimester(m)].push(e);
+  });
+
+  let y = 38;
+  [1,2,3,4].forEach(t => {
+    const items = triData[t];
+    if (!items.length) return;
+    
+    doc.setFontSize(10); doc.setFont(undefined,'bold');
+    doc.setTextColor(11,79,158);
+    doc.text(`T${t} · ${getTrimesterLabel(t)}`, 20, y);
+    y += 5;
+
+    const total = items.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
+    const rows = items.map(e => [
+      e.date||'',
+      e.desc?.substring(0,25)||'',
+      e.cat||'',
+      USERS[e.user]?.label?.substring(0,15)||'',
+      (parseFloat(e.amount)||0).toFixed(2)+' DH'
+    ]);
+
+    doc.autoTable({
+      startY: y, head: [['Date','Description','Catégorie','Collaborateur','Montant']],
+      body: rows, margin: {left:20, right:20},
+      theme: 'grid', headStyles: {fillColor: [11,79,158], fontSize:7},
+      bodyStyles: {fontSize:7}, footStyles: {fontSize:7, fontStyle:'bold'},
+      didDrawPage: (d) => { y = d.cursor.y + 4; }
+    });
+
+    doc.setFontSize(8); doc.setFont(undefined,'bold');
+    doc.setTextColor(53,61,79);
+    doc.text(`Total T${t} : ${total.toFixed(2)} DH (${items.length} dépense${items.length>1?'s':''})`, 20, y + 2);
+    y += 10;
+  });
+
+  // Footer
+  doc.setDrawColor(200,200,200); doc.line(20, y, 190, y);
+  doc.setFontSize(8); doc.setTextColor(142,151,168); doc.setFont(undefined,'normal');
+  doc.text('eqnovia · Notes de Frais', 105, y + 5, {align:'center'});
+  
+  doc.save(`rapport-trimestriel_${year||'all'}_${today()}.pdf`);
+  toast('📄 Rapport trimestriel PDF téléchargé !');
+}
+
+function exportExcelTrimestre() {
+  const data = getFilteredExpenses();
+  const yearSel = document.getElementById('triYearFilter');
+  const year = yearSel?.value || '';
+  let filtered = year ? data.filter(e => e.date?.substring(0,4) === year) : data;
+
+  const rows = [['eqnovia · Rapport trimestriel', '', '', '', ''],
+    [`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${USERS[currentUser]?.label||''}`, '', '', '', ''],
+    ['', '', '', '', ''],
+    ['Trimestre', 'Période', 'Montant TTC', 'Nb dépenses', 'Moyenne/mois']
+  ];
+
+  const triData = {1:[],2:[],3:[],4:[]};
+  filtered.forEach(e => {
+    const m = e.date?.substring(5,7);
+    if (!m) return;
+    triData[getTrimester(m)].push(e);
+  });
+
+  let grandTotal = 0;
+  [1,2,3,4].forEach(t => {
+    const items = triData[t];
+    if (!items.length) return;
+    const total = items.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
+    grandTotal += total;
+    const months = getTrimesterMonths(t);
+    const monthNames = ['Jan','Fév','Mar','Avr','Mai','Juin','Jui','Aoû','Sep','Oct','Nov','Déc'];
+    rows.push([`T${t}`, months.map(m => monthNames[parseInt(m)-1]).join(', '), total.toFixed(2)+' DH', items.length, (total/months.length).toFixed(2)+' DH']);
+  });
+  rows.push(['', 'TOTAL', grandTotal.toFixed(2)+' DH', '', '']);
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:14},{wch:18},{wch:14},{wch:14},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Trimestres');
+  XLSX.writeFile(wb, `rapport-trimestriel_${year||'all'}_${today()}.xlsx`);
+  toast('📊 Rapport trimestriel Excel téléchargé !');
+}
+
+function exportPDFComparison() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p','mm','a4');
+  
+  // Header
+  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch(e) { /* fallback */ }
+  doc.setFontSize(8); doc.setTextColor(247,147,30); doc.setFont(undefined,'normal');
+  doc.text('Notes de Frais', 38, 22);
+  
+  doc.setFontSize(14); doc.setTextColor(53,61,79); doc.setFont(undefined,'bold');
+  doc.text('Comparaison de périodes', 105, 20, {align:'center'});
+  doc.setFontSize(8); doc.setTextColor(142,151,168);
+  doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')}`, 105, 26, {align:'center'});
+  
+  doc.setDrawColor(11,79,158); doc.line(20, 30, 190, 30);
+
+  const p1 = document.getElementById('cmpDate1')?.value||'Période 1';
+  const p2 = document.getElementById('cmpDate2')?.value||'Période 2';
+
+  doc.setFontSize(11); doc.setFont(undefined,'bold');
+  doc.setTextColor(53,61,79);
+  doc.text(`Comparaison : ${p1} vs ${p2}`, 20, 38);
+
+  const data = getFilteredExpenses();
+  const period1 = document.getElementById('cmpPeriod1')?.value||'month';
+  const period2 = document.getElementById('cmpPeriod2')?.value||'month';
+
+  const set1 = _filterByPeriod(data, period1, p1);
+  const set2 = _filterByPeriod(data, period2, p2);
+  const t1 = set1.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
+  const t2 = set2.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
+
+  doc.autoTable({
+    startY: 44, head: [['Indicateur', p1, p2, 'Variation']],
+    body: [
+      ['Total TTC', t1.toFixed(2)+' DH', t2.toFixed(2)+' DH', t1 ? `${((t2-t1)/t1*100).toFixed(1)}%` : 'N/A'],
+      ['Nb dépenses', String(set1.length), String(set2.length), set1.length ? `${((set2.length-set1.length)/set1.length*100).toFixed(1)}%` : 'N/A'],
+    ],
+    theme: 'grid', headStyles: {fillColor: [11,79,158], fontSize:8},
+    bodyStyles: {fontSize:8}, margin: {left:20, right:20},
+  });
+
+  const fy = doc.lastAutoTable.finalY + 6;
+  doc.setFontSize(7); doc.setTextColor(142,151,168);
+  doc.text('eqnovia · Notes de Frais · Analyse comparative', 105, fy, {align:'center'});
+  doc.save(`comparaison_${p1}_vs_${p2}_${today()}.pdf`);
+  toast('📄 Rapport de comparaison PDF téléchargé !');
+}
+
+// ════════════════════════════════════════════════════
+// Get filtered data helper (for new reports)
+// ════════════════════════════════════════════════════
+function getFilteredExpenses() {
+  return cache;
+}
+
+// Shared filter helper for comparison
+function _filterByPeriod(data, periodType, periodValue) {
+  if (periodType === 'month') return data.filter(e => e.date?.substring(0,7) === periodValue);
+  else if (periodType === 'trimestre') {
+    const [y, t] = periodValue.split('-T');
+    const months = getTrimesterMonths(parseInt(t));
+    return data.filter(e => e.date?.substring(0,4) === y && months.includes(e.date?.substring(5,7)));
+  } else return data.filter(e => e.date?.substring(0,4) === periodValue);
+}
+
+// ════════════════════════════════════════════════════
+// ADMIN OM — GLOBAL DASHBOARD
+// ════════════════════════════════════════════════════
+let _adminOMCache = [];
+let _adminOMFiltered = [];
+
+async function loadAdminOM() {
+  const container = document.getElementById('adminOMContent');
+  if (!container) return;
+  container.innerHTML = '<div class="admin-om-loading"><span class="spinner"></span> Chargement des ordres de mission depuis Firebase...</div>';
+  
+  try {
+    // Load from Firebase
+    const fbData = (await fbLoadOM()) || [];
+    // Also load from localStorage for merge
+    const localData = loadOMHistory();
+    
+    // Merge: combine both sources, deduplicate by _localId
+    const seen = new Set();
+    const merged = [];
+    
+    // Add Firebase items first
+    fbData.forEach(item => {
+      const key = item._localId || item.numero + '_' + item.employe;
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push({ ...item, _source: 'firebase' });
+      }
+    });
+    
+    // Add local items not in Firebase
+    localData.forEach(item => {
+      const key = item._localId || item.numero + '_' + item.employe;
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push({ ...item, _source: item._syncedToFB ? 'both' : 'local' });
+      } else if (item._syncedToFB) {
+        // Mark Firebase item as also synced from this user
+        const existing = merged.find(m => (m._localId || m.numero + '_' + m.employe) === key);
+        if (existing) existing._source = 'both';
+      }
+    });
+    
+    _adminOMCache = merged;
+    populateAdminFilters();
+    renderAdminOM();
+  } catch(e) {
+    console.warn('Admin OM load failed:', e);
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><h3>Erreur de chargement</h3><p>Impossible de charger les données depuis Firebase.</p><button class="btn btn-ghost" onclick="loadAdminOM()" style="margin-top:10px;">🔄 Réessayer</button></div>';
+  }
+}
+
+function populateAdminFilters() {
+  const data = _adminOMCache || [];
+  const yearSel = document.getElementById('adminOMYear');
+  const empSel = document.getElementById('adminOMEmploye');
+  if (!yearSel || !empSel) return;
+
+  const years = [...new Set(data.map(o => o.date?.substring(0,4)).filter(Boolean))].sort();
+  const currentYear = yearSel.value;
+  yearSel.innerHTML = '<option value="">Toutes années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+  if (currentYear) yearSel.value = currentYear;
+
+  const employes = [...new Set(data.map(o => o.employe).filter(Boolean))].sort();
+  const currentEmp = empSel.value;
+  empSel.innerHTML = '<option value="">Tous collaborateurs</option>' + employes.map(e => `<option value="${e}">${e}</option>`).join('');
+  if (currentEmp) empSel.value = currentEmp;
+}
+
+function renderAdminOM() {
+  const container = document.getElementById('adminOMContent');
+  if (!container) return;
+  
+  const search = (document.getElementById('adminOMSearch')?.value || '').toLowerCase();
+  const yearFilter = document.getElementById('adminOMYear')?.value || '';
+  const employeFilter = document.getElementById('adminOMEmploye')?.value || '';
+  const statusFilter = document.getElementById('adminOMStatus')?.value || '';
+  
+  let data = _adminOMCache;
+  
+  // Apply filters
+  if (search) data = data.filter(o => 
+    (o.numero || '').toLowerCase().includes(search) ||
+    (o.employe || '').toLowerCase().includes(search) ||
+    (o.objet || '').toLowerCase().includes(search) ||
+    (o.depart || '').toLowerCase().includes(search) ||
+    (o.arrivee || '').toLowerCase().includes(search)
+  );
+  if (yearFilter) data = data.filter(o => o.date?.substring(0,4) === yearFilter);
+  if (employeFilter) data = data.filter(o => o.employe === employeFilter);
+  if (statusFilter) data = data.filter(o => (o._status || 'pending') === statusFilter);
+  
+  // Update count
+  document.getElementById('adminOMCount').textContent = `${data.length} OM`;
+  
+  // Store filtered data for exports BEFORE the early return
+  _adminOMFiltered = data;
+  
+  if (!data.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Aucun ordre de mission</h3><p>Aucun résultat trouvé pour les filtres actuels.</p></div>';
+    return;
+  }
+  
+  // Stats
+  const totalOM = data.length;
+  const fbCount = data.filter(o => o._source === 'firebase' || o._source === 'both').length;
+  const localCount = data.filter(o => o._source === 'local').length;
+  const uniqueEmployes = [...new Set(data.map(o => o.employe).filter(Boolean))].length;
+  const pendingCount = data.filter(o => (o._status || 'pending') === 'pending').length;
+  const approvedCount = data.filter(o => o._status === 'approved').length;
+  const rejectedCount = data.filter(o => o._status === 'rejected').length;
+  
+  function statusIcon(s) {
+    s = s || 'pending';
+    if (s === 'approved') return '✅';
+    if (s === 'rejected') return '❌';
+    return '⏳';
+  }
+  function statusLabel(s) {
+    s = s || 'pending';
+    if (s === 'approved') return 'Approuvé';
+    if (s === 'rejected') return 'Rejeté';
+    return 'En attente';
+  }
+  function statusClass(s) {
+    s = s || 'pending';
+    if (s === 'approved') return 'approved';
+    if (s === 'rejected') return 'rejected';
+    return 'pending';
+  }
+  
+  // Render
+  container.innerHTML = `
+    <div class="admin-om-stats">
+      <div class="admin-om-stat"><div class="aos-value">${totalOM}</div><div class="aos-label">Total OM</div></div>
+      <div class="admin-om-stat"><div class="aos-value">${pendingCount}</div><div class="aos-label">⏳ En attente</div></div>
+      <div class="admin-om-stat"><div class="aos-value">${approvedCount}</div><div class="aos-label">✅ Approuvés</div></div>
+      <div class="admin-om-stat"><div class="aos-value">${rejectedCount}</div><div class="aos-label">❌ Rejetés</div></div>
+      <div class="admin-om-stat"><div class="aos-value">${fbCount}</div><div class="aos-label">Sur Firebase</div></div>
+      <div class="admin-om-stat"><div class="aos-value">${uniqueEmployes}</div><div class="aos-label">Collaborateurs</div></div>
+    </div>
+    <table class="admin-om-table">
+      <thead><tr>
+        <th>Statut</th><th>N° OM</th><th>Collaborateur</th><th>Date</th><th>Trajet</th><th>Objet</th><th>Actions</th>
+      </tr></thead>
+      <tbody>
+        ${data.slice().reverse().map(o => {
+          const rawKey = o._localId || (o.numero || '') + '_' + (o.employe || '');
+          const key = rawKey.replace(/'/g, "\\'");
+          const s = o._status || 'pending';
+          return `
+          <tr>
+            <td><span class="status-badge ${statusClass(s)}">${statusIcon(s)} ${statusLabel(s)}</span></td>
+            <td><strong>${esc(o.numero||'—')}</strong></td>
+            <td>${esc(o.employe||'—')}</td>
+            <td class="td-date">${esc(o.date||'—')}</td>
+            <td style="font-size:10px;">${esc(o.depart||'...')} → ${esc(o.arrivee||'...')}</td>
+            <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(o.objet||'—')}</td>
+            <td>
+              <div class="status-actions">
+                ${s !== 'approved' ? `<button class="status-btn approve" onclick="adminOMSetStatus('${key}','approved')" title="Approuver">✅</button>` : ''}
+                ${s !== 'rejected' ? `<button class="status-btn reject" onclick="adminOMSetStatus('${key}','rejected')" title="Rejeter">❌</button>` : ''}
+                ${s !== 'pending' ? `<button class="status-btn pending-btn" onclick="adminOMSetStatus('${key}','pending')" title="Remettre en attente">⏳</button>` : ''}
+                ${o.tel && o.tel !== '—' && o.tel.length > 5 ? `<a class="status-btn" href="${notifyOMByWhatsApp(o, o._status||'pending', o._comment||'')}" target="_blank" title="WhatsApp" style="text-decoration:none;background:var(--green-pale);color:var(--green);">💬</a>` : ''}
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function adminOMSetStatus(key, newStatus) {
+  const item = _adminOMCache.find(o => (o._localId || (o.numero || '') + '_' + (o.employe || '')) === key);
+  if (!item) return;
+  
+  const statusLabel = {approved:'✅ Approuver', rejected:'❌ Rejeter', pending:'⏳ Remettre en attente'}[newStatus] || newStatus;
+  const comment = prompt(`${statusLabel} — ${esc(item.numero)} (${esc(item.employe)})\n\nSouhaitez-vous ajouter un commentaire pour le collaborateur ?`, '');
+  if (comment === null) return; // cancelled
+  
+  updateOMStatus(key, newStatus, comment || '');
+}
+
+function updateOMStatus(key, newStatus, comment) {
+  const item = _adminOMCache.find(o => (o._localId || (o.numero || '') + '_' + (o.employe || '')) === key);
+  if (!item) return;
+  const oldStatus = item._status || 'pending';
+  if (oldStatus === newStatus) return;
+  
+  item._status = newStatus;
+  if (comment !== undefined) item._comment = comment;
+  
+  // Update in localStorage cache
+  const localData = loadOMHistory();
+  const localIdx = localData.findIndex(o => 
+    o._localId === item._localId || (o.numero === item.numero && o.employe === item.employe)
+  );
+  if (localIdx >= 0) {
+    localData[localIdx]._status = newStatus;
+    if (comment !== undefined) localData[localIdx]._comment = comment;
+    localStorage.setItem(OM_STORAGE_KEY, JSON.stringify(localData));
+  }
+  
+  // Sync to Firebase if item was synced
+  if (useFirebase && item._localId) {
+    fbDeleteOM(item._localId)
+      .then(() => fbAddOM({ ...item, _syncedToFB: true }))
+      .catch(e => console.warn('FB status sync failed:', e));
+  }
+  
+  renderAdminOM();
+  toast(`✅ OM ${esc(item.numero)} : ${newStatus === 'approved' ? 'Approuvé' : newStatus === 'rejected' ? 'Rejeté' : 'Remis en attente'}`, 'ok');
+  
+  // Envoyer une notification email si le statut a changé
+  if (newStatus === 'approved' || newStatus === 'rejected') {
+    notifyOMByEmail(item, newStatus, comment);
+  }
+  
+  // Envoyer une notification WhatsApp si le statut a changé et qu'un téléphone est renseigné
+  if ((newStatus === 'approved' || newStatus === 'rejected') && item.tel && item.tel !== '—' && item.tel.length > 5) {
+    const waUrl = notifyOMByWhatsApp(item, newStatus, comment);
+    if (waUrl) {
+      setTimeout(() => {
+        if (confirm(`📱 Envoyer une notification WhatsApp à ${esc(item.employe)} au ${esc(item.tel)} ?\n\nCliquez sur OK pour ouvrir WhatsApp avec le message pré-rempli.`)) {
+          window.open(waUrl, '_blank');
+        }
+      }, 500);
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════
+// EXPORTS — ADMIN OM (PDF / EXCEL)
+// ════════════════════════════════════════════════════
+function adminOMExportPDF() {
+  const data = _adminOMFiltered;
+  if (!data.length) { toast('Aucune donnée à exporter.', 'err'); return; }
+  
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('l','mm','a4');
+  
+  // Header with Eqnovia logo
+  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch(e) { /* fallback */ }
+  doc.setFontSize(8); doc.setTextColor(247,147,30); doc.setFont(undefined,'normal');
+  doc.text('Notes de Frais', 38, 22);
+  doc.setFontSize(14); doc.setTextColor(53,61,79); doc.setFont(undefined,'bold');
+  doc.text('Ordres de mission — Admin Global', 148, 20, {align:'center'});
+  doc.setFontSize(8); doc.setTextColor(142,151,168);
+  doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${data.length} OM`, 148, 26, {align:'center'});
+  doc.setDrawColor(11,79,158); doc.line(20, 30, 290, 30);
+
+  // Build table
+  const rows = data.slice().reverse().map(o => [
+    o.numero || '—',
+    o.employe || '—',
+    o.date || '—',
+    (o.depart||'') + ' → ' + (o.arrivee||''),
+    (o.objet||'').substring(0,30),
+    o.transport || '—',
+    {approved:'✅ Approuvé', rejected:'❌ Rejeté', pending:'⏳ En attente'}[o._status||'pending'],
+    {firebase:'☁️ FB', local:'💻 Local', both:'✅ Les deux'}[o._source]||'—'
+  ]);
+
+  doc.autoTable({
+    startY: 35, head: [['N° OM','Collaborateur','Date','Trajet','Objet','Transport','Statut','Source']],
+    body: rows, margin: {left:15, right:15},
+    theme: 'grid', headStyles: {fillColor: [11,79,158], fontSize:7},
+    bodyStyles: {fontSize:6}, styles: {cellPadding:2},
+    didDrawPage: (d) => { /* footer handled below */ }
+  });
+
+  const fy = doc.lastAutoTable.finalY + 6;
+  doc.setDrawColor(200); doc.line(15, fy, 280, fy);
+  doc.setFontSize(7); doc.setTextColor(142,151,168);
+  doc.text('eqnovia · Notes de Frais · Ordres de mission globaux', 148, fy + 4, {align:'center'});
+  doc.save(`om_global_${new Date().toISOString().split('T')[0]}.pdf`);
+  toast('📄 Export PDF des OM téléchargé !');
+}
+
+function adminOMExportExcel() {
+  const data = _adminOMFiltered;
+  if (!data.length) { toast('Aucune donnée à exporter.', 'err'); return; }
+  
+  const rows = [
+    ['eqnovia · Ordres de mission (Admin Global)', '', '', '', '', '', '', ''],
+    [`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${data.length} OM`, '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', ''],
+    ['N° OM', 'Collaborateur', 'Date', 'Départ', 'Arrivée', 'Objet', 'Statut', 'Source']
+  ];
+  
+  data.slice().reverse().forEach(o => {
+    rows.push([
+      o.numero || '—',
+      o.employe || '—',
+      o.date || '—',
+      o.depart || '—',
+      o.arrivee || '—',
+      o.objet || '—',
+      {approved:'Approuvé', rejected:'Rejeté', pending:'En attente'}[o._status||'pending'],
+      {firebase:'Firebase', local:'Local', both:'Les deux'}[o._source]||'—'
+    ]);
+  });
+  
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:14},{wch:20},{wch:12},{wch:14},{wch:14},{wch:30},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws, 'OM Global');
+  XLSX.writeFile(wb, `om_global_${new Date().toISOString().split('T')[0]}.xlsx`);
+  toast('📊 Export Excel des OM téléchargé !');
+}
+
+// ════════════════════════════════════════════════════
+// DATA LOAD — OM FROM FIREBASE
+// ════════════════════════════════════════════════════
+async function dataLoadOM() {
+  // Merge Firebase OM data with local storage (Firebase wins on conflicts)
+  if (useFirebase) {
+    try {
+      const fbData = await fbLoadOM();
+      if (fbData && fbData.length > 0) {
+        const localData = loadOMHistory();
+        const localIds = new Set(localData.map(o => o._localId).filter(Boolean));
+        let merged = [...localData];
+        let changed = false;
+        for (const fbItem of fbData) {
+          if (!localIds.has(fbItem._localId)) {
+            merged.push(fbItem);
+            changed = true;
+          }
+        }
+        // Also sync any local items to Firebase that weren't synced yet
+        for (const local of localData) {
+          if (!local._syncedToFB) {
+            local._syncedToFB = true;
+            local._localId = local._localId || (Date.now() + '_' + Math.random().toString(36).slice(2));
+            fbAddOM(local);
+            changed = true;
+          }
+        }
+        if (changed) {
+          // Use a direct save without triggering Firebase sync again
+          localStorage.setItem(OM_STORAGE_KEY, JSON.stringify(merged));
+        }
+      }
+    } catch(e) { console.warn('dataLoadOM error:', e); }
+  }
+  renderOMHistory();
+}
+
+// ════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════
+async function init() {
+  try {
+    document.getElementById('dateInput').value = today();
+
+    await new Promise(r => setTimeout(r, 2000));
+
+    if (window.__fbReady) {
+      useFirebase = true;
+      document.getElementById('dbStatus').className = 'db-status db-online';
+      document.getElementById('dbStatusText').textContent = 'Firebase connecté';
+      toast('🔥 Base de données Firebase connectée !', 'info');
+    } else {
+      useFirebase = false;
+      document.getElementById('dbStatus').className = 'db-status db-local';
+      document.getElementById('dbStatusText').textContent = 'Stockage local';
+      toast('💾 Mode local (localStorage)', 'info');
+    }
+
+    await dataLoad();
+    updateUserUI();
+    updateKPIs();
+    renderAll();
+    
+    // Initialize OM history (Firebase + localStorage merge)
+    await dataLoadOM();  // also calls renderOMHistory() internally
+    
+    // Initialize bottom nav active state
+    TABS.forEach(id => {
+      document.getElementById(`bnav-${id}`)?.classList.toggle('active', id === activeTab);
+    });
+  } catch (error) {
+    console.error('Init error:', error);
+    toast('Erreur lors de l\'initialisation.', 'err');
+  }
+}
+
+// Démarrer l'application
+document.addEventListener('DOMContentLoaded', function() {
+  // Synchronise les listes déroulantes avec les utilisateurs persistés
+  updateLoginUserSelect();
+  updateUserSelector();
+  document.getElementById('loginOverlay').classList.remove('hidden');
+});
+
+// Service Worker PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
+// PWA Install Button
+let deferredPrompt;
+const installBtn = document.getElementById('installBtn');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (installBtn) installBtn.style.display = '';
+});
+
+function installPWA() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then((choiceResult) => {
+    if (choiceResult.outcome === 'accepted') {
+      toast('Application installée avec succès !', 'ok');
+    }
+    deferredPrompt = null;
+    if (installBtn) installBtn.style.display = 'none';
+  });
+}

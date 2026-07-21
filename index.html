@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="theme-color" content="#0B4F9E"/>
   <link rel="manifest" href="manifest.json"/>
+  <link rel="icon" type="image/png" href="logo.PNG"/>
+  <link rel="apple-touch-icon" href="logo.PNG"/>
   <title>Notes de Frais — Eqnovia</title>
   <meta name="description" content="Application de gestion des notes de frais Eqnovia. Saisie, OCR, historique, export PDF/Excel. Base de données Firebase."/>
   
   <!-- Security Headers -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' data: blob: https://www.gstatic.com https://firestore.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob: data:; frame-src 'self' https:;"/>
   <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
-  <meta http-equiv="X-Frame-Options" content="DENY"/>
   <meta http-equiv="X-XSS-Protection" content="1; mode=block"/>
   <meta name="referrer" content="strict-origin-when-cross-origin"/>
 
@@ -19,40 +20,25 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
   
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            eq: {
-              blue: '#0B4F9E',
-              'blue-light': '#1a6bbf',
-              'blue-pale': '#EBF3FB',
-              'blue-mid': '#C8DFF5',
-              orange: '#F7931E',
-              'orange-pale': '#FEF3E8',
-            }
-          }
-        }
-      }
-    }
-  </script>
-
   <!-- Libs -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   
   <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, serverTimestamp, where }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import {
+      getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
+      createUserWithEmailAndPassword, sendPasswordResetEmail
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
     const firebaseConfig = {
+      // ⚠️ Ces valeurs sont remplacées via .env + build.js pour la production
       apiKey: "AIzaSyCCWjweceYZqbHBhdyHZCwVTdbjXgAZ-TI",
       authDomain: "eqnovia-expenses.firebaseapp.com",
       projectId: "eqnovia-expenses",
@@ -62,10 +48,18 @@
     };
 
     let db = null;
+    let auth = null;
     try {
       const app = initializeApp(firebaseConfig);
       db = getFirestore(app);
+      auth = getAuth(app);
       window.__db = db;
+      window.__auth = auth;
+      window.__signInWithEmail = signInWithEmailAndPassword;
+      window.__signOut = signOut;
+      window.__onAuthStateChanged = onAuthStateChanged;
+      window.__createAuthUser = createUserWithEmailAndPassword;
+      window.__sendPasswordReset = sendPasswordResetEmail;
       window.__fs = { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, serverTimestamp, where };
       window.__fbReady = true;
     } catch(e) {
@@ -74,692 +68,16 @@
     }
   </script>
 
-  <style>
-    /* ══════════════════════════════════════════
-       TOKENS — CHARTE EQNOVIA
-    ══════════════════════════════════════════ */
-    :root {
-      --eq-blue:       #0B4F9E;
-      --eq-blue-light: #1a6bbf;
-      --eq-blue-pale:  #EBF3FB;
-      --eq-blue-mid:   #C8DFF5;
-      --eq-orange:     #F7931E;
-      --eq-orange-pale:#FEF3E8;
-      --white:   #FFFFFF;
-      --gray-50: #F7F8FA;
-      --gray-100:#EFF1F5;
-      --gray-200:#DDE1EA;
-      --gray-300:#BEC5D2;
-      --gray-400:#8E97A8;
-      --gray-500:#636E82;
-      --gray-700:#353D4F;
-      --gray-900:#1A2130;
-      --green:      #18A76A;
-      --green-pale: #E6F7F1;
-      --red:        #E03B3B;
-      --red-pale:   #FDEAEA;
-      --amber:      #F59E0B;
-      --amber-pale: #FEF9E7;
-      --radius-sm: 6px; --radius-md:10px; --radius-lg:14px; --radius-xl:20px;
-      --shadow-sm: 0 1px 4px rgba(11,79,158,.06);
-      --shadow-md: 0 4px 16px rgba(11,79,158,.10);
-      --shadow-lg: 0 8px 32px rgba(11,79,158,.14);
-      --header-h: 64px;
-      --sidebar-w: 240px;
-    }
-    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
-    html{scroll-behavior:smooth;}
-    body{font-family:'Inter',sans-serif;background:var(--gray-50);color:var(--gray-900);font-size:14px;line-height:1.5;min-height:100vh;}
+  <!-- Styles -->
+  <link rel="stylesheet" href="style.css"/>
 
-    /* ══ LOGIN ══ */
-    #loginOverlay {
-      position:fixed;inset:0;background:rgba(11,79,158,.92);backdrop-filter:blur(8px);
-      z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;
-    }
-    #loginOverlay.hidden{display:none;}
-    .login-card{
-      background:var(--white);border-radius:var(--radius-xl);padding:40px 36px;max-width:420px;width:100%;
-      box-shadow:var(--shadow-lg);text-align:center;
-    }
-    .login-card .logo-eq{font-size:32px;font-weight:800;color:var(--eq-blue);}
-    .login-card .logo-novia{font-size:32px;font-weight:800;color:var(--eq-blue);}
-    .login-card .logo-dot{display:inline-block;width:10px;height:10px;background:var(--eq-orange);border-radius:50%;position:relative;top:-16px;margin-left:2px;}
-    .login-card h2{font-size:18px;font-weight:700;color:var(--gray-900);margin:20px 0 8px;}
-    .login-card p{font-size:13px;color:var(--gray-400);margin-bottom:24px;}
-    .login-card .form-group{margin-bottom:16px;text-align:left;}
-    .login-card .form-label{font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;}
-    .login-card .form-input{width:100%;height:44px;padding:0 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius-md);font-size:14px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s;}
-    .login-card .form-input:focus{border-color:var(--eq-blue);box-shadow:0 0 0 3px rgba(11,79,158,.12);}
-    .login-card .btn{width:100%;height:44px;font-size:14px;}
-    .login-error{color:var(--red);font-size:12px;margin-top:8px;display:none;}
-
-    /* ══ USER SELECTOR ══ */
-    .user-selector{display:flex;align-items:center;gap:8px;padding:10px 20px;background:var(--gray-50);flex-wrap:wrap;flex:1;min-width:0;}
-    .user-selector label{font-size:12px;font-weight:600;color:var(--gray-500);}
-    .user-selector select{height:32px;padding:0 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:13px;font-family:'Inter',sans-serif;outline:none;background:var(--white);min-width:140px;flex:1;}
-    .user-selector .user-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap;}
-    .user-badge.admin{background:var(--eq-blue-pale);color:var(--eq-blue);}
-    .user-badge.user{background:var(--gray-100);color:var(--gray-700);}
-    .btn-logout{background:var(--red-pale);color:var(--red);border:1px solid #F5C6C6;padding:6px 16px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'Inter',sans-serif;white-space:nowrap;}
-    .btn-logout:hover{background:#FADADAAA;}
-
-    /* ══ TOPBAR ══ */
-    .topbar{position:fixed;top:0;left:0;right:0;height:var(--header-h);background:var(--white);border-bottom:2px solid var(--eq-blue);display:flex;align-items:center;padding:0 16px;gap:10px;z-index:100;box-shadow:var(--shadow-md);}
-    .logo-wrap{display:flex;align-items:center;gap:2px;text-decoration:none;flex-shrink:0;}
-    .logo-eq{font-size:22px;font-weight:800;color:var(--eq-blue);letter-spacing:-1px;}
-    .logo-novia{font-size:22px;font-weight:800;color:var(--eq-blue);letter-spacing:-1px;position:relative;}
-    .logo-dot{display:inline-block;width:8px;height:8px;background:var(--eq-orange);border-radius:50%;position:relative;top:-12px;margin-left:1px;}
-    .topbar-sep{width:1px;height:25px;background:var(--gray-200);margin:0 4px;}
-    .topbar-title{font-size:14px;font-weight:600;color:var(--gray-700);}
-    .topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-    .topbar-right .form-input{height:32px;font-size:12px;width:150px;}
-    .db-status{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:3px 10px;border-radius:30px;}
-    .db-online{background:var(--green-pale);color:var(--green);border:1px solid #b3e8d3;}
-    .db-local {background:var(--amber-pale);color:var(--amber);border:1px solid #fde68a;}
-    .avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--eq-blue),var(--eq-blue-light));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:12px;flex-shrink:0;}
-
-    /* ══ LAYOUT ══ */
-    .layout{display:flex;padding-top:var(--header-h);min-height:100vh;}
-
-    /* ══ SIDEBAR ══ */
-    .sidebar{width:var(--sidebar-w);background:var(--white);border-right:1px solid var(--gray-200);position:fixed;top:var(--header-h);bottom:0;left:0;display:flex;flex-direction:column;padding:16px 0;overflow-y:auto;z-index:50;}
-    .nav-label{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--gray-400);padding:14px 20px 8px;}
-    .nav-label-icon{font-size:16px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);background:var(--eq-blue-pale);color:var(--eq-blue);}
-    .nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;color:var(--gray-500);font-size:13px;font-weight:500;cursor:pointer;border-left:3px solid transparent;transition:all .15s;text-decoration:none;}
-    .nav-item:hover{background:var(--gray-50);color:var(--eq-blue);}
-    .nav-item.active{background:var(--eq-blue-pale);color:var(--eq-blue);border-left-color:var(--eq-blue);font-weight:600;}
-    .nav-icon{width:18px;text-align:center;font-size:15px;}
-    .sidebar-footer{margin-top:auto;padding:14px 20px;border-top:1px solid var(--gray-100);display:flex;flex-direction:column;gap:10px;}
-    .sidebar-footer p{font-size:11px;color:var(--gray-400);margin-bottom:2px;}
-    .sidebar-footer .logout-btn{width:auto;min-width:180px;height:36px;margin-top:auto;border-radius:var(--radius-sm);padding:0 16px;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;cursor:pointer;transition:all .15s;background:var(--red-pale);color:var(--red);border:1px solid #F5C6C6;display:inline-flex;align-items:center;justify-content:center;gap:6px;position:relative;overflow:hidden;box-shadow:none;}
-    .sidebar-footer .logout-btn:hover{background:#FADADAAA;width:auto;min-width:180px;border-radius:var(--radius-sm);}
-    .sidebar-footer .logout-btn .sign{width:auto;padding:0;transition:none;}
-    .sidebar-footer .logout-btn .sign svg{width:14px;height:14px;}
-    .sidebar-footer .logout-btn .text{position:static;width:auto;opacity:1;color:var(--red);font-size:12px;font-weight:600;transition:none;padding:0;}
-    .sidebar-bottom-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-
-    /* ══ CONTENT ══ */
-    .content{margin-left:var(--sidebar-w);flex:1;padding:20px 24px 80px;max-width:calc(100vw - var(--sidebar-w));}
-
-    /* ══ PAGE TABS ══ */
-    .page-tabs{display:flex;gap:0;border-bottom:2px solid var(--gray-200);margin-bottom:20px;flex-wrap:wrap;overflow-x:auto;}
-    .tab-btn{padding:10px 16px;font-size:12px;font-weight:600;color:var(--gray-400);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;font-family:'Inter',sans-serif;white-space:nowrap;}
-    .tab-btn:hover{color:var(--eq-blue);}
-    .tab-btn.active{color:var(--eq-blue);border-bottom-color:var(--eq-blue);}
-
-    /* ══ STATS ══ */
-    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
-    .stat-card{background:var(--white);border:1px solid var(--gray-200);border-radius:var(--radius-lg);padding:14px 16px;box-shadow:var(--shadow-sm);position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s;}
-    .stat-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);}
-    .stat-card::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--radius-lg) var(--radius-lg) 0 0;}
-    .stat-card.blue::after{background:var(--eq-blue);}
-    .stat-card.orange::after{background:var(--eq-orange);}
-    .stat-icon{width:32px;height:32px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-size:15px;margin-bottom:8px;}
-    .stat-icon.blue{background:var(--eq-blue-pale);}
-    .stat-icon.orange{background:var(--eq-orange-pale);}
-    .stat-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--gray-400);margin-bottom:3px;}
-    .stat-value{font-size:18px;font-weight:800;color:var(--gray-900);line-height:1;margin-bottom:3px;font-variant-numeric:tabular-nums;}
-    .stat-sub{font-size:11px;color:var(--gray-400);}
-
-    /* ══ PANEL ══ */
-    .panel{background:var(--white);border:1px solid var(--gray-200);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);margin-bottom:16px;overflow:hidden;}
-    .panel-header{padding:12px 16px;border-bottom:1px solid var(--gray-100);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
-    .panel-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--gray-900);}
-    .panel-icon{width:26px;height:26px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
-    .panel-icon.blue{background:var(--eq-blue-pale);}
-    .panel-icon.orange{background:var(--eq-orange-pale);}
-    .panel-body{padding:16px;}
-
-    /* ══ FORM ══ */
-    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-    .form-group{display:flex;flex-direction:column;gap:4px;}
-    .form-group.span-2{grid-column:span 2;}
-    .form-label{font-size:10px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;}
-    .form-input,.form-select{height:38px;padding:0 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius-md);font-size:13px;font-family:'Inter',sans-serif;color:var(--gray-900);background:var(--white);transition:border-color .15s,box-shadow .15s;outline:none;width:100%;}
-    .form-input:hover,.form-select:hover{border-color:var(--gray-300);}
-    .form-input:focus,.form-select:focus{border-color:var(--eq-blue);box-shadow:0 0 0 3px rgba(11,79,158,.12);}
-    .form-select{-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10L6 8z' fill='%23636E82'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;}
-    .form-input[type="file"]{padding:6px 12px;}
-
-    /* ══ BUTTONS ══ */
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 14px;border-radius:var(--radius-md);font-size:12px;font-weight:600;font-family:'Inter',sans-serif;cursor:pointer;border:none;transition:all .15s;white-space:nowrap;text-decoration:none;}
-    .btn:active{transform:scale(.97);}
-    .btn-primary{background:var(--eq-blue);color:white;box-shadow:0 2px 8px rgba(11,79,158,.25);}
-    .btn-primary:hover{background:var(--eq-blue-light);box-shadow:0 4px 16px rgba(11,79,158,.35);}
-    .btn-orange{background:var(--eq-orange);color:white;box-shadow:0 2px 8px rgba(247,147,30,.25);}
-    .btn-orange:hover{background:#e08312;}
-    .btn-ghost{background:var(--gray-50);color:var(--gray-700);border:1.5px solid var(--gray-200);}
-    .btn-ghost:hover{background:var(--gray-100);color:var(--gray-900);}
-    .btn-danger{background:var(--red-pale);color:var(--red);border:1.5px solid #F5C6C6;}
-    .btn-danger:hover{background:#FADADAAA;}
-    .btn-icon{width:30px;height:30px;padding:0;border-radius:var(--radius-sm);border:1.5px solid var(--gray-200);background:var(--white);color:var(--gray-400);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .15s;}
-    .btn-icon:hover{border-color:var(--red);color:var(--red);background:var(--red-pale);}
-    .btn-icon.edit{color:var(--gray-400);}
-    .btn-icon.edit:hover{border-color:var(--eq-blue);color:var(--eq-blue);background:var(--eq-blue-pale);}
-    .btn-icon.disabled{opacity:0.4;cursor:not-allowed;pointer-events:none;}
-    .btn-lg{height:40px;font-size:13px;padding:0 20px;}
-    .btn-full{width:100%;}
-    .btn-pdf{background:#E53935;color:white;}
-    .btn-pdf:hover{background:#C62828;}
-    .btn-excel{background:#1D6F42;color:white;}
-    .btn-excel:hover{background:#155332;}
-
-    /* ══ EXPORT GROUP ══ */
-    .export-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-
-    /* ══ OCR ZONE ══ */
-    .upload-zone{border:2px dashed var(--gray-300);border-radius:var(--radius-md);padding:20px 16px;text-align:center;cursor:pointer;transition:all .2s;background:var(--gray-50);}
-    .upload-zone:hover,.upload-zone.drag-over{border-color:var(--eq-blue);background:var(--eq-blue-pale);}
-    .upload-zone input{display:none;}
-    .upload-zone .upload-icon{font-size:28px;margin-bottom:6px;}
-    .upload-zone p{font-size:12px;color:var(--gray-400);}
-    .upload-zone .file-selected{font-size:11px;color:var(--eq-blue);font-weight:600;margin-top:4px;}
-    .ocr-progress{height:4px;background:var(--gray-100);border-radius:4px;margin-top:10px;display:none;overflow:hidden;}
-    .ocr-progress-bar{height:100%;background:linear-gradient(90deg,var(--eq-blue),var(--eq-orange));border-radius:4px;width:0%;transition:width .3s;}
-    .ocr-output{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-md);padding:10px;font-size:11px;font-family:'Courier New',monospace;color:var(--gray-500);max-height:120px;overflow-y:auto;margin-top:10px;white-space:pre-wrap;line-height:1.6;}
-
-    /* ══ FILTERS ══ */
-    .filters-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;background:var(--gray-50);border-bottom:1px solid var(--gray-100);}
-    .filters-bar .form-input,.filters-bar .form-select{height:32px;font-size:12px;width:auto;min-width:120px;}
-    .filter-sep{width:1px;height:20px;background:var(--gray-200);margin:0 2px;}
-
-    /* ══ TABLE ══ */
-    .table-wrap{overflow-x:auto;}
-    table{width:100%;border-collapse:collapse;font-size:12px;}
-    thead tr{background:var(--gray-50);border-bottom:2px solid var(--gray-200);}
-    th{padding:8px 12px;text-align:left;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gray-400);white-space:nowrap;}
-    th.sortable{cursor:pointer;user-select:none;}
-    th.sortable:hover{color:var(--eq-blue);}
-    tbody tr{border-bottom:1px solid var(--gray-100);transition:background .1s;}
-    tbody tr:hover{background:var(--eq-blue-pale);}
-    tbody tr:last-child{border-bottom:none;}
-    td{padding:8px 12px;color:var(--gray-700);vertical-align:middle;}
-    td.td-date{font-size:12px;color:var(--gray-400);font-variant-numeric:tabular-nums;white-space:nowrap;}
-    td.td-amount{font-weight:700;color:var(--eq-blue);font-variant-numeric:tabular-nums;white-space:nowrap;}
-    td.td-desc{max-width:150px;}
-    td.td-desc span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-    td.td-user{font-size:11px;color:var(--gray-400);}
-    .badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:30px;font-size:10px;font-weight:600;white-space:nowrap;}
-    .badge-yes{background:var(--green-pale);color:var(--green);}
-    .badge-no{background:var(--red-pale);color:var(--red);}
-    .badge-cat{background:var(--eq-blue-pale);color:var(--eq-blue);}
-    .badge-justif{background:var(--eq-blue-pale);color:var(--eq-blue);cursor:pointer;}
-    .badge-justif:hover{background:var(--eq-blue-mid);}
-    .badge-user{background:var(--gray-100);color:var(--gray-700);}
-
-    /* ══ TABLE FOOTER ══ */
-    .table-footer{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--gray-50);border-top:2px solid var(--gray-200);flex-wrap:wrap;gap:10px;}
-    .total-info{font-size:12px;color:var(--gray-400);}
-    .total-amount{display:flex;align-items:center;gap:8px;background:var(--eq-blue-pale);border:1px solid var(--eq-blue-mid);padding:8px 16px;border-radius:var(--radius-md);font-size:14px;font-weight:800;color:var(--eq-blue);font-variant-numeric:tabular-nums;}
-
-    /* ══ EMPTY ══ */
-    .empty-state{text-align:center;padding:40px 24px;}
-    .empty-state .empty-icon{font-size:40px;margin-bottom:10px;}
-    .empty-state h3{font-size:15px;font-weight:700;color:var(--gray-700);margin-bottom:4px;}
-    .empty-state p{font-size:12px;color:var(--gray-400);}
-
-    /* ══ HISTORY GROUPS ══ */
-    .history-group{margin-bottom:12px;border:1px solid var(--gray-200);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm);}
-    .history-group-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--white);cursor:pointer;user-select:none;transition:background .15s;}
-    .history-group-header:hover{background:var(--eq-blue-pale);}
-    .history-group-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--gray-900);}
-    .history-group-badge{display:flex;align-items:center;gap:12px;}
-    .group-total{font-size:14px;font-weight:800;color:var(--eq-blue);}
-    .group-count{font-size:11px;color:var(--gray-400);}
-    .group-toggle{font-size:11px;color:var(--gray-400);transition:transform .2s;}
-    .group-toggle.open{transform:rotate(180deg);}
-    .history-group-body{display:none;}
-    .history-group-body.open{display:block;}
-
-    /* ══ YEAR CHART ══ */
-    .year-chart{padding:16px 18px 6px;border-bottom:1px solid var(--gray-100);}
-    .year-chart h4{font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
-    .bar-chart{display:flex;align-items:flex-end;gap:6px;height:60px;}
-    .bar-wrap{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;}
-    .bar-fill{width:100%;border-radius:3px 3px 0 0;background:linear-gradient(180deg,var(--eq-blue),var(--eq-blue-light));min-height:3px;transition:height .4s;}
-    .bar-label{font-size:8px;color:var(--gray-400);font-weight:600;white-space:nowrap;}
-    .bar-value{font-size:8px;color:var(--eq-blue);font-weight:700;white-space:nowrap;}
-
-    /* ══ LOADING ══ */
-    .spinner{display:inline-block;width:16px;height:16px;border:2.5px solid var(--eq-blue-pale);border-top-color:var(--eq-blue);border-radius:50%;animation:spin .7s linear infinite;}
-    @keyframes spin{to{transform:rotate(360deg);}}
-    .loading-row td{text-align:center;padding:30px 16px;}
-
-    /* ══ TOAST ══ */
-    #toast{position:fixed;bottom:20px;right:20px;min-width:240px;max-width:340px;background:var(--white);border:1px solid var(--gray-200);border-radius:var(--radius-lg);padding:12px 16px;display:none;align-items:center;gap:10px;z-index:9999;box-shadow:var(--shadow-lg);animation:slideUp .25s ease;font-size:12.5px;font-weight:500;color:var(--gray-700);}
-    #toast.show{display:flex;}
-    .toast-icon{width:28px;height:28px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
-    .toast-icon.ok{background:var(--green-pale);}
-    .toast-icon.err{background:var(--red-pale);}
-    .toast-icon.info{background:var(--eq-blue-pale);}
-    .toast-bar{position:absolute;bottom:0;left:0;height:3px;border-radius:0 0 var(--radius-lg) var(--radius-lg);background:var(--green);animation:shrink 3.4s linear forwards;}
-    #toast.err .toast-bar{background:var(--red);}
-    @keyframes slideUp{from{transform:translateY(20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
-    @keyframes shrink{from{width:100%;}to{width:0%;}}
-
-    /* ══ MODAL ══ */
-    .modal-overlay{position:fixed;inset:0;background:rgba(26,33,48,.55);backdrop-filter:blur(3px);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;pointer-events:none;transition:opacity .2s;}
-    .modal-overlay.open{opacity:1;pointer-events:all;}
-    .modal{background:var(--white);border-radius:var(--radius-xl);box-shadow:var(--shadow-lg);width:100%;max-width:500px;max-height:90vh;overflow-y:auto;transform:scale(.95);transition:transform .2s;}
-    .modal-overlay.open .modal{transform:scale(1);}
-    .modal-header{padding:16px 20px 12px;border-bottom:1px solid var(--gray-100);display:flex;align-items:center;justify-content:space-between;}
-    .modal-header h3{font-size:14px;font-weight:700;color:var(--gray-900);}
-    .modal-close{background:none;border:none;cursor:pointer;font-size:18px;color:var(--gray-400);line-height:1;padding:2px;}
-    .modal-close:hover{color:var(--gray-700);}
-    .modal-body{padding:16px 20px;}
-    .modal-footer{padding:12px 20px 16px;display:flex;gap:8px;justify-content:flex-end;}
-
-    /* ══ EDIT MODAL ══ */
-    #editModal .modal{max-width:560px;}
-    .action-btns{display:flex;align-items:center;gap:4px;}
-
-    /* ══ JUSTIFICATIF MODAL ══ */
-    #justifModal .modal{max-width:560px;}
-    #justifModal .modal-body img{max-width:100%;border-radius:var(--radius-md);border:1px solid var(--gray-200);}
-    .justif-thumb{max-width:50px;max-height:50px;border-radius:4px;object-fit:cover;border:1px solid var(--gray-200);cursor:pointer;transition:transform .2s;}
-    .justif-thumb:hover{transform:scale(1.05);}
-
-    /* ══ SCROLLBAR ══ */
-    ::-webkit-scrollbar{width:5px;height:5px;}
-    ::-webkit-scrollbar-track{background:transparent;}
-    ::-webkit-scrollbar-thumb{background:var(--gray-200);border-radius:4px;}
-    ::-webkit-scrollbar-thumb:hover{background:var(--gray-300);}
-
-    /* ══ UIVERSE.IO BUTTON STYLES ══ */
-    .Btn {
-      padding: 10px;
-      width: 50px;
-      height: 50px;
-      border: none;
-      border-radius: 50%;
-      background-color: white;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      position: relative;
-      transition-duration: 0.3s;
-    }
-    .svgIcon {
-      fill: #2196f3;
-    }
-    .icon2 {
-      width: 18px;
-      height: 5px;
-      border-bottom: 2px solid #2196f3;
-      border-left: 2px solid #2196f3;
-      border-right: 2px solid #2196f3;
-    }
-    .tooltip {
-      position: absolute;
-      top: -50px;
-      opacity: 0;
-      background-color: rgb(12, 12, 12);
-      color: white;
-      padding: 10px 10px;
-      border-radius: 5px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition-duration: 0.2s;
-      pointer-events: none;
-      letter-spacing: 0.5px;
-      font-size: 12px;
-      font-family: 'Inter', sans-serif;
-      white-space: nowrap;
-    }
-    .tooltip::before {
-      position: absolute;
-      content: "";
-      width: 10px;
-      height: 10px;
-      background-color: rgb(12, 12, 12);
-      background-size: 1000%;
-      background-position: center;
-      transform: rotate(45deg);
-      bottom: -5%;
-      transition-duration: 0.3s;
-    }
-    .Btn:hover .tooltip {
-      opacity: 1;
-      transition-duration: 0.3s;
-    }
-    .Btn:hover {
-      background-color: #01579b;
-      transition-duration: 0.3s;
-    }
-    .Btn:hover .icon2 {
-      border-bottom: 2px solid white;
-      border-left: 2px solid white;
-      border-right: 2px solid white;
-    }
-    .Btn:hover .svgIcon {
-      fill: white;
-      animation: slide-in-top 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
-    }
-    @keyframes slide-in-top {
-      0% {
-        transform: translateY(-10px);
-        opacity: 0;
-      }
-      100% {
-        transform: translateY(0px);
-        opacity: 1;
-      }
-    }
-
-    /* ══ LOGOUT BUTTON (Uiverse.io) ══ */
-    .Btn {
-      --black: #000000;
-      --ch-black: #141414;
-      --eer-black: #1b1b1b;
-      --night-rider: #2e2e2e;
-      --white: #ffffff;
-      --af-white: #f3f3f3;
-      --ch-white: #e1e1e1;
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      width: 45px;
-      height: 45px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      position: relative;
-      overflow: hidden;
-      transition-duration: .3s;
-      box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.199);
-      background-color: var(--night-rider);
-    }
-    /* plus sign */
-    .sign {
-      width: 100%;
-      transition-duration: .3s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .sign svg {
-      width: 17px;
-    }
-    .sign svg path {
-      fill: var(--af-white);
-    }
-    /* text */
-    .text {
-      position: absolute;
-      right: 0%;
-      width: 0%;
-      opacity: 0;
-      color: var(--af-white);
-      font-size: 1.2em;
-      font-weight: 600;
-      transition-duration: .3s;
-    }
-    /* hover effect on button width */
-    .Btn:hover {
-      width: 125px;
-      border-radius: 5px;
-      transition-duration: .3s;
-    }
-    .Btn:hover .sign {
-      width: 30%;
-      transition-duration: .3s;
-      padding-left: 20px;
-    }
-    /* hover effect button's text */
-    .Btn:hover .text {
-      opacity: 1;
-      width: 70%;
-      transition-duration: .3s;
-      padding-right: 10px;
-    }
-    /* button click effect*/
-    .Btn:active {
-      transform: translate(2px ,2px);
-    }
-
-    /* ══ MOBILE MENU TOGGLE ══ */
-    .menu-toggle {
-      display: none;
-      width: 32px;
-      height: 32px;
-      border: none;
-      background: var(--eq-blue-pale);
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      color: var(--eq-blue);
-      flex-shrink: 0;
-      transition: all .15s;
-    }
-    .menu-toggle:hover {
-      background: var(--eq-blue);
-      color: white;
-    }
-    .sidebar-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,.4);
-      z-index: 199;
-      display: none;
-      opacity: 0;
-      transition: opacity .3s;
-    }
-    .sidebar-overlay.open {
-      display: block;
-      opacity: 1;
-    }
-
-    /* ══ BOTTOM NAVIGATION (MOBILE) ══ */
-    .bottom-nav {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 64px;
-      background: var(--white);
-      border-top: 2px solid var(--eq-blue);
-      display: none;
-      align-items: center;
-      justify-content: space-around;
-      z-index: 100;
-      box-shadow: 0 -2px 12px rgba(11,79,158,.10);
-      padding: 0 8px;
-    }
-    .bottom-nav-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 2px;
-      padding: 6px 10px;
-      border-radius: var(--radius-md);
-      cursor: pointer;
-      transition: all .2s;
-      text-decoration: none;
-      color: var(--gray-400);
-      font-size: 10px;
-      font-weight: 600;
-      min-width: 56px;
-      border: none;
-      background: none;
-      font-family: 'Inter', sans-serif;
-    }
-    .bottom-nav-item:hover {
-      color: var(--eq-blue);
-      background: var(--eq-blue-pale);
-    }
-    .bottom-nav-item.active {
-      color: var(--eq-blue);
-      background: var(--eq-blue-pale);
-    }
-    .bottom-nav-item .nav-icon {
-      font-size: 20px;
-      line-height: 1;
-    }
-    .bottom-nav-logo {
-      display: flex;
-      align-items: center;
-      gap: 2px;
-      font-weight: 800;
-      color: var(--eq-blue);
-      font-size: 14px;
-      letter-spacing: -0.5px;
-    }
-    .bottom-nav-logo .logo-dot {
-      display: inline-block;
-      width: 6px;
-      height: 6px;
-      background: var(--eq-orange);
-      border-radius: 50%;
-      position: relative;
-      top: -8px;
-      margin-left: 1px;
-    }
-
-    /* ══ MOBILE SECTION HEADER ══ */
-    .mobile-section-header {
-      display: none;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 12px;
-      padding: 10px 12px;
-      background: var(--white);
-      border-radius: var(--radius-md);
-      border: 1px solid var(--gray-200);
-    }
-    .mobile-section-header .logo-eq,
-    .mobile-section-header .logo-novia {
-      font-size: 18px;
-    }
-    .mobile-section-header .logo-dot {
-      width: 6px;
-      height: 6px;
-      top: -8px;
-    }
-    .section-label {
-      font-size: 10px;
-      font-weight: 700;
-      color: var(--gray-400);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-    .section-name {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--gray-700);
-    }
-
-    /* ══ RESPONSIVE ══ */
-    @media(max-width:992px){
-      .sidebar{width:60px;}
-      .sidebar .nav-label{display:none;}
-      .sidebar .nav-item{padding:12px 18px;justify-content:center;}
-      .sidebar .nav-item span:not(.nav-icon){display:none;}
-      .sidebar .nav-item{position:relative;}
-      .sidebar .nav-item:hover::after{content:attr(data-tooltip);position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);background:var(--gray-900);color:white;padding:6px 12px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;white-space:nowrap;z-index:1000;pointer-events:none;box-shadow:var(--shadow-md);}
-      .sidebar .sidebar-footer p{font-size:8px;text-align:center;}
-      .sidebar .user-selector{flex-direction:column;align-items:center;gap:4px;padding:8px 10px;}
-      .sidebar .user-selector label{display:none;}
-      .sidebar .user-selector select{max-width:50px;font-size:10px;height:28px;}
-      .sidebar .user-selector .user-badge{font-size:10px;padding:2px 8px;}
-      .sidebar .sidebar-bottom-row{flex-direction:column;align-items:center;gap:6px;}
-      .sidebar .sidebar-footer .logout-btn{width:32px;height:32px;min-width:32px;padding:0;font-size:0;border-radius:50%;}
-      .sidebar .sidebar-footer .logout-btn svg{width:14px;height:14px;}
-      .sidebar .sidebar-footer .logout-btn .sign{width:100%;padding:0;}
-      .content{margin-left:60px;max-width:calc(100vw - 60px);padding:16px;}
-    }
-    @media(max-width:768px){
-      .sidebar{position:fixed;top:0;left:-280px;width:280px;height:100vh;z-index:200;transition:left .3s ease;box-shadow:4px 0 20px rgba(0,0,0,.15);}
-      .sidebar.open{left:0;}
-      .sidebar-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:199;display:none;opacity:0;transition:opacity .3s;}
-      .sidebar-overlay.open{display:block;opacity:1;}
-      .content{margin-left:0;max-width:100vw;padding:10px;padding-bottom:80px;}
-      .form-grid{grid-template-columns:1fr;}
-      .form-group.span-2{grid-column:span 1;}
-      .input-form-grid{grid-template-columns:1fr;}
-      .stats-grid{grid-template-columns:1fr;}
-      .topbar-title{display:none;}
-      .topbar{height:52px;padding:0 8px;gap:6px;}
-      .topbar .logo-wrap img{height:26px;}
-      .topbar-right .form-input{width:90px;height:28px;font-size:10px;}
-      .db-status{font-size:8px;padding:2px 6px;}
-      .avatar{width:26px;height:26px;font-size:10px;}
-      .filters-bar{padding:8px 10px;}
-      .filters-bar .form-input,.filters-bar .form-select{min-width:70px;font-size:10px;height:28px;}
-      .filters-bar .form-select{padding-right:24px;}
-      .export-group .btn span{display:none;}
-      .total-amount{font-size:11px;padding:4px 10px;}
-      .panel-header{flex-direction:column;align-items:stretch;}
-      .panel-header .export-group{justify-content:flex-start;}
-      .user-selector{flex-wrap:wrap;}
-      .user-selector select{max-width:100px;font-size:10px;height:28px;}
-      .user-selector .user-badge{font-size:10px;padding:2px 8px;}
-      .sidebar-bottom-row{flex-direction:column;align-items:stretch;gap:8px;}
-      .sidebar .sidebar-footer .logout-btn{width:100%;min-width:unset;height:40px;padding:0 16px;font-size:12px;border-radius:var(--radius-sm);justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.1);transition:all .2s;}
-      .sidebar .sidebar-footer .logout-btn:hover{background:#FADADAAA;box-shadow:0 2px 6px rgba(0,0,0,.15);}
-      .sidebar .nav-item span:not(.nav-icon){display:inline !important;}
-      .sidebar .nav-item{justify-content:flex-start;padding:10px 20px;}
-      .sidebar .nav-label{display:flex !important;}
-      .sidebar-footer .logout-btn svg{width:14px;height:14px;}
-      .bottom-nav{display:flex;}
-      .menu-toggle{display:flex !important;}
-      /* Mobile section header for tablet */
-      .mobile-section-header{display:flex !important;}
-    }
-    @media(max-width:480px){
-      .content{padding:8px;}
-      .stats-grid{grid-template-columns:1fr;}
-      .stat-card{padding:10px 12px;}
-      .stat-value{font-size:16px;}
-      .panel-body{padding:12px;}
-      .topbar{padding:0 8px;gap:6px;}
-      .topbar .logo-eq,.topbar .logo-novia{font-size:18px;}
-      .topbar .logo-dot{width:6px;height:6px;top:-10px;}
-      .topbar-right .form-input{width:80px;font-size:10px;height:28px;}
-      .db-status{font-size:8px;padding:2px 6px;}
-      .avatar{width:26px;height:26px;font-size:10px;}
-      .filters-bar{padding:8px 10px;}
-      .filters-bar .form-input,.filters-bar .form-select{min-width:60px;font-size:10px;height:28px;}
-      .table-wrap table{font-size:10px;}
-      th,td{padding:5px 6px;}
-      .badge{font-size:8px;padding:1px 6px;}
-      .btn{height:30px;font-size:10px;padding:0 10px;}
-      .btn-icon{width:24px;height:24px;font-size:11px;}
-      .btn-lg{height:36px;font-size:12px;}
-      .total-amount{font-size:11px;padding:4px 10px;}
-      .modal{padding:8px;}
-      .bottom-nav{height:56px;}
-      .bottom-nav-item{min-width:48px;padding:4px 6px;font-size:9px;}
-      .bottom-nav-item .nav-icon{font-size:18px;}
-      .bottom-nav-logo{font-size:12px;}
-      .content{padding-bottom:70px;}
-      .mobile-section-header{display:flex !important;}
-      /* Mobile section header styles */
-      .mobile-section-header{background:var(--white);border-radius:var(--radius-md);border:1px solid var(--gray-200);margin-bottom:12px;}
-      .mobile-section-header .logo-eq,.mobile-section-header .logo-novia{font-size:16px;}
-      .mobile-section-header .logo-dot{width:5px;height:5px;top:-6px;}
-      .mobile-section-header .section-label{font-size:9px;}
-      .mobile-section-header .section-name{font-size:12px;}
-      /* Logout button mobile */
-      .sidebar .sidebar-footer .logout-btn{width:100%;min-width:unset;height:40px;padding:0 16px;font-size:12px;border-radius:var(--radius-sm);justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.1);transition:all .2s;}
-      .sidebar .sidebar-footer .logout-btn:hover{background:#FADADAAA;box-shadow:0 2px 6px rgba(0,0,0,.15);}
-      .sidebar .logout-btn svg{width:12px;height:12px;}
-    }
-  </style>
 </head>
 <body>
 
 <!-- LOGIN OVERLAY -->
 <div id="loginOverlay">
   <div class="login-card">
-    <div>
-      <span class="logo-eq">eq</span><span class="logo-novia">novia</span><span class="logo-dot"></span>
-    </div>
+    <img src="logo.PNG" alt="Eqnovia" class="login-logo"/>
     <h2>🔐 Accès sécurisé</h2>
     <p>Veuillez vous authentifier pour accéder à l'application</p>
     <div class="form-group">
@@ -769,7 +87,7 @@
         <option value="user1">Rachid Bayed</option>
         <option value="user2">Soufiane Laraichi</option>
         <option value="user3">Bourzgui Fatima Zahra</option>
-        <option value="user4">Larbi</option>
+        <option value="user4">Larbi Ramzi</option>
         <option value="user5">Ibrahime</option>
         <option value="user6">Hamza</option>
       </select>
@@ -795,7 +113,7 @@
   <div class="modal">
     <div class="modal-header">
       <h3 id="modalTitle">Confirmation</h3>
-      <button class="modal-close" onclick="closeModal()">✕</button>
+      <button class="modal-close" onclick="closeModal()" aria-label="Fermer la fenêtre">✕</button>
     </div>
     <div class="modal-body"><p id="modalMsg" style="color:var(--gray-700);"></p></div>
     <div class="modal-footer">
@@ -810,7 +128,7 @@
   <div class="modal">
     <div class="modal-header">
       <h3>✏️ Modifier la dépense</h3>
-      <button class="modal-close" onclick="closeEditModal()">✕</button>
+      <button class="modal-close" onclick="closeEditModal()" aria-label="Fermer la fenêtre">✕</button>
     </div>
     <div class="modal-body">
       <div class="form-grid">
@@ -860,7 +178,7 @@
   <div class="modal">
     <div class="modal-header">
       <h3>📎 Justificatif de la dépense</h3>
-      <button class="modal-close" onclick="closeJustifModal()">✕</button>
+      <button class="modal-close" onclick="closeJustifModal()" aria-label="Fermer la fenêtre">✕</button>
     </div>
     <div class="modal-body" id="justifBody" style="text-align:center;">
       <p style="color:var(--gray-400);">Aucun justificatif pour cette dépense.</p>
@@ -876,7 +194,7 @@
     <div class="modal" style="max-width:600px;">
       <div class="modal-header">
         <h3>👥 Gestion des utilisateurs</h3>
-        <button class="modal-close" onclick="closeUserModal()">✕</button>
+        <button class="modal-close" onclick="closeUserModal()" aria-label="Fermer la fenêtre">✕</button>
       </div>
       <div class="modal-body">
         <div style="margin-bottom:16px;">
@@ -912,12 +230,15 @@
       </div>
     </div>
   </div>
-  
+    </div>
+  </div>
+
   <!-- TOP BAR -->
 <header class="topbar" id="appContent" style="display:none;">
-  <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()" aria-label="Menu">
+  <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()" aria-label="Menu" aria-expanded="false">
     ☰
   </button>
+  <div class="logo-wrap"><img src="logo.PNG" alt="Eqnovia" class="app-logo"/></div>
   <div class="topbar-sep"></div>
   <span class="topbar-title">Notes de Frais</span>
   <div class="topbar-right">
@@ -926,7 +247,7 @@
       <span>⏳</span> <span id="dbStatusText">Connexion…</span>
     </div>
     <!-- From Uiverse.io by ZAKARIAE48CHELLE -->
-    <button id="installBtn" class="Btn" style="display:none;" onclick="installPWA()">
+    <button id="installBtn" class="btn-install" style="display:none;" onclick="installPWA()">
       <svg class="svgIcon" viewBox="0 0 384 512" height="1em" xmlns="http://www.w3.org/2000/svg">
         <path d="M169.4 470.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 370.8 224 64c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 306.7L54.6 265.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"></path>
       </svg>
@@ -941,7 +262,7 @@
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 
 <!-- SIDEBAR -->
-<aside class="sidebar" id="appContent" style="display:none;">
+<aside class="sidebar" id="appContent" role="navigation" aria-label="Navigation principale" style="display:none;">
   <span class="nav-label"><span class="nav-label-icon">📊</span> Tableau de bord</span>
   <a class="nav-item active" data-tooltip="Saisie & OCR" onclick="switchTab('saisie')" id="nav-saisie">
     <span class="nav-icon">✏️</span> <span>Saisie & OCR</span>
@@ -957,6 +278,15 @@
   <a class="nav-item" data-tooltip="Par année" onclick="switchTab('yearly')" id="nav-yearly">
     <span class="nav-icon">📆</span> <span>Par année</span>
   </a>
+  <a class="nav-item" data-tooltip="Par trimestre" onclick="switchTab('trimestre')" id="nav-trimestre">
+    <span class="nav-icon">📊</span> <span>Par trimestre</span>
+  </a>
+  <a class="nav-item" data-tooltip="Comparaison" onclick="switchTab('comparison')" id="nav-comparison">
+    <span class="nav-icon">📈</span> <span>Comparaison</span>
+  </a>
+  <a class="nav-item" data-tooltip="Ordre de mission" onclick="switchTab('mission')" id="nav-mission">
+    <span class="nav-icon">🗺️</span> <span>Ordre de mission</span>
+  </a>
 
   <span class="nav-label"><span class="nav-label-icon">📤</span> Exports</span>
   <a class="nav-item" data-tooltip="PDF" onclick="exportPDF()">
@@ -969,11 +299,13 @@
   <span class="nav-label" id="adminOnlyLabel"><span class="nav-label-icon">⚙️</span> Gestion</span>
   <a class="nav-item" id="adminUsersBtn" data-tooltip="Gestion utilisateurs" onclick="openUserManager()">
     <span class="nav-icon">👥</span> <span>Utilisateurs</span>
-  </a>
-  <a class="nav-item" id="adminClearBtn" data-tooltip="Tout effacer" onclick="confirmClear()" style="color:var(--red);">
+  </a>  <a class="nav-item" id="adminClearBtn" data-tooltip="Tout effacer" onclick="confirmClear()" style="color:var(--red);">
     <span class="nav-icon">🗑️</span> <span>Tout effacer</span>
   </a>
-
+  <a class="nav-item" id="adminOMBtn" data-tooltip="Ordres de mission" onclick="switchTab('admin-om')" style="color:var(--eq-blue);">
+    <span class="nav-icon">🗺️</span> <span>OM Global</span>
+  </a>
+  
   <span class="nav-label"><span class="nav-label-icon">ℹ️</span> Informations</span>
   <a class="nav-item" data-tooltip="Conditions" onclick="switchTab('policy')" id="nav-policy">
     <span class="nav-icon">📜</span> <span>Conditions</span>
@@ -988,14 +320,14 @@
           <option value="user1">👤 Rachid Bayed</option>
           <option value="user2">👤 Soufiane Laraichi</option>
           <option value="user3">👤 Fatima zahra Bourzgui</option>
-          <option value="user4">👤 Larbi</option>
+          <option value="user4">👤 Larbi Ramzi</option>
           <option value="user5">👤 Ibrahime</option>
           <option value="user6">👤 Hamza</option>
         </select>
         <span class="user-badge admin" id="userBadge">Admin</span>
       </div>
       <!-- From Uiverse.io by kennyotsu-monochromia -->
-      <button class="Btn logout-btn" onclick="logout()">
+      <button class="logout-btn" onclick="logout()">
         <div class="sign"><svg viewBox="0 0 512 512"><path d="M377.9 105.9L500.7 228.7c7.2 7.2 11.3 17.1 11.3 27.3s-4.1 20.1-11.3 27.3L377.9 406.1c-6.4 6.4-15 9.9-24 9.9c-18.7 0-33.9-15.2-33.9-33.9l0-62.1-128 0c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l128 0 0-62.1c0-18.7 15.2-33.9 33.9-33.9c9 0 17.6 3.6 24 9.9zM160 96L96 96c-17.7 0-32 14.3-32 32l0 256c0 17.7 14.3 32 32 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c-53 0-96-43-96-96L0 128C0 75 43 32 96 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32z"></path></svg></div>
         <div class="text">Déconnexion</div>
       </button>
@@ -1027,21 +359,23 @@
   </div>
 
   <!-- PAGE TABS -->
-  <div class="page-tabs">
-    <button class="tab-btn active" id="tab-saisie"   onclick="switchTab('saisie')">✏️ Saisie & OCR</button>
-    <button class="tab-btn"        id="tab-all"      onclick="switchTab('all')">📋 Toutes</button>
-    <button class="tab-btn"        id="tab-monthly"  onclick="switchTab('monthly')">📅 Par mois</button>
-    <button class="tab-btn"        id="tab-yearly"   onclick="switchTab('yearly')">📆 Par année</button>
-    <button class="tab-btn"        id="tab-policy"   onclick="switchTab('policy')">📜 Conditions</button>
+  <div class="page-tabs" role="tablist" aria-label="Onglets des sections">
+    <button class="tab-btn active" id="tab-saisie" role="tab" aria-selected="true" aria-controls="tab-content-saisie" onclick="switchTab('saisie')">✏️ <span>Saisie & OCR</span></button>
+    <button class="tab-btn"        id="tab-all"      role="tab" aria-selected="false" aria-controls="tab-content-all" onclick="switchTab('all')">📋 <span>Toutes</span></button>
+    <button class="tab-btn"        id="tab-monthly"  role="tab" aria-selected="false" aria-controls="tab-content-monthly" onclick="switchTab('monthly')">📅 <span>Par mois</span></button>
+    <button class="tab-btn"        id="tab-yearly"   role="tab" aria-selected="false" aria-controls="tab-content-yearly" onclick="switchTab('yearly')">📆 <span>Par année</span></button>
+    <button class="tab-btn"        id="tab-trimestre"  role="tab" aria-selected="false" aria-controls="tab-content-trimestre" onclick="switchTab('trimestre')">📊 <span>Par trimestre</span></button>
+    <button class="tab-btn"        id="tab-comparison" role="tab" aria-selected="false" aria-controls="tab-content-comparison" onclick="switchTab('comparison')">📈 <span>Comparaison</span></button>
+    <button class="tab-btn"        id="tab-mission"  role="tab" aria-selected="false" aria-controls="tab-content-mission" onclick="switchTab('mission')">🗺️ <span>Ordre de mission</span></button>
+    <button class="tab-btn"        id="tab-admin-om" role="tab" aria-selected="false" aria-controls="tab-content-admin-om" onclick="switchTab('admin-om')" style="display:none;">🗺️ <span>OM Global</span></button>
+    <button class="tab-btn"        id="tab-policy"   role="tab" aria-selected="false" aria-controls="tab-content-policy" onclick="switchTab('policy')">📜 <span>Conditions</span></button>
   </div>
 
   <!-- ══ TAB: SAISIE & OCR ══ -->
-  <div id="tab-content-saisie">
+  <div id="tab-content-saisie" role="tabpanel" aria-labelledby="tab-saisie">
     <!-- Mobile Section Header -->
     <div class="mobile-section-header" style="display:none;">
-      <div style="display:flex;align-items:center;gap:4px;">
-        <span class="logo-eq" style="font-size:18px;">eq</span><span class="logo-novia" style="font-size:18px;">novia</span><span class="logo-dot" style="width:6px;height:6px;top:-8px;"></span>
-      </div>
+      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
       <span class="section-label">Section :</span>
       <span class="section-name">Saisie & OCR</span>
     </div>
@@ -1086,10 +420,17 @@
               <label class="form-label" for="commentInput">Commentaires</label>
               <input type="text" class="form-input" id="commentInput" placeholder="Remarques..." autocomplete="off"/>
             </div>
-            <div class="form-group span-2">
-              <label class="form-label" for="justifInput">📎 Justificatif (photo/facture)</label>
-              <input type="file" class="form-input" id="justifInput" accept="image/*" style="padding:6px 12px;"/>
-            </div>
+<div class="form-group span-2">
+  <label class="form-label" for="justifInput">📎 Justificatif (photo/facture PDF)</label>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <input type="file" class="form-input" id="justifInput" accept="image/*,.pdf" style="padding:6px 12px;flex:1;min-width:150px;" onchange="previewJustificatif(event)"/>
+    <div id="justifPreview" style="width:50px;height:50px;border-radius:6px;border:1px solid var(--gray-200);display:none;overflow:hidden;flex-shrink:0;">
+      <img id="justifPreviewImg" src="" alt="Aperçu" style="width:100%;height:100%;object-fit:cover;"/>
+    </div>
+    <button type="button" class="btn btn-ghost" id="justifClearBtn" style="display:none;height:30px;font-size:10px;padding:0 8px;" onclick="clearJustificatif()">✕ Effacer</button>
+  </div>
+  <div id="justifFileName" style="font-size:10px;color:var(--gray-400);margin-top:2px;"></div>
+</div>
           </div>
           <button class="btn btn-primary btn-lg btn-full" style="margin-top:14px;" onclick="addExpense()" id="addBtn">
             ➕ Ajouter la dépense
@@ -1124,12 +465,10 @@
   </div>
 
   <!-- ══ TAB: TOUTES ══ -->
-  <div id="tab-content-all" style="display:none;">
+  <div id="tab-content-all" role="tabpanel" aria-labelledby="tab-all" style="display:none;">
     <!-- Mobile Section Header -->
     <div class="mobile-section-header" style="display:none;">
-      <div style="display:flex;align-items:center;gap:4px;">
-        <span class="logo-eq" style="font-size:18px;">eq</span><span class="logo-novia" style="font-size:18px;">novia</span><span class="logo-dot" style="width:6px;height:6px;top:-8px;"></span>
-      </div>
+      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
       <span class="section-label">Section :</span>
       <span class="section-name">Toutes les dépenses</span>
     </div>
@@ -1198,12 +537,10 @@
   </div>
 
   <!-- ══ TAB: PAR MOIS ══ -->
-  <div id="tab-content-monthly" style="display:none;">
+  <div id="tab-content-monthly" role="tabpanel" aria-labelledby="tab-monthly" style="display:none;">
     <!-- Mobile Section Header -->
     <div class="mobile-section-header" style="display:none;">
-      <div style="display:flex;align-items:center;gap:4px;">
-        <span class="logo-eq" style="font-size:18px;">eq</span><span class="logo-novia" style="font-size:18px;">novia</span><span class="logo-dot" style="width:6px;height:6px;top:-8px;"></span>
-      </div>
+      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
       <span class="section-label">Section :</span>
       <span class="section-name">Par mois</span>
     </div>
@@ -1225,12 +562,10 @@
   </div>
 
   <!-- ══ TAB: PAR ANNÉE ══ -->
-  <div id="tab-content-yearly" style="display:none;">
+  <div id="tab-content-yearly" role="tabpanel" aria-labelledby="tab-yearly" style="display:none;">
     <!-- Mobile Section Header -->
     <div class="mobile-section-header" style="display:none;">
-      <div style="display:flex;align-items:center;gap:4px;">
-        <span class="logo-eq" style="font-size:18px;">eq</span><span class="logo-novia" style="font-size:18px;">novia</span><span class="logo-dot" style="width:6px;height:6px;top:-8px;"></span>
-      </div>
+      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
       <span class="section-label">Section :</span>
       <span class="section-name">Par année</span>
     </div>
@@ -1242,12 +577,10 @@
   </div>
 
   <!-- ══ TAB: CONDITIONS & POLITIQUE ══ -->
-  <div id="tab-content-policy" style="display:none;">
+  <div id="tab-content-policy" role="tabpanel" aria-labelledby="tab-policy" style="display:none;">
     <!-- Mobile Section Header -->
     <div class="mobile-section-header" style="display:none;">
-      <div style="display:flex;align-items:center;gap:4px;">
-        <span class="logo-eq" style="font-size:18px;">eq</span><span class="logo-novia" style="font-size:18px;">novia</span><span class="logo-dot" style="width:6px;height:6px;top:-8px;"></span>
-      </div>
+      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
       <span class="section-label">Section :</span>
       <span class="section-name">Conditions</span>
     </div>
@@ -1307,1551 +640,275 @@
     </div>
   </div>
 
+  <!-- ══ TAB: TRIMESTRE ══ -->
+  <div id="tab-content-trimestre" role="tabpanel" aria-labelledby="tab-trimestre" style="display:none;">
+    <div class="mobile-section-header" style="display:none;">
+      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
+      <span class="section-label">Section :</span>
+      <span class="section-name">Rapports trimestriels</span>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><div class="panel-icon blue">📊</div> Synthèse trimestrielle</div>
+        <div class="export-group">
+          <button class="btn btn-pdf" onclick="exportPDFTrimestre()"><span>📄 </span>PDF</button>
+          <button class="btn btn-excel" onclick="exportExcelTrimestre()"><span>📊 </span>Excel</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="filters-bar" style="border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:14px;">
+          <select class="form-select" id="triYearFilter" onchange="renderTrimester()" style="min-width:100px;"></select>
+          <div class="filter-sep"></div>
+          <select class="form-select" id="triUserFilter" onchange="renderTrimester()" style="min-width:100px;">
+            <option value="">Tous les collaborateurs</option>
+          </select>
+        </div>
+        <div id="trimesterContent">
+          <div class="empty-state">
+            <div class="empty-icon">📊</div>
+            <h3>Sélectionnez une année</h3>
+            <p>Les données trimestrielles apparaîtront ici.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: COMPARAISON ══ -->
+  <div id="tab-content-comparison" role="tabpanel" aria-labelledby="tab-comparison" style="display:none;">
+    <div class="mobile-section-header" style="display:none;">
+      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
+      <span class="section-label">Section :</span>
+      <span class="section-name">Comparaison des périodes</span>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><div class="panel-icon orange">📈</div> Analyse comparative des dépenses</div>
+        <div class="export-group">
+          <button class="btn btn-pdf" onclick="exportPDFComparison()"><span>📄 </span>PDF</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="filters-bar" style="border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:14px;">
+          <select class="form-select" id="cmpPeriod1" onchange="renderComparison()" style="min-width:80px;">
+            <option value="month">Mois</option>
+            <option value="trimestre">Trimestre</option>
+            <option value="year">Année</option>
+          </select>
+          <select class="form-select" id="cmpDate1" onchange="renderComparison()" style="min-width:120px;"></select>
+          <span style="font-size:12px;color:var(--gray-400);font-weight:600;">vs</span>
+          <select class="form-select" id="cmpPeriod2" onchange="renderComparison()" style="min-width:80px;">
+            <option value="month">Mois</option>
+            <option value="trimestre">Trimestre</option>
+            <option value="year">Année</option>
+          </select>
+          <select class="form-select" id="cmpDate2" onchange="renderComparison()" style="min-width:120px;"></select>
+          <div class="filter-sep"></div>
+          <select class="form-select" id="cmpUserFilter" onchange="renderComparison()" style="min-width:100px;">
+            <option value="">Tous</option>
+          </select>
+          <button class="btn btn-primary" onclick="renderComparison()" style="height:32px;font-size:11px;">🔄 Comparer</button>
+        </div>
+        <div id="comparisonContent">
+          <div class="empty-state">
+            <div class="empty-icon">📈</div>
+            <h3>Sélectionnez deux périodes</h3>
+            <p>Choisissez deux périodes à comparer pour analyser l'évolution des dépenses.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: ADMIN OM (Global) ══ -->
+  <div id="tab-content-admin-om" role="tabpanel" aria-labelledby="tab-admin-om" style="display:none;">
+    <div class="mobile-section-header" style="display:none;">
+      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
+      <span class="section-label">Admin :</span>
+      <span class="section-name">Ordres de mission globaux</span>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><div class="panel-icon blue">🗺️</div> Tous les ordres de mission (Firebase)</div>
+        <div class="export-group">
+          <button class="btn btn-pdf" onclick="adminOMExportPDF()" style="height:30px;font-size:10px;padding:0 10px;"><span>📄 </span>PDF</button>
+          <button class="btn btn-excel" onclick="adminOMExportExcel()" style="height:30px;font-size:10px;padding:0 10px;"><span>📊 </span>Excel</button>
+          <button class="btn btn-ghost" onclick="loadAdminOM()" style="height:30px;font-size:10px;padding:0 10px;">🔄</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="filters-bar" style="border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:14px;">
+          <input type="text" class="form-input" id="adminOMSearch" placeholder="🔍 Rechercher..." oninput="renderAdminOM()" style="min-width:120px;"/>
+          <div class="filter-sep"></div>
+          <select class="form-select" id="adminOMYear" onchange="renderAdminOM()" style="min-width:90px;">
+            <option value="">Toutes années</option>
+          </select>
+          <select class="form-select" id="adminOMEmploye" onchange="renderAdminOM()" style="min-width:120px;">
+            <option value="">Tous collaborateurs</option>
+          </select>
+          <div class="filter-sep"></div>
+          <select class="form-select" id="adminOMStatus" onchange="renderAdminOM()" style="min-width:110px;">
+            <option value="">Tous statuts</option>
+            <option value="pending">⏳ En attente</option>
+            <option value="approved">✅ Approuvé</option>
+            <option value="rejected">❌ Rejeté</option>
+          </select>
+          <span id="adminOMCount" style="font-size:11px;color:var(--gray-400);font-weight:600;margin-left:auto;">0 OM</span>
+        </div>
+        <div class="table-wrap" id="adminOMContent">
+          <div class="empty-state">
+            <div class="empty-icon">📋</div>
+            <h3>Chargement des données...</h3>
+            <p>Les ordres de mission depuis Firebase apparaîtront ici.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: ORDRE DE MISSION ══ -->
+  <div id="tab-content-mission" role="tabpanel" aria-labelledby="tab-mission" style="display:none;">
+    <!-- Mobile Section Header -->
+    <div class="mobile-section-header" style="display:none;">
+      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
+      <span class="section-label">Section :</span>
+      <span class="section-name">Ordre de mission</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" class="input-form-grid">
+
+      <!-- Formulaire d'ordre de mission -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title"><div class="panel-icon blue">🗺️</div> Nouvel ordre de mission</div>
+        </div>
+        <div class="panel-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label" for="omNumero">N° d'ordre *</label>
+              <input type="text" class="form-input" id="omNumero" placeholder="Ex : OM-2026-001" autocomplete="off"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="omDate">Date d'émission *</label>
+              <input type="date" class="form-input" id="omDate"/>
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label" for="omEmploye">Nom du collaborateur *</label>
+              <input type="text" class="form-input" id="omEmploye" placeholder="Ex : Rachid Alami" autocomplete="off"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="omDepart">Lieu de départ</label>
+              <input type="text" class="form-input" id="omDepart" placeholder="Ex : Casablanca" autocomplete="off"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="omArrivee">Lieu de destination</label>
+              <input type="text" class="form-input" id="omArrivee" placeholder="Ex : Rabat" autocomplete="off"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="omDebut">Date de début</label>
+              <input type="date" class="form-input" id="omDebut"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="omFin">Date de fin</label>
+              <input type="date" class="form-input" id="omFin"/>
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label" for="omObjet">Objet de la mission *</label>
+              <input type="text" class="form-input" id="omObjet" placeholder="Ex : Réunion client, installation…" autocomplete="off"/>
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label" for="omTransport">Mode de transport</label>
+              <select class="form-select" id="omTransport">
+                <option value="Voiture">🚗 Voiture</option>
+                <option value="Train">🚆 Train</option>
+                <option value="Avion">✈️ Avion</option>
+                <option value="Bus">🚌 Bus</option>
+                <option value="Taxi">🚕 Taxi</option>
+                <option value="Autre">📌 Autre</option>
+              </select>
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label" for="omTel">📱 Téléphone (WhatsApp) <span style="font-weight:400;color:var(--gray-400);text-transform:none;">— pour notification</span></label>
+              <input type="tel" class="form-input" id="omTel" placeholder="Ex : 06 12 34 56 78" autocomplete="off"/>
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label" for="omRemarques">Remarques / instructions</label>
+              <textarea class="form-input" id="omRemarques" rows="3" placeholder="Consignes particulières, hébergement…" style="resize:vertical;"></textarea>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-lg" style="flex:1;min-width:140px;" onclick="generateMissionOrder()">📄 Générer la fiche</button>
+            <button class="btn btn-ghost btn-lg" style="flex:1;min-width:140px;" onclick="resetMissionForm()">↺ Réinitialiser</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Aperçu de la fiche d'ordre de mission -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title"><div class="panel-icon orange">📑</div> Fiche d'ordre de mission</div>
+          <button class="btn btn-pdf no-print" style="font-size:11px;padding:6px 12px;" onclick="printMissionOrder()" id="omPrintBtn" disabled>🖨️ Imprimer / PDF</button>
+        </div>
+        <div class="panel-body">
+          <div id="omFiche" class="om-fiche">
+            <p style="color:var(--gray-400);font-size:13px;text-align:center;padding:40px 0;">🗒️ Remplissez le formulaire et cliquez sur « Générer la fiche » pour afficher la fiche d'ordre de mission.</p>
+          </div>
+          <div id="omHistorySection" class="om-history" style="margin-top:16px;border-top:1px solid var(--gray-100);padding-top:14px;">
+            <h4>📋 Historique des ordres de mission</h4>
+            <div id="omHistoryList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- BOTTOM NAVIGATION (MOBILE) -->
-<nav class="bottom-nav" id="bottomNav">
-  <a class="bottom-nav-item active" onclick="switchTab('saisie')" id="bnav-saisie">
-    <span class="nav-icon">✏️</span>
+<nav class="bottom-nav" id="bottomNav" aria-label="Navigation rapide">
+  <a class="bottom-nav-item active" onclick="switchTab('saisie')" id="bnav-saisie" role="button" aria-label="Saisie & OCR">
+    <span class="nav-icon" aria-hidden="true">✏️</span>
     <span>Saisie</span>
   </a>
-  <a class="bottom-nav-item" onclick="switchTab('all')" id="bnav-all">
-    <span class="nav-icon">📋</span>
+  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('all')" id="bnav-all" role="button" aria-label="Toutes les dépenses">
+    <span class="nav-icon" aria-hidden="true">📋</span>
     <span>Toutes</span>
   </a>
-  <a class="bottom-nav-item" onclick="switchTab('monthly')" id="bnav-monthly">
-    <span class="nav-icon">📅</span>
+  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('monthly')" id="bnav-monthly" role="button" aria-label="Par mois">
+    <span class="nav-icon" aria-hidden="true">📅</span>
     <span>Mois</span>
   </a>
-  <a class="bottom-nav-item" onclick="switchTab('yearly')" id="bnav-yearly">
-    <span class="nav-icon">📆</span>
+  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('yearly')" id="bnav-yearly" role="button" aria-label="Par année">
+    <span class="nav-icon" aria-hidden="true">📆</span>
     <span>Année</span>
   </a>
-  <a class="bottom-nav-item" onclick="switchTab('policy')" id="bnav-policy">
-    <span class="nav-icon">📜</span>
+  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('trimestre')" id="bnav-trimestre" role="button" aria-label="Par trimestre">
+    <span class="nav-icon" aria-hidden="true">📊</span>
+    <span>Trimestre</span>
+  </a>
+  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('comparison')" id="bnav-comparison" role="button" aria-label="Comparaison">
+    <span class="nav-icon" aria-hidden="true">📈</span>
+    <span>Comparer</span>
+  </a>
+  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('mission')" id="bnav-mission" role="button" aria-label="Ordre de mission">
+    <span class="nav-icon" aria-hidden="true">🗺️</span>
+    <span>Mission</span>
+  </a>
+  <a id="bnav-admin-om" style="display:none;"></a>
+  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('policy')" id="bnav-policy" role="button" aria-label="Conditions et informations">
+    <span class="nav-icon" aria-hidden="true">📜</span>
     <span>Infos</span>
   </a>
 </nav>
 
 </main>
 
-<script>
-'use strict';
-// ════════════════════════════════════════════
-// CONSTANTS & STATE
-// ════════════════════════════════════════════
-const STORAGE_KEY = 'eqnovia_expenses_v3';
-const MONTHS_FR   = ['Janvier','Février','Mars','Avril','Mai','Juin',
-                     'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-const MONTHS_SHORT= ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
 
-let sortCol = 'date', sortDir = -1;
-let activeTab = 'saisie';
-let cache = [];
-let useFirebase = false;
-let ocrText = '';
-let currentUser = 'admin';
-let isAdmin = true;
-let isAuthenticated = false;
+  <!-- Script principal -->
+  <script src="app.js" defer></script>
 
-// ════════════════════════════════════════════
-// USERS CONFIG
-// ════════════════════════════════════════════
-// Comptes par défaut (utilisés au premier lancement et comme référence)
-const DEFAULT_USERS = {
-  admin: { password: 'eqnovia-2026', label: 'Administrateur', isAdmin: true },
-  user1: { password: 'rachid2026', label: 'Rachid Bayed', isAdmin: false },
-  user2: { password: 'soufiane2026', label: 'Soufiane Laraichi', isAdmin: false },
-  user3: { password: 'fatima2026', label: 'Bourzgui Fatima Zahra', isAdmin: false },
-  user4: { password: 'larbi2026', label: 'Larbi', isAdmin: false },
-  user5: { password: 'ibrahime2026', label: 'Ibrahime', isAdmin: false },
-  user6: { password: 'hamza2026', label: 'Hamza', isAdmin: false }
-};
-
-const USERS_STORAGE_KEY = 'eqnovia_users_v1';
-
-// Charge les utilisateurs depuis le stockage local (persistance des créations/suppressions)
-function loadUsers() {
-  try {
-    const raw = localStorage.getItem(USERS_STORAGE_KEY);
-    if (raw) {
-      const stored = JSON.parse(raw);
-      if (stored && typeof stored === 'object') {
-        // L'administrateur doit toujours exister et conserver ses privilèges
-        stored.admin = {
-          password: (stored.admin && stored.admin.password) || DEFAULT_USERS.admin.password,
-          label: 'Administrateur',
-          isAdmin: true
-        };
-        return stored;
-      }
-    }
-  } catch (e) {
-    console.warn('Lecture des utilisateurs impossible, utilisation des valeurs par défaut.', e);
-  }
-  // Premier lancement : on utilise les comptes par défaut
-  return JSON.parse(JSON.stringify(DEFAULT_USERS));
-}
-
-// Sauvegarde les utilisateurs dans le stockage local
-function saveUsers() {
-  try {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(USERS));
-  } catch (e) {
-    console.warn('Sauvegarde des utilisateurs impossible.', e);
-  }
-}
-
-let USERS = loadUsers();
-// Persiste les comptes par défaut dès le premier lancement
-if (!localStorage.getItem(USERS_STORAGE_KEY)) saveUsers();
-
-// Données de démonstration pour Rachid Bayed
-const DEMO_EXPENSES = [
-  { id: 1001, date: '2026-06-20', desc: 'Taxi Aéroport Casablanca - Rabat', amount: 450.00, cat: 'Transport', mission: 'Mission client OCP', comment: 'Trajet aller', user: 'user1', justif: 'Non', justifData: null, justifName: null },
-  { id: 1002, date: '2026-06-18', desc: 'Déjeuner avec client', amount: 320.50, cat: 'Repas', mission: 'Mission client OCP', comment: 'Restaurant La Table', user: 'user1', justif: 'Non', justifData: null, justifName: null },
-  { id: 1003, date: '2026-06-15', desc: 'Hôtel Ibis Casablanca', amount: 890.00, cat: 'Hébergement', mission: 'Mission client OCP', comment: '2 nuits', user: 'user1', justif: 'Non', justifData: null, justifName: null },
-  { id: 1004, date: '2026-06-10', desc: 'Train Rabat - Casablanca', amount: 120.00, cat: 'Transport', mission: 'Réunion interne', comment: 'Aller-retour', user: 'user1', justif: 'Non', justifData: null, justifName: null },
-  { id: 1005, date: '2026-06-05', desc: 'Achat fournitures bureau', amount: 230.75, cat: 'Matériel', mission: 'Fournitures Q2', comment: 'Papeterie', user: 'user1', justif: 'Non', justifData: null, justifName: null }
-];
-
-// ════════════════════════════════════════════
-// SIDEBAR TOGGLE (MOBILE)
-// ════════════════════════════════════════════
-function toggleSidebar() {
-  const sidebar = document.querySelector('.sidebar');
-  const overlay = document.getElementById('sidebarOverlay');
-  if (sidebar && overlay) {
-    sidebar.classList.toggle('open');
-    overlay.classList.toggle('open');
-  }
-}
-
-// ════════════════════════════════════════════
-// LOGIN / LOGOUT
-// ════════════════════════════════════════════
-function login() {
-  const pwd = document.getElementById('loginPassword').value.trim();
-  const user = document.getElementById('loginUser').value;
-  
-  if (USERS[user] && USERS[user].password === pwd) {
-    isAuthenticated = true;
-    currentUser = user;
-    isAdmin = USERS[user].isAdmin;
-    
-    document.getElementById('loginOverlay').classList.add('hidden');
-    document.querySelectorAll('#appContent').forEach(el => el.style.display = '');
-    
-    document.getElementById('userSelector').value = user;
-    updateUserUI();
-    
-    // Initialize bottom nav active state
-    TABS.forEach(id => {
-      document.getElementById(`bnav-${id}`)?.classList.toggle('active', id === activeTab);
-    });
-    
-    toast('✅ Connexion réussie ! Bienvenue ' + USERS[user].label, 'ok');
-    init();
-  } else {
-    document.getElementById('loginError').style.display = 'block';
-    document.getElementById('loginPassword').value = '';
-    document.getElementById('loginPassword').focus();
-    toast('❌ Mot de passe incorrect', 'err');
-  }
-}
-
-function logout() {
-  if (confirm('Voulez-vous vraiment vous déconnecter ?')) {
-    isAuthenticated = false;
-    document.querySelectorAll('#appContent').forEach(el => el.style.display = 'none');
-    document.getElementById('loginOverlay').classList.remove('hidden');
-    document.getElementById('loginPassword').value = '';
-    document.getElementById('loginError').style.display = 'none';
-    // Close sidebar on mobile
-    document.querySelector('.sidebar')?.classList.remove('open');
-    document.getElementById('sidebarOverlay')?.classList.remove('open');
-    // Reset bottom nav active state
-    TABS.forEach(id => {
-      document.getElementById(`bnav-${id}`)?.classList.remove('active');
-    });
-    toast('👋 Déconnexion réussie', 'info');
-  }
-}
-
-document.getElementById('loginPassword').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') login();
-});
-
-// ════════════════════════════════════════════
-// USER MANAGEMENT
-// ════════════════════════════════════════════
-function switchUser(userId) {
-  if (!isAdmin) {
-    toast('Seul l\'administrateur peut changer d\'utilisateur.', 'err');
-    document.getElementById('userSelector').value = currentUser;
-    return;
-  }
-  currentUser = userId;
-  isAdmin = USERS[userId].isAdmin;
-  updateUserUI();
-  updateKPIs();
-  renderAll();
-  renderMonthly();
-  renderYearly();
-  toast('👤 Changement vers ' + USERS[userId].label, 'info');
-}
-
-function updateUserUI() {
-  const badge = document.getElementById('userBadge');
-  const avatar = document.getElementById('avatarDisplay');
-  const userInfo = USERS[currentUser];
-  
-  badge.textContent = userInfo.label;
-  badge.className = 'user-badge ' + (isAdmin ? 'admin' : 'user');
-  
-  const first = userInfo.label.substring(0, 1);
-  avatar.textContent = first;
-  
-  const adminOnly = document.querySelectorAll('#adminOnlyLabel, #adminUsersBtn, #adminClearBtn');
-  adminOnly.forEach(el => el.style.display = isAdmin ? '' : 'none');
-  
-  const filterUser = document.getElementById('filterUser');
-  if (filterUser) {
-    filterUser.style.display = isAdmin ? '' : 'none';
-  }
-  
-  const filterMonthUser = document.getElementById('filterMonthUser');
-  if (filterMonthUser) {
-    filterMonthUser.style.display = isAdmin ? '' : 'none';
-  }
-}
-
-// ════════════════════════════════════════════
-// USER MANAGEMENT (Admin)
-// ════════════════════════════════════════════
-function openUserManager() {
-  if (!isAdmin) {
-    return toast('Seul l\'administrateur peut gérer les utilisateurs.', 'err');
-  }
-  renderUsersList();
-  document.getElementById('userModal').classList.add('open');
-}
-
-function closeUserModal() {
-  document.getElementById('userModal').classList.remove('open');
-}
-
-document.getElementById('userModal').addEventListener('click', e => {
-  if (e.target === document.getElementById('userModal')) closeUserModal();
-});
-
-function renderUsersList() {
-  const container = document.getElementById('usersList');
-  const users = Object.entries(USERS).filter(([key]) => key !== 'admin');
-  
-  if (!users.length) {
-    container.innerHTML = '<p style="color:var(--gray-400);font-size:13px;text-align:center;padding:20px;">Aucun utilisateur.</p>';
-    return;
-  }
-  
-  container.innerHTML = users.map(([key, u]) => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:8px;background:var(--white);">
-      <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
-        <div style="width:32px;height:32px;border-radius:50%;background:${u.isAdmin ? 'var(--eq-blue-pale)' : 'var(--gray-100)'};color:${u.isAdmin ? 'var(--eq-blue)' : 'var(--gray-700)'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">
-          ${u.label.substring(0,1).toUpperCase()}
-        </div>
-        <div style="min-width:0;flex:1;">
-          <div style="font-size:13px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(u.label)}</div>
-          <div style="font-size:11px;color:var(--gray-400);">${u.isAdmin ? 'Administrateur' : 'Utilisateur'}</div>
-        </div>
-      </div>
-      <div style="display:flex;gap:6px;flex-shrink:0;">
-        <button class="btn-icon edit" onclick="editUser('${key}')" title="Modifier" style="width:28px;height:28px;font-size:12px;">✏️</button>
-        ${key !== 'admin' ? `<button class="btn-icon" onclick="deleteUser('${key}')" title="Supprimer" style="width:28px;height:28px;font-size:12px;color:var(--red);">✕</button>` : ''}
-      </div>
-    </div>
-  `).join('');
-}
-
-function addNewUser() {
-  const nameInput = document.getElementById('newUserName');
-  const pwdInput = document.getElementById('newUserPassword');
-  const roleInput = document.getElementById('newUserRole');
-  
-  const name = sanitizeInput(nameInput.value);
-  const pwd = pwdInput.value.trim();
-  const isAdminRole = roleInput.value === 'admin';
-  
-  if (!name) return toast('Veuillez saisir un nom.', 'err');
-  if (!pwd) return toast('Veuillez saisir un mot de passe.', 'err');
-  if (pwd.length < 4) return toast('Le mot de passe doit contenir au moins 4 caractères.', 'err');
-  
-  // Generate unique key
-  const existingKeys = Object.keys(USERS).filter(k => k.startsWith('user'));
-  const maxNum = existingKeys.reduce((max, k) => {
-    const num = parseInt(k.replace('user', ''), 10);
-    return num > max ? num : max;
-  }, 0);
-  const newKey = 'user' + (maxNum + 1);
-  
-  USERS[newKey] = {
-    password: pwd,
-    label: name,
-    isAdmin: isAdminRole
-  };
-
-  saveUsers();
-
-  nameInput.value = '';
-  pwdInput.value = '';
-  roleInput.value = 'user';
-
-  renderUsersList();
-  updateUserSelector();
-  updateLoginUserSelect();
-  toast('✅ Utilisateur ajouté : ' + name, 'ok');
-}
-
-function editUser(key) {
-  const user = USERS[key];
-  if (!user) return;
-  
-  const newName = prompt('Nouveau nom pour ' + user.label + ' :', user.label);
-  if (newName === null) return;
-  
-  const sanitizedName = sanitizeInput(newName);
-  if (!sanitizedName) return toast('Le nom ne peut pas être vide.', 'err');
-  
-  const newPwd = prompt('Nouveau mot de passe (laisser vide pour conserver l\'ancien) :', '');
-  if (newPwd === null) return;
-  
-  USERS[key].label = sanitizedName;
-  if (newPwd.trim()) {
-    if (newPwd.trim().length < 4) return toast('Le mot de passe doit contenir au moins 4 caractères.', 'err');
-    USERS[key].password = newPwd.trim();
-  }
-
-  saveUsers();
-
-  renderUsersList();
-  updateUserUI();
-  updateLoginUserSelect();
-  toast('✅ Utilisateur modifié : ' + sanitizedName, 'ok');
-}
-
-function deleteUser(key) {
-  const user = USERS[key];
-  if (!user) return;
-  
-  showModal('Supprimer l\'utilisateur', 'Voulez-vous vraiment supprimer l\'utilisateur "' + user.label + '" ? Cette action est irréversible.', async () => {
-    delete USERS[key];
-    saveUsers();
-    renderUsersList();
-    updateUserSelector();
-    updateLoginUserSelect();
-    
-    // If deleted user was current, switch to admin
-    if (currentUser === key) {
-      currentUser = 'admin';
-      isAdmin = true;
-      updateUserUI();
-    }
-    
-    toast('🗑️ Utilisateur supprimé.', 'info');
-  });
-}
-
-function updateUserSelector() {
-  const sel = document.getElementById('userSelector');
-  if (!sel) return;
-  
-  const currentVal = sel.value;
-  sel.innerHTML = '<option value="admin"> Admin</option>' +
-    Object.entries(USERS)
-      .filter(([k]) => k !== 'admin')
-      .map(([k, u]) => `<option value="${k}">👤 ${esc(u.label)}</option>`)
-      .join('');
-  
-  if (Object.keys(USERS).includes(currentVal)) {
-    sel.value = currentVal;
-  }
-}
-
-// Met à jour la liste déroulante de connexion avec les utilisateurs persistés
-function updateLoginUserSelect() {
-  const sel = document.getElementById('loginUser');
-  if (!sel) return;
-
-  const currentVal = sel.value;
-  sel.innerHTML = Object.entries(USERS)
-    .map(([k, u]) => `<option value="${k}">${u.isAdmin ? 'Administrateur' : esc(u.label)}</option>`)
-    .join('');
-
-  if (USERS[currentVal]) sel.value = currentVal;
-}
-
-function getUserExpenses(data) {
-  if (isAdmin) return data;
-  return data.filter(e => e.user === currentUser);
-}
-
-// ════════════════════════════════════════════
-// FIREBASE BRIDGE
-// ════════════════════════════════════════════
-async function fbAdd(expense) {
-  if (!useFirebase) return;
-  try {
-    const { collection, addDoc, serverTimestamp } = window.__fs;
-    await addDoc(collection(window.__db, 'expenses'), {
-      ...expense,
-      createdAt: serverTimestamp()
-    });
-  } catch(e) { console.warn('FB add failed', e); }
-}
-
-async function fbDelete(id) {
-  if (!useFirebase) return;
-  try {
-    const { collection, getDocs, deleteDoc, doc } = window.__fs;
-    const snap = await getDocs(collection(window.__db, 'expenses'));
-    for (const d of snap.docs) {
-      if (d.data().id === id) { await deleteDoc(doc(window.__db, 'expenses', d.id)); break; }
-    }
-  } catch(e) { console.warn('FB delete failed', e); }
-}
-
-async function fbLoad() {
-  if (!useFirebase) return null;
-  try {
-    const { collection, getDocs, query, orderBy } = window.__fs;
-    const q    = query(collection(window.__db,'expenses'), orderBy('createdAt','asc'));
-    const snap = await getDocs(q);
-    const arr  = [];
-    snap.forEach(d => arr.push({ ...d.data() }));
-    return arr;
-  } catch(e) { console.warn('FB load failed', e); return null; }
-}
-
-// ════════════════════════════════════════════
-// LOCAL STORAGE
-// ════════════════════════════════════════════
-function lsLoad() { 
-  try { 
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch(e) { 
-    console.warn('localStorage read failed:', e);
-    return []; 
-  }
-}
-
-function lsSave(d) { 
-  try { 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); 
-  } catch(e) { 
-    console.warn('localStorage save failed:', e);
-  }
-}
-
-// ════════════════════════════════════════════
-// DATA LAYER
-// ════════════════════════════════════════════
-async function dataLoad() {
-  if (useFirebase) {
-    const fb = await fbLoad();
-    if (fb !== null) {
-      cache = fb;
-      // Si cache vide, ajouter les données de démonstration
-      if (cache.length === 0) {
-        cache = DEMO_EXPENSES;
-        try { lsSave(cache); } catch(e) {}
-        // Ajouter à Firebase
-        for (const exp of cache) {
-          await fbAdd(exp);
-        }
-      }
-      try { lsSave(cache); } catch(e) {}
-      return;
-    }
-  }
-  cache = lsLoad();
-  // Si cache vide, ajouter les données de démonstration
-  if (cache.length === 0) {
-    cache = DEMO_EXPENSES;
-    try { lsSave(cache); } catch(e) {}
-  }
-}
-
-async function dataAdd(exp) {
-  cache.push(exp);
-  try { lsSave(cache); } catch(e) {}
-  await fbAdd(exp);
-}
-
-async function dataDelete(id) {
-  cache = cache.filter(e => e.id !== id);
-  try { lsSave(cache); } catch(e) {}
-  await fbDelete(id);
-}
-
-function dataAll() { return [...cache]; }
-
-// ════════════════════════════════════════════
-// HELPERS
-// ════════════════════════════════════════════
-function fmtDH(n) {
-  return n.toLocaleString('fr-MA', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' DH';
-}
-function fmtDate(iso) {
-  if (!iso) return '—';
-  const [y,m,d] = iso.split('-');
-  return `${d} ${MONTHS_FR[parseInt(m,10)-1].substring(0,3)}. ${y}`;
-}
-function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
-function today() { return new Date().toISOString().split('T')[0]; }
-function sanitizeInput(str) {
-  if (typeof str !== 'string') return '';
-  return str.replace(/[<>\"']/g, '').trim();
-}
-function validateAmount(val) {
-  const n = parseFloat(val);
-  return !isNaN(n) && n >= 0 && n <= 10000000;
-}
-function validateDate(dateStr) {
-  const d = new Date(dateStr);
-  const now = new Date();
-  const tenYearsAgo = new Date(now.getFullYear() - 10, now.getMonth(), now.getDate());
-  return !isNaN(d.getTime()) && d <= now && d >= tenYearsAgo;
-}
-
-// ════════════════════════════════════════════
-// TOAST
-// ════════════════════════════════════════════
-function toast(msg, type='ok') {
-  const t=document.getElementById('toast'),
-        icon=document.getElementById('toastIcon'),
-        msgEl=document.getElementById('toastMsg'),
-        bar=document.getElementById('toastBar');
-  icon.textContent={'ok':'✓','err':'✕','info':'ℹ'}[type]||'✓';
-  icon.className=`toast-icon ${type}`;
-  msgEl.textContent=msg;
-  t.className='toast show'+(type==='err'?' err':'');
-  bar.style.animation='none'; void bar.offsetWidth; bar.style.animation='';
-  clearTimeout(t._tid);
-  t._tid=setTimeout(()=>t.classList.remove('show'),3400);
-}
-
-// ════════════════════════════════════════════
-// MODAL
-// ════════════════════════════════════════════
-function showModal(title,msg,cb){
-  document.getElementById('modalTitle').textContent=title;
-  document.getElementById('modalMsg').textContent=msg;
-  document.getElementById('modalOk').onclick=()=>{closeModal();cb&&cb();};
-  document.getElementById('modal').classList.add('open');
-}
-function closeModal(){ document.getElementById('modal').classList.remove('open'); }
-document.getElementById('modal').addEventListener('click',e=>{
-  if(e.target===document.getElementById('modal')) closeModal();
-});
-
-// ════════════════════════════════════════════
-// JUSTIFICATIF MODAL
-// ════════════════════════════════════════════
-function closeJustifModal() {
-  document.getElementById('justifModal').classList.remove('open');
-}
-
-document.getElementById('justifModal').addEventListener('click', e => {
-  if (e.target === document.getElementById('justifModal')) closeJustifModal();
-});
-
-function viewJustificatif(id) {
-  const exp = cache.find(e => e.id === id);
-  if (!exp) return toast('Dépense introuvable.', 'err');
-  
-  const body = document.getElementById('justifBody');
-  
-  if (exp.justifData) {
-    body.innerHTML = `<img src="${exp.justifData}" alt="Justificatif" style="max-width:100%;border-radius:8px;border:1px solid var(--gray-200);max-height:450px;object-fit:contain;"/>
-    <p style="margin-top:10px;font-size:12px;color:var(--gray-400);">
-      ${exp.justifName ? '📎 ' + esc(exp.justifName) : 'Justificatif'}
-    </p>`;
-  } else {
-    body.innerHTML = `<p style="color:var(--gray-400);font-size:14px;">📭 Aucun justificatif pour cette dépense.</p>`;
-  }
-  
-  document.getElementById('justifModal').classList.add('open');
-}
-
-// ════════════════════════════════════════════
-// TAB SWITCHING
-// ════════════════════════════════════════════
-const TABS = ['saisie','all','monthly','yearly','policy'];
-function switchTab(t) {
-  activeTab = t;
-  TABS.forEach(id=>{
-    document.getElementById(`tab-content-${id}`).style.display = id===t?'block':'none';
-    document.getElementById(`tab-${id}`)?.classList.toggle('active', id===t);
-    document.getElementById(`nav-${id}`)?.classList.toggle('active', id===t);
-    document.getElementById(`bnav-${id}`)?.classList.toggle('active', id===t);
-    // Show/hide mobile section headers
-    document.querySelectorAll(`.mobile-section-header`).forEach(el => el.style.display = 'none');
-    const header = document.querySelector(`#tab-content-${t} .mobile-section-header`);
-    if (header) header.style.display = 'flex';
-  });
-  if (t==='all')     renderAll();
-  if (t==='monthly') renderMonthly();
-  if (t==='yearly')  renderYearly();
-}
-
-// ════════════════════════════════════════════
-// ADD EXPENSE
-// ════════════════════════════════════════════
-async function addExpense() {
-  const date    = document.getElementById('dateInput').value;
-  const desc    = sanitizeInput(document.getElementById('descInput').value);
-  const amount  = parseFloat(document.getElementById('amountInput').value);
-  const cat     = document.getElementById('catInput').value;
-  const mission = sanitizeInput(document.getElementById('missionInput').value);
-  const comment = sanitizeInput(document.getElementById('commentInput').value);
-  const justifFile = document.getElementById('justifInput');
-
-  if (!date)                    return toast('Veuillez saisir une date.','err');
-  if (!desc)                    return toast('Veuillez saisir une description.','err');
-  if (!validateDate(date))      return toast('Date invalide (doit être dans le passé et <= 10 ans).','err');
-  if (!validateAmount(amount))  return toast('Montant TTC invalide (0 < montant <= 10 000 000).','err');
-
-  const btn = document.getElementById('addBtn');
-  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Enregistrement…';
-
-  let justifData = null;
-  let justifName = '';
-
-  if (justifFile.files && justifFile.files.length > 0) {
-    const file = justifFile.files[0];
-    if (file.type.startsWith('image/')) {
-      try {
-        const reader = new FileReader();
-        const data = await new Promise((resolve, reject) => {
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-        justifData = data;
-        justifName = file.name;
-      } catch (e) {
-        console.warn('Error reading justificatif:', e);
-      }
-    } else {
-      toast('Le justificatif doit être une image.', 'err');
-      btn.disabled=false; btn.innerHTML='➕ Ajouter la dépense';
-      return;
-    }
-  }
-
-  const exp = { 
-    id: Date.now(), 
-    date, 
-    desc, 
-    amount, 
-    cat, 
-    mission: mission || '',
-    comment, 
-    user: currentUser,
-    justif: justifData ? 'Oui' : 'Non',
-    justifData: justifData || null,
-    justifName: justifName || null
-  };
-  await dataAdd(exp);
-
-  btn.disabled=false; btn.innerHTML='➕ Ajouter la dépense';
-  
-  document.getElementById('descInput').value='';
-  document.getElementById('amountInput').value='';
-  document.getElementById('missionInput').value='';
-  document.getElementById('commentInput').value='';
-  document.getElementById('justifInput').value='';
-  
-  updateKPIs();
-  if (activeTab!=='saisie') switchTab(activeTab); else renderAll();
-  toast('Dépense enregistrée dans la base de données ✔');
-}
-
-// ════════════════════════════════════════════
-// EDIT
-// ════════════════════════════════════════════
-let editingId = null;
-
-function editRow(id) {
-  const exp = cache.find(e => e.id === id);
-  if (!exp) return toast('Dépense introuvable.', 'err');
-  
-  if (!isAdmin && exp.user !== currentUser) {
-    return toast('Vous ne pouvez modifier que vos propres dépenses.', 'err');
-  }
-  
-  editingId = id;
-  document.getElementById('editDate').value    = exp.date;
-  document.getElementById('editAmount').value  = exp.amount;
-  document.getElementById('editDesc').value    = exp.desc;
-  document.getElementById('editCat').value     = exp.cat || 'Autre';
-  document.getElementById('editMission').value = exp.mission || '';
-  document.getElementById('editComment').value = exp.comment || '';
-  
-  document.getElementById('editModal').classList.add('open');
-}
-
-function closeEditModal() {
-  document.getElementById('editModal').classList.remove('open');
-  editingId = null;
-}
-
-document.getElementById('editModal').addEventListener('click', e => {
-  if (e.target === document.getElementById('editModal')) closeEditModal();
-});
-
-async function saveEdit() {
-  if (editingId === null) return;
-  
-  const idx = cache.findIndex(e => e.id === editingId);
-  if (idx === -1) return toast('Dépense introuvable.', 'err');
-  
-  if (!isAdmin && cache[idx].user !== currentUser) {
-    return toast('Vous ne pouvez modifier que vos propres dépenses.', 'err');
-  }
-  
-  const date    = document.getElementById('editDate').value;
-  const desc    = sanitizeInput(document.getElementById('editDesc').value);
-  const amount  = parseFloat(document.getElementById('editAmount').value);
-  const cat     = document.getElementById('editCat').value;
-  const mission = sanitizeInput(document.getElementById('editMission').value);
-  const comment = sanitizeInput(document.getElementById('editComment').value);
-
-  if (!date)                    return toast('Veuillez saisir une date.', 'err');
-  if (!desc)                    return toast('Veuillez saisir une description.', 'err');
-  if (!validateDate(date))      return toast('Date invalide (doit être dans le passé et <= 10 ans).', 'err');
-  if (!validateAmount(amount))  return toast('Montant TTC invalide (0 < montant <= 10 000 000).', 'err');
-
-  const btn = document.getElementById('editSaveBtn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Enregistrement…';
-
-  cache[idx] = { ...cache[idx], date, desc, amount, cat, mission, comment };
-  try { lsSave(cache); } catch(e) {}
-  
-  if (useFirebase) {
-    try {
-      const { collection, getDocs, deleteDoc, doc, addDoc, serverTimestamp } = window.__fs;
-      const snap = await getDocs(collection(window.__db, 'expenses'));
-      for (const d of snap.docs) {
-        if (d.data().id === editingId) { await deleteDoc(doc(window.__db, 'expenses', d.id)); break; }
-      }
-      await addDoc(collection(window.__db, 'expenses'), { ...cache[idx], createdAt: serverTimestamp() });
-    } catch(e) { console.warn('FB edit failed', e); }
-  }
-
-  btn.disabled = false; btn.innerHTML = '💾 Enregistrer les modifications';
-  closeEditModal();
-  updateKPIs();
-  if (activeTab === 'monthly') renderMonthly();
-  else if (activeTab === 'yearly') renderYearly();
-  else renderAll();
-  toast('Dépense modifiée avec succès ✔');
-}
-
-// ════════════════════════════════════════════
-// DELETE
-// ════════════════════════════════════════════
-function deleteRow(id) {
-  const exp = cache.find(e => e.id === id);
-  if (!exp) return toast('Dépense introuvable.', 'err');
-  
-  if (!isAdmin) {
-    return toast('Seul l\'administrateur peut supprimer des dépenses.', 'err');
-  }
-  
-  showModal('Supprimer la dépense','Cette action est irréversible. Continuer ?', async()=>{
-    await dataDelete(id);
-    updateKPIs();
-    if (activeTab==='monthly') renderMonthly();
-    else if (activeTab==='yearly') renderYearly();
-    else renderAll();
-    toast('Dépense supprimée.');
-  });
-}
-
-// ════════════════════════════════════════════
-// CLEAR ALL
-// ════════════════════════════════════════════
-function confirmClear(){
-  if (!isAdmin) {
-    return toast('Seul l\'administrateur peut effacer toutes les données.', 'err');
-  }
-  showModal('⚠️ Supprimer tout','Toutes les dépenses seront effacées de la base de données. Continuer ?', async()=>{
-    if (useFirebase) {
-      try {
-        const { collection, getDocs, deleteDoc, doc } = window.__fs;
-        const snap = await getDocs(collection(window.__db,'expenses'));
-        for (const d of snap.docs) {
-          await deleteDoc(doc(window.__db,'expenses',d.id));
-        }
-      } catch(e){ console.warn(e); }
-    }
-    cache=[];
-    try { lsSave([]); } catch(e) {}
-    updateKPIs();
-    renderAll(); renderMonthly(); renderYearly();
-    toast('Toutes les dépenses ont été supprimées.');
-  });
-}
-
-// ════════════════════════════════════════════
-// GLOBAL SEARCH
-// ════════════════════════════════════════════
-function handleGlobalSearch(query) {
-  const q = (query || '').toLowerCase().trim();
-  if (!q) {
-    if (activeTab !== 'all') switchTab('all');
-    resetFilters();
-    return;
-  }
-  if (activeTab !== 'all') switchTab('all');
-  document.getElementById('filterSearch').value = q;
-  renderAll();
-}
-
-// ════════════════════════════════════════════
-// KPIs
-// ════════════════════════════════════════════
-function updateKPIs() {
-  const all   = dataAll();
-  const userData = getUserExpenses(all);
-  const now   = new Date();
-  const ym    = now.toISOString().substring(0,7);
-  const mData = userData.filter(e=>e.date.startsWith(ym));
-  const total = userData.reduce((s,e)=>s+e.amount,0);
-
-  document.getElementById('kpiTotal').textContent      = fmtDH(total);
-  document.getElementById('kpiCount').textContent      = userData.length + ' dépense(s)';
-  document.getElementById('kpiMonth').textContent      = fmtDH(mData.reduce((s,e)=>s+e.amount,0));
-  document.getElementById('kpiMonthLabel').textContent = MONTHS_FR[now.getMonth()] + ' ' + now.getFullYear();
-}
-
-// ════════════════════════════════════════════
-// SORT
-// ════════════════════════════════════════════
-function sortBy(col){
-  if(sortCol===col) sortDir*=-1; else{sortCol=col;sortDir=-1;}
-  renderAll();
-}
-
-// ════════════════════════════════════════════
-// RENDER ALL
-// ════════════════════════════════════════════
-function renderAll() {
-  const allData = dataAll();
-  const data = getUserExpenses(allData);
-  const yearF   = document.getElementById('filterYear').value;
-  const monthF  = document.getElementById('filterMonth').value;
-  const catF    = document.getElementById('filterCat').value;
-  const userF   = document.getElementById('filterUser').value;
-  const search  = (document.getElementById('filterSearch').value||'').toLowerCase();
-
-  const years = [...new Set(allData.map(e=>e.date.substring(0,4)))].sort().reverse();
-  const ySel  = document.getElementById('filterYear');
-  const yVal  = ySel.value;
-  ySel.innerHTML='<option value="all">📅 Toutes années</option>';
-  years.forEach(y=>{const o=document.createElement('option');o.value=y;o.textContent=y;ySel.appendChild(o);});
-  if(years.includes(yVal)) ySel.value=yVal;
-
-  const userSel = document.getElementById('filterUser');
-  const userVal = userSel.value;
-  const userOptions = isAdmin ? Object.keys(USERS) : [currentUser];
-  userSel.innerHTML='<option value="all">👤 Tous</option>';
-  userOptions.forEach(u=>{
-    const o=document.createElement('option');
-    o.value=u;
-    o.textContent=USERS[u].label;
-    userSel.appendChild(o);
-  });
-  if(userOptions.includes(userVal)) userSel.value=userVal;
-
-  let rows = data.filter(e=>{
-    const y=e.date.substring(0,4), m=e.date.substring(5,7);
-    const userMatch = userF==='all' || e.user === userF;
-    return (yearF==='all'||y===yearF)
-        && (monthF==='all'||m===monthF)
-        && (catF==='all'||(e.cat||'Autre')===catF)
-        && userMatch
-        && (!search||e.desc.toLowerCase().includes(search)||(e.cat||'').toLowerCase().includes(search)||(e.mission||'').toLowerCase().includes(search));
-  }).sort((a,b)=>{
-    if(sortCol==='amount') return (a.amount-b.amount)*sortDir;
-    return a.date.localeCompare(b.date)*sortDir;
-  });
-
-  const tbody=document.getElementById('tbody');
-
-  if(!rows.length){
-    tbody.innerHTML=`<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">🗂️</div><h3>Aucune dépense trouvée</h3><p>Ajustez vos filtres ou saisissez une nouvelle dépense.</p></div></td></tr>`;
-    document.getElementById('grandTotal').innerHTML='💰 Total : <strong>0,00 DH</strong>';
-    document.getElementById('rowCount').textContent='0 ligne(s)';
-    return;
-  }
-
-  let total=0, html='';
-  rows.forEach((e,i)=>{
-    total+=e.amount;
-
-    const justifBadge = e.justifData 
-      ? `<span class="badge badge-justif" onclick="viewJustificatif(${e.id})" title="Voir le justificatif">📎 Oui</span>`
-      : `<span class="badge badge-no">❌ Non</span>`;
-    
-    const userLabel = USERS[e.user] ? USERS[e.user].label : e.user;
-    const isOwner = e.user === currentUser;
-    const canEdit = isAdmin || isOwner;
-    const canDelete = isAdmin;
-
-    html+=`<tr>
-      <td style="color:var(--gray-400);font-size:11px;">${i+1}</td>
-      <td class="td-date">${fmtDate(e.date)}</td>
-      <td class="td-desc"><span title="${esc(e.desc)}">${esc(e.desc)}</span></td>
-      <td><span class="badge badge-cat">${esc(e.cat||'Autre')}</span></td>
-      <td class="td-amount">${fmtDH(e.amount)}</td>
-      <td class="td-desc"><span title="${esc(e.mission || '')}">${esc(e.mission || '—')}</span></td>
-      <td class="td-desc"><span title="${esc(e.comment || '')}">${esc(e.comment || '—')}</span></td>
-      <td class="td-user"><span class="badge badge-user">${esc(userLabel)}</span></td>
-      <td>${justifBadge}</td>
-      <td><div class="action-btns">
-        <button class="btn-icon edit ${!canEdit ? 'disabled' : ''}" onclick="${canEdit ? 'editRow('+e.id+')' : ''}" title="${canEdit ? 'Modifier' : 'Non autorisé'}">✏️</button>
-        <button class="btn-icon ${!canDelete ? 'disabled' : ''}" onclick="${canDelete ? 'deleteRow('+e.id+')' : ''}" title="${canDelete ? 'Supprimer' : 'Non autorisé'}">✕</button>
-      </div></td>
-    </tr>`;
-  });
-  tbody.innerHTML=html;
-  document.getElementById('grandTotal').innerHTML=`💰 Total TTC : <strong>${fmtDH(total)}</strong>`;
-  document.getElementById('rowCount').textContent=rows.length+' ligne(s) — Total TTC : '+fmtDH(total);
-}
-
-function resetFilters(){
-  ['filterYear','filterMonth','filterCat','filterUser'].forEach(id=>{
-    const el = document.getElementById(id);
-    if (el) el.value='all';
-  });
-  document.getElementById('filterSearch').value='';
-  renderAll();
-}
-
-// ════════════════════════════════════════════
-// RENDER MONTHLY
-// ════════════════════════════════════════════
-function renderMonthly() {
-  const allData = dataAll();
-  const data = getUserExpenses(allData);
-  const yearF  = document.getElementById('filterYearMonth').value;
-  const userF  = document.getElementById('filterMonthUser')?.value || 'all';
-
-  const years=[...new Set(allData.map(e=>e.date.substring(0,4)))].sort().reverse();
-  const ySel=document.getElementById('filterYearMonth');
-  const yVal=ySel.value;
-  ySel.innerHTML='<option value="all">Toutes années</option>';
-  years.forEach(y=>{const o=document.createElement('option');o.value=y;o.textContent=y;ySel.appendChild(o);});
-  if(years.includes(yVal)) ySel.value=yVal;
-
-  // Populate user filter dynamically
-  const userSel = document.getElementById('filterMonthUser');
-  const userVal = userSel?.value || 'all';
-  if (userSel && isAdmin) {
-    userSel.innerHTML = '<option value="all">👤 Tous</option>' +
-      Object.keys(USERS).map(u => `<option value="${u}">${u === 'admin' ? 'Admin' : esc(USERS[u].label)}</option>`).join('');
-    if (Object.keys(USERS).includes(userVal)) userSel.value = userVal;
-  }
-
-  let filtered = data.filter(e=> yearF==='all'||e.date.substring(0,4)===yearF);
-  
-  if (!isAdmin) {
-    filtered = filtered.filter(e => e.user === currentUser);
-  } else if (userF !== 'all') {
-    filtered = filtered.filter(e => e.user === userF);
-  }
-
-  const groups={};
-  filtered.forEach(e=>{
-    const key=e.date.substring(0,7);
-    if(!groups[key]) groups[key]=[];
-    groups[key].push(e);
-  });
-
-  const keys=Object.keys(groups).sort().reverse();
-  const container=document.getElementById('monthlyGroups');
-
-  if(!keys.length){
-    container.innerHTML=`<div class="panel"><div class="empty-state"><div class="empty-icon">📭</div><h3>Aucune dépense</h3><p>Aucune dépense enregistrée pour cette période.</p></div></div>`;
-    return;
-  }
-
-  container.innerHTML = keys.map(key=>{
-    const [y,m]=key.split('-');
-    const label=`${MONTHS_FR[parseInt(m,10)-1]} ${y}`;
-    const items=groups[key].sort((a,b)=>b.date.localeCompare(a.date));
-    const total=items.reduce((s,e)=>s+e.amount,0);
-    
-    const rows=items.map((e,i)=>{
-      const justifBadge = e.justifData 
-        ? `<span class="badge badge-justif" onclick="viewJustificatif(${e.id})" title="Voir le justificatif">📎 Oui</span>`
-        : `<span class="badge badge-no">❌ Non</span>`;
-      const userLabel = USERS[e.user] ? USERS[e.user].label : e.user;
-      const isOwner = e.user === currentUser;
-      const canEdit = isAdmin || isOwner;
-      const canDelete = isAdmin;
-      
-      return `<tr>
-        <td style="color:var(--gray-400);font-size:11px;padding:8px 12px;">${i+1}</td>
-        <td class="td-date" style="padding:8px 12px;">${fmtDate(e.date)}</td>
-        <td class="td-desc" style="padding:8px 12px;"><span title="${esc(e.desc)}">${esc(e.desc)}</span></td>
-        <td style="padding:8px 12px;"><span class="badge badge-cat">${esc(e.cat||'Autre')}</span></td>
-        <td class="td-amount" style="padding:8px 12px;">${fmtDH(e.amount)}</td>
-        <td class="td-desc" style="padding:8px 12px;"><span title="${esc(e.mission || '')}">${esc(e.mission || '—')}</span></td>
-        <td class="td-desc" style="padding:8px 12px;"><span title="${esc(e.comment || '')}">${esc(e.comment || '—')}</span></td>
-        <td class="td-user" style="padding:8px 12px;"><span class="badge badge-user">${esc(userLabel)}</span></td>
-        <td style="padding:8px 12px;">${justifBadge}</td>
-        <td style="padding:8px 12px;"><div class="action-btns">
-          <button class="btn-icon edit ${!canEdit ? 'disabled' : ''}" onclick="${canEdit ? 'editRow('+e.id+')' : ''}" title="${canEdit ? 'Modifier' : 'Non autorisé'}">✏️</button>
-          <button class="btn-icon ${!canDelete ? 'disabled' : ''}" onclick="${canDelete ? 'deleteRow('+e.id+')' : ''}" title="${canDelete ? 'Supprimer' : 'Non autorisé'}">✕</button>
-        </div></td>
-      </tr>`;
-    }).join('');
-
-    return `<div class="history-group">
-      <div class="history-group-header" onclick="toggleGroup('${key}')">
-        <div class="history-group-title">
-          <span style="font-size:18px;">📅</span>
-          <span>${label}</span>
-          <span style="font-size:11px;color:var(--gray-400);font-weight:500;">${items.length} dépense(s)</span>
-        </div>
-        <div class="history-group-badge">
-          <span class="group-total">${fmtDH(total)}</span>
-          <span class="group-toggle" id="toggle-${key}">▼</span>
-        </div>
-      </div>
-      <div class="history-group-body open" id="body-${key}">
-        <div class="table-wrap">
-          <table>
-            <thead><tr>
-              <th>#</th><th>Date</th><th>Description</th><th>Type</th>
-              <th>Total</th><th>Mission</th><th>Commentaires</th><th>User</th><th>Justif</th><th></th>
-            </tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-        <div style="display:flex;justify-content:flex-end;padding:10px 16px;background:var(--gray-50);border-top:1px solid var(--gray-100);gap:12px;">
-          <div class="total-amount">💰 Total TTC : <strong>${fmtDH(total)}</strong></div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function toggleGroup(key){
-  const body=document.getElementById(`body-${key}`);
-  const tog=document.getElementById(`toggle-${key}`);
-  body.classList.toggle('open');
-  tog.classList.toggle('open');
-}
-
-// ════════════════════════════════════════════
-// RENDER YEARLY
-// ════════════════════════════════════════════
-function renderYearly() {
-  const allData = dataAll();
-  const data = getUserExpenses(allData);
-  const groups={};
-  data.forEach(e=>{
-    const y=e.date.substring(0,4);
-    if(!groups[y]) groups[y]={total:0, count:0, byMonth:{}, byCat:{}, users:new Set()};
-    groups[y].total+=e.amount;
-    groups[y].count++;
-    groups[y].users.add(e.user);
-    const m=parseInt(e.date.substring(5,7),10)-1;
-    groups[y].byMonth[m]=(groups[y].byMonth[m]||0)+e.amount;
-    const c=e.cat||'Autre';
-    groups[y].byCat[c]=(groups[y].byCat[c]||0)+e.amount;
-  });
-
-  const years=Object.keys(groups).sort().reverse();
-  const container=document.getElementById('yearlyGroups');
-
-  if(!years.length){
-    container.innerHTML=`<div class="panel"><div class="empty-state"><div class="empty-icon">📭</div><h3>Aucune dépense</h3><p>Aucune dépense enregistrée.</p></div></div>`;
-    return;
-  }
-
-  container.innerHTML=years.map(y=>{
-    const g=groups[y];
-    const vals=Object.values(g.byMonth);
-    const maxVal=Math.max(...vals,1);
-    const bars=Array.from({length:12},(_,i)=>{
-      const v=g.byMonth[i]||0;
-      const h=Math.max(Math.round((v/maxVal)*60),v>0?3:0);
-      return `<div class="bar-wrap">
-        <div class="bar-value">${v>0?Math.round(v/1000)+'k':''}</div>
-        <div class="bar-fill" style="height:${h}px;opacity:${v>0?1:.2};"></div>
-        <div class="bar-label">${MONTHS_SHORT[i]}</div>
-      </div>`;
-    }).join('');
-
-    const userList = Array.from(g.users).map(u => USERS[u]?.label || u).join(', ');
-    const catRows=Object.entries(g.byCat).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--gray-100);">
-        <span class="badge badge-cat">${esc(cat)}</span>
-        <span style="font-weight:700;color:var(--eq-blue);font-size:12px;">${fmtDH(amt)}</span>
-      </div>`).join('');
-
-    return `<div class="history-group">
-      <div class="history-group-header" onclick="toggleGroup('y${y}')">
-        <div class="history-group-title">
-          <span style="font-size:20px;">📆</span>
-          <span>Année ${y}</span>
-          <span style="font-size:11px;color:var(--gray-400);font-weight:500;">${g.count} dépense(s)</span>
-        </div>
-        <div class="history-group-badge">
-          <span class="group-total">${fmtDH(g.total)}</span>
-          <span class="group-toggle open" id="toggle-y${y}">▼</span>
-        </div>
-      </div>
-      <div class="history-group-body open" id="body-y${y}">
-        <div class="year-chart">
-          <h4>Répartition mensuelle (DH) ${isAdmin ? '— ' + userList : ''}</h4>
-          <div class="bar-chart">${bars}</div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
-          <div style="padding:14px 18px;border-right:1px solid var(--gray-100);">
-            <h4 style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Par catégorie</h4>
-            ${catRows}
-          </div>
-          <div style="padding:14px 18px;">
-            <h4 style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Résumé ${y}</h4>
-            <div style="font-size:24px;font-weight:800;color:var(--eq-blue);margin-bottom:3px;">${fmtDH(g.total)}</div>
-            <div style="font-size:12px;color:var(--gray-400);">${g.count} dépenses · Moy. ${fmtDH(g.total/g.count)}</div>
-            <div style="margin-top:12px;">
-              <button class="btn btn-primary" style="height:32px;font-size:11px;" onclick="switchTab('monthly');document.getElementById('filterYearMonth').value='${y}';renderMonthly();">
-                📅 Voir mois par mois
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-// ════════════════════════════════════════════
-// OCR
-// ════════════════════════════════════════════
-function onFileChosen(e) {
-  const f = e.target.files[0];
-  document.getElementById('fileName').textContent = f ? '📎 ' + f.name : 'Aucun fichier';
-}
-
-function handleDragOver(e) {
-  e.preventDefault();
-  document.getElementById('uploadZone').classList.add('drag-over');
-}
-
-function handleDragLeave() {
-  document.getElementById('uploadZone').classList.remove('drag-over');
-}
-
-function handleDrop(e) {
-  e.preventDefault();
-  document.getElementById('uploadZone').classList.remove('drag-over');
-  const f = e.dataTransfer.files[0];
-  if (f && f.type.startsWith('image/')) {
-    const dt = new DataTransfer();
-    dt.items.add(f);
-    document.getElementById('fileInput').files = dt.files;
-    document.getElementById('fileName').textContent = '📎 ' + f.name;
-    toast('Image prête pour OCR !');
-  } else {
-    toast('Veuillez déposer un fichier image.', 'err');
-  }
-}
-
-async function runOCR() {
-  const fileInput = document.getElementById('fileInput');
-  const out = document.getElementById('ocrOutput');
-  const bar = document.getElementById('ocrBar');
-  const prog = document.getElementById('ocrProgress');
-  const btn = document.getElementById('ocrBtn');
-
-  if (!fileInput.files || !fileInput.files.length) {
-    return toast('Choisissez d\'abord une image.', 'err');
-  }
-
-  btn.disabled = true;
-  btn.textContent = '⏳ Lecture en cours…';
-  prog.style.display = 'block';
-  bar.style.width = '0%';
-  out.textContent = '⏳ Initialisation de Tesseract…';
-
-  try {
-    const file = fileInput.files[0];
-    
-    if (typeof Tesseract === 'undefined') {
-      throw new Error('Tesseract.js n\'est pas chargé. Vérifiez votre connexion internet.');
-    }
-
-    const imageUrl = URL.createObjectURL(file);
-    
-    const result = await Tesseract.recognize(imageUrl, 'fra', {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          const progress = Math.round(m.progress * 100);
-          bar.style.width = Math.min(progress, 100) + '%';
-          out.textContent = `⏳ Reconnaissance en cours... ${progress}%`;
-        }
-        if (m.status === 'loading tesseract core') {
-          out.textContent = '⏳ Chargement du moteur OCR...';
-        }
-        if (m.status === 'initializing tesseract') {
-          out.textContent = '⏳ Initialisation...';
-        }
-        if (m.status === 'loading language traineddata') {
-          out.textContent = '⏳ Chargement du dictionnaire français...';
-        }
-      }
-    });
-
-    URL.revokeObjectURL(imageUrl);
-
-    ocrText = result.data.text || '';
-    bar.style.width = '100%';
-    
-    if (ocrText.trim()) {
-      out.textContent = ocrText;
-      toast('✅ Texte extrait avec succès !');
-    } else {
-      out.textContent = '⚠️ Aucun texte détecté. Vérifiez que l\'image est lisible.';
-      toast('Aucun texte détecté.', 'err');
-    }
-  } catch (error) {
-    console.error('OCR Error:', error);
-    out.textContent = '❌ Erreur OCR: ' + (error.message || 'Erreur inconnue');
-    toast('Erreur lors de la lecture OCR.', 'err');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '🔍 Lire et extraire';
-    setTimeout(() => {
-      prog.style.display = 'none';
-      bar.style.width = '0%';
-    }, 1000);
-  }
-}
-
-function fillFormFromOCR() {
-  if (!ocrText || ocrText.trim().length === 0) {
-    return toast('Lancez d\'abord l\'OCR.', 'err');
-  }
-
-  const lines = ocrText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  
-  const datePatterns = [
-    /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/,
-    /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})/,
-    /(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/
-  ];
-  
-  const amountPatterns = [
-    /(\d[\d\s,.]*[,.]\d{2})\s*(?:DH|Dhs|MAD)?/i,
-    /(?:total|ttc|montant|prix)[\s:]*(\d[\d\s,.]*[,.]\d{2})/i,
-    /(\d{1,3}(?:[\s.,]\d{3})*[,.]\d{2})/
-  ];
-
-  let foundDate = '';
-  let foundAmount = '';
-  let foundDesc = '';
-
-  for (const line of lines) {
-    for (const pattern of datePatterns) {
-      const match = line.match(pattern);
-      if (match) {
-        if (pattern === datePatterns[0]) {
-          const [_, d, m, y] = match;
-          foundDate = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
-        } else if (pattern === datePatterns[1]) {
-          const [_, d, m, y] = match;
-          const year = parseInt(y) > 30 ? '19' + y : '20' + y;
-          foundDate = `${year}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
-        } else if (pattern === datePatterns[2]) {
-          const [_, y, m, d] = match;
-          foundDate = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
-        }
-        break;
-      }
-    }
-    if (foundDate) break;
-  }
-
-  for (const line of lines) {
-    for (const pattern of amountPatterns) {
-      const match = line.match(pattern);
-      if (match) {
-        let amt = match[1].replace(/\s/g, '').replace(',', '.');
-        const num = parseFloat(amt);
-        if (!isNaN(num) && num > 0 && num < 1000000) {
-          foundAmount = num;
-          break;
-        }
-      }
-    }
-    if (foundAmount) break;
-  }
-
-  let bestDesc = '';
-  let bestDescLength = 0;
-  for (const line of lines) {
-    if (line.length > 5 && 
-        !line.match(/^(facture|invoice|total|montant|date|client|tva|ht|ttc|ref|n°)/i) &&
-        !line.match(/^\d+$/) &&
-        !line.match(/^[\d\s,.]*$/) &&
-        !line.match(/^[A-Z]{2,}$/)) {
-      if (line.length > bestDescLength) {
-        bestDescLength = line.length;
-        bestDesc = line.substring(0, 80);
-      }
-    }
-  }
-
-  if (bestDesc) foundDesc = bestDesc;
-
-  let filled = 0;
-  if (foundDate) {
-    document.getElementById('dateInput').value = foundDate;
-    filled++;
-  }
-  if (foundAmount) {
-    document.getElementById('amountInput').value = foundAmount;
-    filled++;
-  }
-  if (foundDesc) {
-    document.getElementById('descInput').value = foundDesc;
-    filled++;
-  }
-
-  toast(filled > 0 ? 
-    `${filled} champ(s) rempli(s) — Vérifiez les valeurs avant d'ajouter.` : 
-    'Aucun champ détecté. Vérifiez que l\'image contient une facture lisible.', 
-    filled > 0 ? 'ok' : 'err'
-  );
-}
-
-// ════════════════════════════════════════════
-// EXPORTS (avec filtres actifs)
-// ════════════════════════════════════════════
-function getFilteredDataForExport() {
-  const allData = dataAll();
-  const data = getUserExpenses(allData);
-  
-  const yearF = document.getElementById('filterYear')?.value || 'all';
-  const monthF = document.getElementById('filterMonth')?.value || 'all';
-  const catF = document.getElementById('filterCat')?.value || 'all';
-  const userF = document.getElementById('filterUser')?.value || 'all';
-  const search = (document.getElementById('filterSearch')?.value || '').toLowerCase();
-
-  return data.filter(e => {
-    const y = e.date.substring(0,4);
-    const m = e.date.substring(5,7);
-    const userMatch = userF === 'all' || e.user === userF;
-    return (yearF === 'all' || y === yearF)
-      && (monthF === 'all' || m === monthF)
-      && (catF === 'all' || (e.cat || 'Autre') === catF)
-      && userMatch
-      && (!search || e.desc.toLowerCase().includes(search) || (e.cat || '').toLowerCase().includes(search) || (e.mission || '').toLowerCase().includes(search));
-  });
-}
-
-function exportExcel() {
-  if (!window.XLSX) return toast('Bibliothèque Excel non chargée.', 'err');
-  const data = getFilteredDataForExport();
-  if (!data.length) return toast('Aucune dépense à exporter avec ces filtres.', 'err');
-  
-  const employeeRows = [
-    ['NOTE DE FRAIS', ''],
-    ['Date d\'export', new Date().toLocaleDateString('fr-FR')],
-    ['Utilisateur connecté', USERS[currentUser].label],
-    ['Filtres actifs', 'Oui'],
-    [],
-  ];
-  const headers = ['N°', 'Date', 'Description', 'Type', 'Total TTC (DH)', 'Objet mission', 'Commentaires', 'Utilisateur', 'Justificatif'];
-  const sorted = [...data].sort((a, b) => b.date.localeCompare(a.date));
-  const dataRows = sorted.map((e, i) => [
-    i + 1, e.date, e.desc, e.cat || 'Autre', e.amount, e.mission || '', e.comment || '',
-    USERS[e.user]?.label || e.user,
-    e.justifData ? 'Oui' : 'Non'
-  ]);
-  const totalTTC = sorted.reduce((s, e) => s + e.amount, 0);
-  const footerRows = [[], ['', '', 'TOTAL', '', totalTTC, '', '', '', '']];
-  const allRows = [...employeeRows, headers, ...dataRows, ...footerRows];
-  const ws = XLSX.utils.aoa_to_sheet(allRows);
-  ws['!cols'] = [{ wch: 5 }, { wch: 14 }, { wch: 35 }, { wch: 18 }, { wch: 15 }, { wch: 25 }, { wch: 30 }, { wch: 15 }, { wch: 12 }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Notes de Frais');
-  XLSX.writeFile(wb, `note-de-frais_${USERS[currentUser].label.replace(/ /g, '_')}_${today()}.xlsx`);
-  toast('Export Excel téléchargé !');
-}
-
-function exportPDF() {
-  if (!window.jspdf) return toast('Bibliothèque PDF non chargée.', 'err');
-  const data = getFilteredDataForExport();
-  if (!data.length) return toast('Aucune dépense à exporter avec ces filtres.', 'err');
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const W = 297;
-  
-  const logoUrl = 'image.png';
-  try {
-    doc.addImage(logoUrl, 'PNG', 14, 4, 20, 18);
-  } catch (e) {
-    console.warn('Logo not found in PDF export', e);
-  }
-  
-  doc.setFillColor(11, 79, 158);
-  doc.rect(0, 0, W, 22, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.setTextColor(255, 255, 255);
-  doc.text('eqnovia', 38, 14);
-  doc.setFillColor(247, 147, 30);
-  doc.circle(38 + doc.getTextWidth('eqnovia') - 2, 8, 1.5, 'F');
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(200, 223, 245);
-  doc.text('Note de Frais — Document officiel', 14, 20);
-  const now = new Date();
-  doc.setFontSize(9);
-  doc.text(`Édité le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`, W - 14, 14, { align: 'right' });
-  doc.setTextColor(11, 79, 158);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.text('Récapitulatif des dépenses professionnelles', 14, 30);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(53, 61, 79);
-  doc.text(`Utilisateur : ${USERS[currentUser].label}`, 14, 36);
-  doc.text(`Filtres actifs : Oui`, 180, 36);
-  
-  const sorted = [...data].sort((a, b) => b.date.localeCompare(a.date));
-  const total = sorted.reduce((s, e) => s + e.amount, 0);
-  const head = [['#', 'Date', 'Description', 'Type', 'Total TTC', 'Mission', 'Commentaires', 'User', 'Justif']];
-  const body = sorted.map((e, i) => [
-    i + 1, fmtDate(e.date), e.desc, e.cat || 'Autre', fmtDH(e.amount), e.mission || '—', e.comment || '—',
-    USERS[e.user]?.label || e.user,
-    e.justifData ? 'Oui' : 'Non'
-  ]);
-  doc.autoTable({
-    head, body, startY: 40,
-    styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 2.5, valign: 'middle' },
-    headStyles: { fillColor: [11, 79, 158], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
-    alternateRowStyles: { fillColor: [235, 243, 251] },
-    columnStyles: {
-      0: { cellWidth: 6, halign: 'center', textColor: [100, 110, 130] },
-      1: { cellWidth: 18, textColor: [100, 110, 130] },
-      2: { cellWidth: 38 },
-      3: { cellWidth: 20 },
-      4: { cellWidth: 22, halign: 'right', fontStyle: 'bold', textColor: [11, 79, 158] },
-      5: { cellWidth: 28 },
-      6: { cellWidth: 25 },
-      7: { cellWidth: 18 },
-      8: { cellWidth: 14, halign: 'center' }
-    },
-    foot: [['', '', '', 'TOTAL', fmtDH(total), '', '', '', '']],
-    footStyles: { fillColor: [235, 243, 251], fontStyle: 'bold' },
-    margin: { left: 10, right: 10 }
-  });
-  const fy = doc.lastAutoTable.finalY + 8;
-  doc.setFillColor(247, 147, 30);
-  doc.rect(10, fy, 6, 6, 'F');
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(100, 110, 130);
-  doc.text(`Eqnovia · ${sorted.length} dépense(s) · Total TTC : ${fmtDH(total)}`, 20, fy + 4);
-  doc.save(`note-de-frais_${USERS[currentUser].label.replace(/ /g, '_')}_${today()}.pdf`);
-  toast('Export PDF téléchargé !');
-}
-
-// ════════════════════════════════════════════
-// INIT
-// ════════════════════════════════════════════
-async function init() {
-  try {
-    document.getElementById('dateInput').value = today();
-
-    await new Promise(r => setTimeout(r, 2000));
-
-    if (window.__fbReady) {
-      useFirebase = true;
-      document.getElementById('dbStatus').className = 'db-status db-online';
-      document.getElementById('dbStatusText').textContent = 'Firebase connecté';
-      toast('🔥 Base de données Firebase connectée !', 'info');
-    } else {
-      useFirebase = false;
-      document.getElementById('dbStatus').className = 'db-status db-local';
-      document.getElementById('dbStatusText').textContent = 'Stockage local';
-      toast('💾 Mode local (localStorage)', 'info');
-    }
-
-    await dataLoad();
-    updateUserUI();
-    updateKPIs();
-    renderAll();
-    
-    // Initialize bottom nav active state
-    TABS.forEach(id => {
-      document.getElementById(`bnav-${id}`)?.classList.toggle('active', id === activeTab);
-    });
-  } catch (error) {
-    console.error('Init error:', error);
-    toast('Erreur lors de l\'initialisation.', 'err');
-  }
-}
-
-// Démarrer l'application
-document.addEventListener('DOMContentLoaded', function() {
-  // Synchronise les listes déroulantes avec les utilisateurs persistés
-  updateLoginUserSelect();
-  updateUserSelector();
-  document.getElementById('loginOverlay').classList.remove('hidden');
-});
-
-// Service Worker PWA
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  });
-}
-
-// PWA Install Button
-let deferredPrompt;
-const installBtn = document.getElementById('installBtn');
-
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredPrompt = e;
-  if (installBtn) installBtn.style.display = '';
-});
-
-function installPWA() {
-  if (!deferredPrompt) return;
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.then((choiceResult) => {
-    if (choiceResult.outcome === 'accepted') {
-      toast('Application installée avec succès !', 'ok');
-    }
-    deferredPrompt = null;
-    if (installBtn) installBtn.style.display = 'none';
-  });
-}
-</script>
 </body>
 </html>
