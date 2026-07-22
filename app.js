@@ -88,15 +88,6 @@ if (!localStorage.getItem(USERS_STORAGE_KEY)) saveUsers();
 // Initialiser l'écouteur Firebase Auth au démarrage
 initFirebaseAuthListener();
 
-// Données de démonstration pour Rachid Bayed
-const DEMO_EXPENSES = [
-  { id: 1001, date: '2026-06-20', desc: 'Taxi Aéroport Casablanca - Rabat', amount: 450.00, cat: 'Transport', mission: 'Mission client OCP', comment: 'Trajet aller', user: 'user1', justif: 'Non', justifData: null, justifName: null },
-  { id: 1002, date: '2026-06-18', desc: 'Déjeuner avec client', amount: 320.50, cat: 'Repas', mission: 'Mission client OCP', comment: 'Restaurant La Table', user: 'user1', justif: 'Non', justifData: null, justifName: null },
-  { id: 1003, date: '2026-06-15', desc: 'Hôtel Ibis Casablanca', amount: 890.00, cat: 'Hébergement', mission: 'Mission client OCP', comment: '2 nuits', user: 'user1', justif: 'Non', justifData: null, justifName: null },
-  { id: 1004, date: '2026-06-10', desc: 'Train Rabat - Casablanca', amount: 120.00, cat: 'Transport', mission: 'Réunion interne', comment: 'Aller-retour', user: 'user1', justif: 'Non', justifData: null, justifName: null },
-  { id: 1005, date: '2026-06-05', desc: 'Achat fournitures bureau', amount: 230.75, cat: 'Matériel', mission: 'Fournitures Q2', comment: 'Papeterie', user: 'user1', justif: 'Non', justifData: null, justifName: null }
-];
-
 // ════════════════════════════════════════════
 // SIDEBAR TOGGLE (MOBILE)
 // ════════════════════════════════════════════
@@ -266,7 +257,25 @@ async function seedFirebaseAuthUsers() {
   
   // S'assurer que l'admin est connecté à Firebase Auth
   if (!useFirebaseAuth || !currentAuthUser) {
-    const ok = await firebaseAuthSignIn(adminEmail, adminPassword);
+    let ok = await firebaseAuthSignIn(adminEmail, adminPassword);
+    
+    if (!ok) {
+      // L'admin n'existe peut-être pas dans Firebase Auth, essayer de le créer
+      console.warn('Admin Firebase Auth échec, tentative de création...');
+      try {
+        await window.__createAuthUser(window.__auth, adminEmail, adminPassword);
+        // Déconnecter le nouvel utilisateur et reconnecter l'admin
+        await window.__signOut(window.__auth);
+        ok = await firebaseAuthSignIn(adminEmail, adminPassword);
+      } catch (error) {
+        console.error('❌ Création admin Firebase Auth échouée:', error.code, error.message);
+        if (error.code === 'auth/email-already-in-use') {
+          return toast('Impossible de connecter l\'admin à Firebase Auth. L\'email existe déjà avec un autre mot de passe.', 'err');
+        }
+        return toast('Impossible de connecter l\'admin à Firebase Auth. Vérifiez les identifiants.', 'err');
+      }
+    }
+    
     if (!ok) {
       return toast('Impossible de connecter l\'admin à Firebase Auth. Vérifiez les identifiants.', 'err');
     }
@@ -437,6 +446,14 @@ function updateUserUI() {
   
   const adminOnly = document.querySelectorAll('#adminOnlyLabel, #adminUsersBtn, #adminClearBtn, #adminOMBtn, #tab-admin-om');
   adminOnly.forEach(el => el.style.display = isAdmin ? '' : 'none');
+  
+  // Show user missions tab for non-admin users
+  const userMissionsTab = document.getElementById('tab-user-missions');
+  const userMissionsNav = document.getElementById('nav-user-missions');
+  const userMissionsBnav = document.getElementById('bnav-user-missions');
+  if (userMissionsTab) userMissionsTab.style.display = isAdmin ? 'none' : '';
+  if (userMissionsNav) userMissionsNav.style.display = isAdmin ? 'none' : '';
+  if (userMissionsBnav) userMissionsBnav.style.display = isAdmin ? 'none' : '';
   
   const filterUser = document.getElementById('filterUser');
   if (filterUser) {
@@ -640,9 +657,28 @@ async function fbAdd(expense) {
     await addDoc(collection(window.__db, 'expenses'), {
       ...expense,
       _authUid: getAuthUid(),
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
+      createdBy: currentUser,
+      modifiedBy: currentUser,
+      modifiedAt: serverTimestamp()
     });
   } catch(e) { console.warn('FB add failed', e); }
+}
+
+async function fbUpdate(id, updates) {
+  if (!useFirebase) return;
+  try {
+    const { collection, getDocs, doc, query, where, updateDoc, serverTimestamp } = window.__fs;
+    const q = query(collection(window.__db, 'expenses'), where('id', '==', id));
+    const snap = await getDocs(q);
+    for (const d of snap.docs) {
+      await updateDoc(doc(window.__db, 'expenses', d.id), {
+        ...updates,
+        modifiedBy: currentUser,
+        modifiedAt: serverTimestamp()
+      });
+    }
+  } catch(e) { console.warn('FB update failed', e); }
 }
 
 async function fbDelete(id) {
@@ -669,7 +705,7 @@ async function fbLoad() {
         q = query(collection(window.__db,'expenses'), orderBy('createdAt','asc'));
       } else {
         // Utilisateur ne voit que ses propres documents
-        q = query(collection(window.__db,'expenses'), 
+        q = query(collection(window.__db,'expenses'),
           where('_authUid', '==', currentAuthUser.uid),
           orderBy('createdAt','asc'));
       }
@@ -684,7 +720,7 @@ async function fbLoad() {
 }
 
 // ════════════════════════════════════════════
-// FIREBASE — ORDRES DE MISSION
+// FIREBASE — ORDRES DE MISSION (legacy)
 // ════════════════════════════════════════════
 async function fbAddOM(om) {
   if (!useFirebase) return;
@@ -721,6 +757,75 @@ async function fbLoadOM() {
 }
 
 // ════════════════════════════════════════════
+// FIREBASE — MISSION ORDERS (nouveau système)
+// ════════════════════════════════════════════
+async function fbAddMissionOrder(mo) {
+  if (!useFirebase) return null;
+  try {
+    const { collection, addDoc, serverTimestamp } = window.__fs;
+    const docRef = await addDoc(collection(window.__db, 'mission_orders'), {
+      ...mo,
+      _authUid: getAuthUid(),
+      createdAt: serverTimestamp(),
+      modifiedAt: serverTimestamp()
+    });
+    return docRef.id;
+  } catch(e) { console.warn('FB mission_order add failed', e); return null; }
+}
+
+async function fbUpdateMissionOrder(docId, updates) {
+  if (!useFirebase) return;
+  try {
+    const { doc, updateDoc, serverTimestamp } = window.__fs;
+    await updateDoc(doc(window.__db, 'mission_orders', docId), {
+      ...updates,
+      modifiedBy: currentUser,
+      modifiedAt: serverTimestamp()
+    });
+  } catch(e) { console.warn('FB mission_order update failed', e); }
+}
+
+async function fbDeleteMissionOrder(docId) {
+  if (!useFirebase) return;
+  try {
+    const { deleteDoc, doc } = window.__fs;
+    await deleteDoc(doc(window.__db, 'mission_orders', docId));
+  } catch(e) { console.warn('FB mission_order delete failed', e); }
+}
+
+async function fbLoadMissionOrders() {
+  if (!useFirebase) return null;
+  try {
+    const { collection, getDocs, query, orderBy, where } = window.__fs;
+    let q;
+    if (isAdmin) {
+      // Admin voit tous les OM
+      q = query(collection(window.__db, 'mission_orders'), orderBy('createdAt', 'desc'));
+    } else {
+      // Utilisateur voit seulement ses OM assignées
+      const authUid = getAuthUid();
+      if (authUid) {
+        q = query(collection(window.__db, 'mission_orders'), where('assignedTo', '==', authUid), orderBy('createdAt', 'desc'));
+      } else {
+        q = query(collection(window.__db, 'mission_orders'), orderBy('createdAt', 'desc'));
+      }
+    }
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ _firebaseId: d.id, ...d.data() }));
+  } catch(e) { console.warn('FB mission_orders load failed', e); return null; }
+}
+
+async function fbLoadMissionOrdersForUser(userId) {
+  if (!useFirebase) return null;
+  try {
+    const { collection, getDocs, query, orderBy, where } = window.__fs;
+    const q = query(collection(window.__db, 'mission_orders'), where('assignedTo', '==', userId), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ _firebaseId: d.id, ...d.data() }));
+  } catch(e) { console.warn('FB mission_orders load for user failed', e); return null; }
+}
+
+// ════════════════════════════════════════════
 // LOCAL STORAGE
 // ════════════════════════════════════════════
 function lsLoad() { 
@@ -749,40 +854,127 @@ async function dataLoad() {
     const fb = await fbLoad();
     if (fb !== null) {
       cache = fb;
-      // Si cache vide, ajouter les données de démonstration
-      if (cache.length === 0) {
-        cache = DEMO_EXPENSES;
-        try { lsSave(cache); } catch(e) {}
-        // Ajouter à Firebase
-        for (const exp of cache) {
-          await fbAdd(exp);
-        }
-      }
       try { lsSave(cache); } catch(e) {}
       return;
     }
   }
   cache = lsLoad();
-  // Si cache vide, ajouter les données de démonstration
-  if (cache.length === 0) {
-    cache = DEMO_EXPENSES;
-    try { lsSave(cache); } catch(e) {}
-  }
 }
 
 async function dataAdd(exp) {
+  exp.createdBy = currentUser;
+  exp.createdAt = new Date().toISOString();
+  exp.modifiedBy = currentUser;
+  exp.modifiedAt = new Date().toISOString();
   cache.push(exp);
   try { lsSave(cache); } catch(e) {}
   await fbAdd(exp);
 }
 
+async function dataUpdate(id, updates) {
+  const idx = cache.findIndex(e => e.id === id);
+  if (idx === -1) return;
+  cache[idx] = { ...cache[idx], ...updates, modifiedBy: currentUser, modifiedAt: new Date().toISOString() };
+  try { lsSave(cache); } catch(e) {}
+  await fbUpdate(id, updates);
+}
+
 async function dataDelete(id) {
+  const exp = cache.find(e => e.id === id);
+  if (exp) {
+    exp.deletedBy = currentUser;
+    exp.deletedAt = new Date().toISOString();
+  }
   cache = cache.filter(e => e.id !== id);
   try { lsSave(cache); } catch(e) {}
   await fbDelete(id);
 }
 
 function dataAll() { return [...cache]; }
+
+// ════════════════════════════════════════════
+// MISSION ORDERS DATA LAYER
+// ════════════════════════════════════════════
+let missionOrdersCache = [];
+let userMissionOrdersCache = [];
+
+async function dataLoadMissionOrders() {
+  if (useFirebase) {
+    const fb = await fbLoadMissionOrders();
+    if (fb !== null) {
+      missionOrdersCache = fb;
+      try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+      return;
+    }
+  }
+  // Fallback: load from localStorage
+  try {
+    const stored = localStorage.getItem('eqnovia_mission_orders');
+    missionOrdersCache = stored ? JSON.parse(stored) : [];
+  } catch(e) {
+    missionOrdersCache = [];
+  }
+}
+
+async function dataLoadUserMissionOrders() {
+  if (useFirebase) {
+    const authUid = getAuthUid();
+    if (authUid) {
+      const fb = await fbLoadMissionOrdersForUser(authUid);
+      if (fb !== null) {
+        userMissionOrdersCache = fb;
+        return;
+      }
+    }
+  }
+  // Fallback: filter from local cache
+  userMissionOrdersCache = missionOrdersCache.filter(mo => {
+    if (isAdmin) return true;
+    return mo.assignedTo === currentUser || mo._authUid === getAuthUid();
+  });
+}
+
+async function dataAddMissionOrder(mo) {
+  mo.createdBy = currentUser;
+  mo.createdAt = new Date().toISOString();
+  mo.modifiedBy = currentUser;
+  mo.modifiedAt = new Date().toISOString();
+  missionOrdersCache.push(mo);
+  try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+  
+  const fbId = await fbAddMissionOrder(mo);
+  if (fbId) {
+    mo._firebaseId = fbId;
+    // Update local storage with firebase ID
+    try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+  }
+}
+
+async function dataUpdateMissionOrder(docId, updates) {
+  const idx = missionOrdersCache.findIndex(mo => mo._firebaseId === docId || mo._localId === docId);
+  if (idx === -1) return;
+  missionOrdersCache[idx] = { ...missionOrdersCache[idx], ...updates, modifiedBy: currentUser, modifiedAt: new Date().toISOString() };
+  try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+  await fbUpdateMissionOrder(docId, updates);
+}
+
+async function dataDeleteMissionOrder(docId) {
+  const idx = missionOrdersCache.findIndex(mo => mo._firebaseId === docId || mo._localId === docId);
+  if (idx >= 0) {
+    missionOrdersCache[idx].deletedBy = currentUser;
+    missionOrdersCache[idx].deletedAt = new Date().toISOString();
+  }
+  missionOrdersCache = missionOrdersCache.filter(mo => mo._firebaseId !== docId && mo._localId !== docId);
+  try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+  await fbDeleteMissionOrder(docId);
+}
+
+function dataAllMissionOrders() { return [...missionOrdersCache]; }
+
+function dataUserMissionOrders() {
+  if (isAdmin) return [...missionOrdersCache];
+  return missionOrdersCache.filter(mo => mo.assignedTo === currentUser || mo._authUid === getAuthUid());
+}
 
 // ════════════════════════════════════════════
 // HELPERS
@@ -1007,11 +1199,12 @@ function viewJustificatif(id) {
 // ════════════════════════════════════════════
 // TAB SWITCHING
 // ════════════════════════════════════════════
-const TABS = ['saisie','all','monthly','yearly','trimestre','comparison','mission','admin-om','policy'];
+const TABS = ['saisie','all','monthly','yearly','trimestre','comparison','mission','admin-om','user-missions','policy'];
 function switchTab(t) {
   activeTab = t;
   TABS.forEach(id=>{
-    document.getElementById(`tab-content-${id}`).style.display = id===t?'block':'none';
+    const tabContent = document.getElementById(`tab-content-${id}`);
+    if (tabContent) tabContent.style.display = id===t?'block':'none';
     const tabBtn = document.getElementById(`tab-${id}`);
     tabBtn?.classList.toggle('active', id===t);
     if (tabBtn) tabBtn.setAttribute('aria-selected', id===t ? 'true' : 'false');
@@ -1028,6 +1221,7 @@ function switchTab(t) {
   if (t==='trimestre')  renderTrimester();
   if (t==='comparison') renderComparison();
   if (t==='admin-om')   loadAdminOM();
+  if (t==='user-missions') renderUserMissionOrders();
 }
 
 // ════════════════════════════════════════════
@@ -1411,6 +1605,647 @@ generateMissionOrder = function() {
 };
 
 // ════════════════════════════════════════════
+// MISSION ORDERS — ADMIN CREATION & ASSIGNMENT
+// ════════════════════════════════════════════
+async function createMissionOrder() {
+  if (!isAdmin) {
+    return toast('Seul l\'administrateur peut créer des ordres de mission.', 'err');
+  }
+
+  const numero = sanitizeInput(document.getElementById('moNumero').value);
+  const date = document.getElementById('moDate').value;
+  const employe = sanitizeInput(document.getElementById('moEmploye').value);
+  const depart = sanitizeInput(document.getElementById('moDepart').value);
+  const arrivee = sanitizeInput(document.getElementById('moArrivee').value);
+  const debut = document.getElementById('moDebut').value;
+  const fin = document.getElementById('moFin').value;
+  const objet = sanitizeInput(document.getElementById('moObjet').value);
+  const transport = document.getElementById('moTransport').value;
+  const tel = sanitizeInput(document.getElementById('moTel').value);
+  const remarques = sanitizeInput(document.getElementById('moRemarques').value);
+  const assignedTo = document.getElementById('moAssignedTo').value;
+  const comment = sanitizeInput(document.getElementById('moComment').value);
+
+  if (!numero) return toast('Veuillez saisir le numéro d\'ordre de mission.', 'err');
+  if (!date) return toast('Veuillez saisir la date d\'émission.', 'err');
+  if (!employe) return toast('Veuillez saisir le nom du collaborateur.', 'err');
+  if (!objet) return toast('Veuillez saisir l\'objet de la mission.', 'err');
+  if (!assignedTo) return toast('Veuillez assigner l\'ordre de mission à un utilisateur.', 'err');
+
+  const btn = document.getElementById('createMOBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Création...';
+
+  const mo = {
+    numero,
+    date,
+    employe,
+    depart: depart || '—',
+    arrivee: arrivee || '—',
+    debut: debut || '—',
+    fin: fin || '—',
+    objet,
+    transport: transport || 'Voiture',
+    tel: tel || '—',
+    remarques: remarques || '—',
+    comment: comment || '',
+    status: 'pending',
+    assignedTo,
+    assignedBy: currentUser,
+    user: assignedTo,
+    _localId: Date.now() + '_' + Math.random().toString(36).slice(2)
+  };
+
+  await dataAddMissionOrder(mo);
+
+  btn.disabled = false;
+  btn.innerHTML = '📝 Créer l\'ordre de mission';
+
+  // Reset form
+  document.getElementById('moNumero').value = '';
+  document.getElementById('moDate').value = '';
+  document.getElementById('moEmploye').value = '';
+  document.getElementById('moDepart').value = '';
+  document.getElementById('moArrivee').value = '';
+  document.getElementById('moDebut').value = '';
+  document.getElementById('moFin').value = '';
+  document.getElementById('moObjet').value = '';
+  document.getElementById('moTransport').value = 'Voiture';
+  document.getElementById('moTel').value = '';
+  document.getElementById('moRemarques').value = '';
+  document.getElementById('moAssignedTo').value = '';
+  document.getElementById('moComment').value = '';
+
+  renderAdminMissionOrders();
+  toast('✅ Ordre de mission créé et assigné avec succès.', 'ok');
+}
+
+function resetMissionOrderForm() {
+  document.getElementById('moNumero').value = '';
+  document.getElementById('moDate').value = '';
+  document.getElementById('moEmploye').value = '';
+  document.getElementById('moDepart').value = '';
+  document.getElementById('moArrivee').value = '';
+  document.getElementById('moDebut').value = '';
+  document.getElementById('moFin').value = '';
+  document.getElementById('moObjet').value = '';
+  document.getElementById('moTransport').value = 'Voiture';
+  document.getElementById('moTel').value = '';
+  document.getElementById('moRemarques').value = '';
+  document.getElementById('moAssignedTo').value = '';
+  document.getElementById('moComment').value = '';
+  toast('🔄 Formulaire réinitialisé.', 'info');
+}
+
+function loadUserMissionOrders() {
+  renderUserMissionOrders();
+}
+
+function exportUserMissionsPDF() {
+  const data = dataUserMissionOrders();
+  if (!data.length) {
+    toast('Aucun ordre de mission à exporter.', 'err');
+    return;
+  }
+  
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('l','mm','a4');
+  
+  // Header with Eqnovia logo
+  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch(e) { /* fallback */ }
+  doc.setFontSize(8); doc.setTextColor(247,147,30); doc.setFont(undefined,'normal');
+  doc.text('Notes de Frais', 38, 22);
+  doc.setFontSize(14); doc.setTextColor(53,61,79); doc.setFont(undefined,'bold');
+  doc.text('Mes ordres de mission', 148, 20, {align:'center'});
+  doc.setFontSize(8); doc.setTextColor(142,151,168);
+  doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${data.length} OM`, 148, 26, {align:'center'});
+  doc.setDrawColor(11,79,158); doc.line(20, 30, 290, 30);
+
+  // Build table
+  const rows = data.slice().reverse().map(mo => [
+    mo.numero || '—',
+    mo.employe || '—',
+    mo.date || '—',
+    (mo.depart||'') + ' → ' + (mo.arrivee||''),
+    (mo.objet||'').substring(0,30),
+    mo.transport || '—',
+    {approved:'✅ Approuvé', rejected:'❌ Rejeté', pending:'⏳ En attente'}[mo.status] || 'En attente'
+  ]);
+
+  doc.autoTable({
+    startY: 35, head: [['N° OM','Collaborateur','Date','Trajet','Objet','Transport','Statut']],
+    body: rows, margin: {left:15, right:15},
+    theme: 'grid', headStyles: {fillColor: [11,79,158], fontSize:7},
+    bodyStyles: {fontSize:6}, styles: {cellPadding:2},
+    didDrawPage: (d) => { /* footer handled below */ }
+  });
+
+  const fy = doc.lastAutoTable.finalY + 6;
+  doc.setDrawColor(200); doc.line(15, fy, 280, fy);
+  doc.setFontSize(7); doc.setTextColor(142,151,168);
+  doc.text('eqnovia · Notes de Frais · Mes ordres de mission', 148, fy + 4, {align:'center'});
+  doc.save(`mes_om_${new Date().toISOString().split('T')[0]}.pdf`);
+  toast('📄 Export PDF de mes OM téléchargé !');
+}
+
+function renderAdminMissionOrders() {
+  const data = dataAllMissionOrders();
+  const container = document.getElementById('adminMOList');
+  if (!container) return;
+
+  if (!data.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Aucun ordre de mission</h3><p>Créez un nouvel ordre de mission en utilisant le formulaire.</p></div>';
+    return;
+  }
+
+  container.innerHTML = data.slice().reverse().map(mo => {
+    const statusClass = {approved: 'approved', rejected: 'rejected', pending: 'pending'}[mo.status] || 'pending';
+    const statusIcon = {approved: '✅', rejected: '❌', pending: '⏳'}[mo.status] || '⏳';
+    const statusLabel = {approved: 'Approuvé', rejected: 'Rejeté', pending: 'En attente'}[mo.status] || 'En attente';
+    const assignedUser = USERS[mo.assignedTo] ? USERS[mo.assignedTo].label : mo.assignedTo;
+    
+    return `
+    <div class="om-history-item">
+      <div style="flex:1;min-width:0;">
+        <div class="om-h-num">${esc(mo.numero)}</div>
+        <div class="om-h-employe">${esc(mo.employe)}</div>
+        <div class="om-h-date" style="margin-top:2px;">${esc(mo.date)}</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:2px;">Assigné à: ${esc(assignedUser)}</div>
+      </div>
+      <div style="text-align:right;">
+        <span class="status-badge ${statusClass}" style="font-size:9px;padding:1px 8px;">${statusIcon} ${statusLabel}</span>
+      </div>
+      <div class="om-h-actions">
+        <button class="om-h-action view" onclick="viewAdminMO('${mo._firebaseId || mo._localId}')" title="Consulter">👁️</button>
+        <button class="om-h-action pdf" onclick="exportAdminOMPDF('${mo._firebaseId || mo._localId}')" title="Télécharger PDF">📄</button>
+        <button class="om-h-action" onclick="sendMOByEmail('${mo._firebaseId || mo._localId}')" title="Envoyer par Email" style="background:var(--eq-blue-pale);color:var(--eq-blue);">📧</button>
+        <button class="om-h-action" onclick="sendMOByWhatsApp('${mo._firebaseId || mo._localId}')" title="Envoyer par WhatsApp" style="background:var(--green-pale);color:var(--green);">💬</button>
+        <button class="om-h-action del" onclick="deleteAdminMO('${mo._firebaseId || mo._localId}')" title="Supprimer">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function viewAdminMO(docId) {
+  const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
+  if (!mo) return toast('Ordre de mission introuvable.', 'err');
+  
+  // Generate the fiche in the mission tab
+  document.getElementById('omNumero').value = mo.numero || '';
+  document.getElementById('omDate').value = mo.date || '';
+  document.getElementById('omEmploye').value = mo.employe || '';
+  document.getElementById('omDepart').value = mo.depart || '';
+  document.getElementById('omArrivee').value = mo.arrivee || '';
+  document.getElementById('omDebut').value = mo.debut || '';
+  document.getElementById('omFin').value = mo.fin || '';
+  document.getElementById('omTransport').value = mo.transport || 'Voiture';
+  document.getElementById('omObjet').value = mo.objet || '';
+  document.getElementById('omTel').value = mo.tel || '';
+  document.getElementById('omRemarques').value = mo.remarques || '';
+  
+  switchTab('mission');
+  generateMissionOrder();
+  document.getElementById('omFiche')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  toast('👁️ Fiche affichée.', 'ok');
+}
+
+function exportAdminOMPDF(docId) {
+  const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
+  if (!mo) return toast('Ordre de mission introuvable.', 'err');
+  
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    
+    // Logo
+    try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch(e) { /* fallback */ }
+    
+    // Title
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`ORDRE DE MISSION N° ${mo.numero || 'N/A'}`, 105, 22, { align: 'center' });
+    
+    // Separator
+    doc.setDrawColor(11, 79, 158);
+    doc.setLineWidth(0.8);
+    doc.line(14, 27, 196, 27);
+    
+    // Info box
+    const leftX = 18;
+    let y = 33;
+    doc.setFontSize(10);
+    
+    const fields = [
+      ['Date d\'émission', mo.date || '—'],
+      ['Collaborateur', mo.employe || '—'],
+      ['Assigné à', USERS[mo.assignedTo] ? USERS[mo.assignedTo].label : (mo.assignedTo || '—')],
+      ['Lieu de départ', mo.depart || '—'],
+      ['Lieu de destination', mo.arrivee || '—'],
+      ['Date de début', mo.debut || '—'],
+      ['Date de fin', mo.fin || '—'],
+      ['Mode de transport', mo.transport || '—'],
+      ['Téléphone', mo.tel || '—'],
+    ];
+    
+    fields.forEach(([label, value], fi) => {
+      const col = fi % 2;
+      const row = Math.floor(fi / 2);
+      const x = col === 0 ? leftX : 105;
+      const yy = y + row * 8;
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(142, 151, 168);
+      doc.text(label.toUpperCase(), x, yy);
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(53, 61, 79);
+      doc.text(value, x, yy + 4);
+      
+      // Underline
+      doc.setDrawColor(221, 225, 234);
+      doc.setLineWidth(0.3);
+      doc.line(x, yy + 5.5, col === 0 ? 100 : 196, yy + 5.5);
+    });
+    
+    const objY = y + Math.ceil(fields.length / 2) * 8 + 6;
+    
+    // Object box
+    doc.setFillColor(235, 243, 251);
+    doc.setDrawColor(200, 223, 245);
+    doc.roundedRect(leftX - 2, objY, 176, 16, 2, 2, 'FD');
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(11, 79, 158);
+    doc.text('OBJET DE LA MISSION', leftX + 2, objY + 5);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(53, 61, 79);
+    doc.text(mo.objet || '—', leftX + 2, objY + 12);
+    
+    // Remarks
+    let lines;
+    if (mo.remarques && mo.remarques !== '—') {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(142, 151, 168);
+      doc.text('REMARQUES / INSTRUCTIONS', leftX, objY + 23);
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(53, 61, 79);
+      lines = doc.splitTextToSize(mo.remarques, 175);
+      doc.text(lines, leftX, objY + 30);
+    }
+    
+    // Status
+    const statusLabel = {approved:'APPROUVÉ ✅', rejected:'REJETÉ ❌', pending:'EN ATTENTE ⏳'}[mo.status] || 'EN ATTENTE';
+    const linesHeight = (mo.remarques && mo.remarques !== '—' && lines) ? lines.length * 4 : 0;
+    const statusY = objY + (mo.remarques && mo.remarques !== '—' ? 34 + linesHeight : 28);
+    
+    doc.setDrawColor(221, 225, 234);
+    doc.setLineWidth(0.5);
+    doc.line(leftX, statusY, 196, statusY);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(142, 151, 168);
+    doc.text('STATUT', 105, statusY + 7, { align: 'center' });
+    
+    doc.setFontSize(11);
+    doc.setTextColor(11, 79, 158);
+    doc.text(statusLabel, 105, statusY + 14, { align: 'center' });
+    
+    // Comment
+    let commentLines;
+    if (mo.comment) {
+      doc.setFontSize(9);
+      doc.setTextColor(99, 110, 130);
+      commentLines = doc.splitTextToSize(`Message : ${mo.comment}`, 170);
+      doc.text(commentLines, 105, statusY + 21, { align: 'center' });
+    }
+    
+    // Signature section
+    const commentHeight = (mo.comment && commentLines) ? commentLines.length * 4 : 0;
+    const sigY = statusY + (mo.comment ? 26 + commentHeight : 22);
+    doc.setDrawColor(142, 151, 168);
+    doc.setLineWidth(0.3);
+    
+    // Left signature line
+    doc.line(30, sigY + 12, 85, sigY + 12);
+    doc.setFontSize(8);
+    doc.setTextColor(142, 151, 168);
+    doc.text('Le collaborateur', 57.5, sigY + 17, { align: 'center' });
+    
+    // Right signature line
+    doc.setLineWidth(0.3);
+    doc.line(110, sigY + 12, 165, sigY + 12);
+    doc.text('Le responsable', 137.5, sigY + 17, { align: 'center' });
+    
+    // Footer
+    const footerY = 285;
+    doc.setDrawColor(221, 225, 234);
+    doc.setLineWidth(0.3);
+    doc.line(14, footerY, 196, footerY);
+    doc.setFontSize(7);
+    doc.setTextColor(142, 151, 168);
+    doc.text(`Document généré par Eqnovia — Notes de Frais • ${mo.numero || 'N/A'}`, 105, footerY + 5, { align: 'center' });
+    doc.text(`Date: ${mo.date || '—'}`, 105, footerY + 10, { align: 'center' });
+    
+    doc.save(`Ordre_Mission_${mo.numero || 'sans_numero'}.pdf`);
+    toast('📄 PDF téléchargé.', 'ok');
+  } catch (e) {
+    console.warn('PDF export failed:', e);
+    toast('❌ Erreur lors de la création du PDF.', 'err');
+  }
+}
+
+async function deleteAdminMO(docId) {
+  if (!isAdmin) {
+    return toast('Seul l\'administrateur peut supprimer des ordres de mission.', 'err');
+  }
+  
+  showModal('Supprimer l\'ordre de mission', 'Voulez-vous vraiment supprimer cet ordre de mission ? Cette action est irréversible.', async () => {
+    await dataDeleteMissionOrder(docId);
+    renderAdminMissionOrders();
+    toast('🗑️ Ordre de mission supprimé.', 'ok');
+  });
+}
+
+// ════════════════════════════════════════════
+// MISSION ORDERS — USER DASHBOARD
+// ════════════════════════════════════════════
+function renderUserMissionOrders() {
+  const data = dataUserMissionOrders();
+  const container = document.getElementById('userMOList');
+  if (!container) return;
+
+  if (!data.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><h3>Aucun ordre de mission</h3><p>Vous n\'avez aucun ordre de mission assigné pour le moment.</p></div>';
+    return;
+  }
+
+  container.innerHTML = data.slice().reverse().map(mo => {
+    const statusClass = {approved: 'approved', rejected: 'rejected', pending: 'pending'}[mo.status] || 'pending';
+    const statusIcon = {approved: '✅', rejected: '❌', pending: '⏳'}[mo.status] || '⏳';
+    const statusLabel = {approved: 'Approuvé', rejected: 'Rejeté', pending: 'En attente'}[mo.status] || 'En attente';
+    
+    return `
+    <div class="om-history-item">
+      <div style="flex:1;min-width:0;">
+        <div class="om-h-num">${esc(mo.numero)}</div>
+        <div class="om-h-employe">${esc(mo.employe)}</div>
+        <div class="om-h-date" style="margin-top:2px;">${esc(mo.date)}</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:2px;">${esc(mo.depart || '...')} → ${esc(mo.arrivee || '...')}</div>
+      </div>
+      <div style="text-align:right;">
+        <span class="status-badge ${statusClass}" style="font-size:9px;padding:1px 8px;">${statusIcon} ${statusLabel}</span>
+      </div>
+      <div class="om-h-actions">
+        <button class="om-h-action view" onclick="viewUserMO('${mo._firebaseId || mo._localId}')" title="Consulter">👁️</button>
+        <button class="om-h-action pdf" onclick="exportUserOMPDF('${mo._firebaseId || mo._localId}')" title="Télécharger PDF">📄</button>
+        ${mo.tel && mo.tel !== '—' && mo.tel.length > 5 ? `<button class="om-h-action" onclick="sendUserMOByWhatsApp('${mo._firebaseId || mo._localId}')" title="WhatsApp" style="background:var(--green-pale);color:var(--green);">💬</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function viewUserMO(docId) {
+  const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
+  if (!mo) return toast('Ordre de mission introuvable.', 'err');
+  
+  document.getElementById('omNumero').value = mo.numero || '';
+  document.getElementById('omDate').value = mo.date || '';
+  document.getElementById('omEmploye').value = mo.employe || '';
+  document.getElementById('omDepart').value = mo.depart || '';
+  document.getElementById('omArrivee').value = mo.arrivee || '';
+  document.getElementById('omDebut').value = mo.debut || '';
+  document.getElementById('omFin').value = mo.fin || '';
+  document.getElementById('omTransport').value = mo.transport || 'Voiture';
+  document.getElementById('omObjet').value = mo.objet || '';
+  document.getElementById('omTel').value = mo.tel || '';
+  document.getElementById('omRemarques').value = mo.remarques || '';
+  
+  switchTab('mission');
+  generateMissionOrder();
+  document.getElementById('omFiche')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  toast('👁️ Fiche affichée.', 'ok');
+}
+
+function exportUserOMPDF(docId) {
+  const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
+  if (!mo) return toast('Ordre de mission introuvable.', 'err');
+  
+  // Reuse the same PDF export function
+  exportSingleOMPDFByData(mo);
+}
+
+function exportSingleOMPDFByData(mo) {
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    
+    // Logo
+    try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch(e) { /* fallback */ }
+    
+    // Title
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`ORDRE DE MISSION N° ${mo.numero || 'N/A'}`, 105, 22, { align: 'center' });
+    
+    // Separator
+    doc.setDrawColor(11, 79, 158);
+    doc.setLineWidth(0.8);
+    doc.line(14, 27, 196, 27);
+    
+    // Info box
+    const leftX = 18;
+    let y = 33;
+    doc.setFontSize(10);
+    
+    const fields = [
+      ['Date d\'émission', mo.date || '—'],
+      ['Collaborateur', mo.employe || '—'],
+      ['Lieu de départ', mo.depart || '—'],
+      ['Lieu de destination', mo.arrivee || '—'],
+      ['Date de début', mo.debut || '—'],
+      ['Date de fin', mo.fin || '—'],
+      ['Mode de transport', mo.transport || '—'],
+      ['Téléphone', mo.tel || '—'],
+    ];
+    
+    fields.forEach(([label, value], fi) => {
+      const col = fi % 2;
+      const row = Math.floor(fi / 2);
+      const x = col === 0 ? leftX : 105;
+      const yy = y + row * 8;
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(142, 151, 168);
+      doc.text(label.toUpperCase(), x, yy);
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(53, 61, 79);
+      doc.text(value, x, yy + 4);
+      
+      // Underline
+      doc.setDrawColor(221, 225, 234);
+      doc.setLineWidth(0.3);
+      doc.line(x, yy + 5.5, col === 0 ? 100 : 196, yy + 5.5);
+    });
+    
+    const objY = y + Math.ceil(fields.length / 2) * 8 + 6;
+    
+    // Object box
+    doc.setFillColor(235, 243, 251);
+    doc.setDrawColor(200, 223, 245);
+    doc.roundedRect(leftX - 2, objY, 176, 16, 2, 2, 'FD');
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(11, 79, 158);
+    doc.text('OBJET DE LA MISSION', leftX + 2, objY + 5);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(53, 61, 79);
+    doc.text(mo.objet || '—', leftX + 2, objY + 12);
+    
+    // Remarks
+    let lines;
+    if (mo.remarques && mo.remarques !== '—') {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(142, 151, 168);
+      doc.text('REMARQUES / INSTRUCTIONS', leftX, objY + 23);
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(53, 61, 79);
+      lines = doc.splitTextToSize(mo.remarques, 175);
+      doc.text(lines, leftX, objY + 30);
+    }
+    
+    // Status
+    const statusLabel = {approved:'APPROUVÉ ✅', rejected:'REJETÉ ❌', pending:'EN ATTENTE ⏳'}[mo.status] || 'EN ATTENTE';
+    const linesHeight = (mo.remarques && mo.remarques !== '—' && lines) ? lines.length * 4 : 0;
+    const statusY = objY + (mo.remarques && mo.remarques !== '—' ? 34 + linesHeight : 28);
+    
+    doc.setDrawColor(221, 225, 234);
+    doc.setLineWidth(0.5);
+    doc.line(leftX, statusY, 196, statusY);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(142, 151, 168);
+    doc.text('STATUT', 105, statusY + 7, { align: 'center' });
+    
+    doc.setFontSize(11);
+    doc.setTextColor(11, 79, 158);
+    doc.text(statusLabel, 105, statusY + 14, { align: 'center' });
+    
+    // Comment
+    let commentLines;
+    if (mo.comment) {
+      doc.setFontSize(9);
+      doc.setTextColor(99, 110, 130);
+      commentLines = doc.splitTextToSize(`Message : ${mo.comment}`, 170);
+      doc.text(commentLines, 105, statusY + 21, { align: 'center' });
+    }
+    
+    // Signature section
+    const commentHeight = (mo.comment && commentLines) ? commentLines.length * 4 : 0;
+    const sigY = statusY + (mo.comment ? 26 + commentHeight : 22);
+    doc.setDrawColor(142, 151, 168);
+    doc.setLineWidth(0.3);
+    
+    // Left signature line
+    doc.line(30, sigY + 12, 85, sigY + 12);
+    doc.setFontSize(8);
+    doc.setTextColor(142, 151, 168);
+    doc.text('Le collaborateur', 57.5, sigY + 17, { align: 'center' });
+    
+    // Right signature line
+    doc.setLineWidth(0.3);
+    doc.line(110, sigY + 12, 165, sigY + 12);
+    doc.text('Le responsable', 137.5, sigY + 17, { align: 'center' });
+    
+    // Footer
+    const footerY = 285;
+    doc.setDrawColor(221, 225, 234);
+    doc.setLineWidth(0.3);
+    doc.line(14, footerY, 196, footerY);
+    doc.setFontSize(7);
+    doc.setTextColor(142, 151, 168);
+    doc.text(`Document généré par Eqnovia — Notes de Frais • ${mo.numero || 'N/A'}`, 105, footerY + 5, { align: 'center' });
+    doc.text(`Date: ${mo.date || '—'}`, 105, footerY + 10, { align: 'center' });
+    
+    doc.save(`Ordre_Mission_${mo.numero || 'sans_numero'}.pdf`);
+    toast('📄 PDF téléchargé.', 'ok');
+  } catch (e) {
+    console.warn('PDF export failed:', e);
+    toast('❌ Erreur lors de la création du PDF.', 'err');
+  }
+}
+
+// ════════════════════════════════════════════
+// MISSION ORDERS — EMAIL & WHATSAPP
+// ════════════════════════════════════════════
+function sendMOByEmail(docId) {
+  const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
+  if (!mo) return toast('Ordre de mission introuvable.', 'err');
+  
+  const assignedUser = USERS[mo.assignedTo];
+  const recipientEmail = assignedUser ? assignedUser.email : '';
+  
+  if (!recipientEmail) {
+    return toast('Aucune adresse email trouvée pour ce collaborateur.', 'err');
+  }
+  
+  const subject = `Ordre de mission N° ${mo.numero} — Eqnovia`;
+  const body = `Bonjour ${mo.employe},\n\nVeuillez trouver ci-joint votre ordre de mission N° ${mo.numero}.\n\nDétails :\n- Date d'émission : ${mo.date}\n- Lieu de départ : ${mo.depart}\n- Lieu de destination : ${mo.arrivee}\n- Date de début : ${mo.debut}\n- Date de fin : ${mo.fin}\n- Objet : ${mo.objet}\n- Mode de transport : ${mo.transport}\n\n${mo.remarques && mo.remarques !== '—' ? 'Remarques : ' + mo.remarques : ''}\n\nCordialement,\nL'administration Eqnovia`;
+  
+  // Open email client
+  window.location.href = `mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  toast('📧 Ouverture du client email...', 'ok');
+}
+
+function sendMOByWhatsApp(docId) {
+  const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
+  if (!mo) return toast('Ordre de mission introuvable.', 'err');
+  
+  if (!mo.tel || mo.tel === '—' || mo.tel.length < 5) {
+    return toast('Numéro de téléphone non renseigné pour cet ordre de mission.', 'err');
+  }
+  
+  const message = `Eqnovia - Ordre de mission N° ${mo.numero}\n\nCollaborateur : ${mo.employe}\nDate : ${mo.date}\nTrajet : ${mo.depart} → ${mo.arrivee}\nObjet : ${mo.objet}\nTransport : ${mo.transport}\n${mo.remarques !== '—' ? 'Remarques : ' + mo.remarques : ''}`;
+  
+  const waUrl = `https://wa.me/${cleanPhone(mo.tel)}?text=${encodeURIComponent(message)}`;
+  window.open(waUrl, '_blank');
+  toast('💬 Ouverture de WhatsApp...', 'ok');
+}
+
+function sendUserMOByWhatsApp(docId) {
+  const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
+  if (!mo) return toast('Ordre de mission introuvable.', 'err');
+  
+  if (!mo.tel || mo.tel === '—' || mo.tel.length < 5) {
+    return toast('Numéro de téléphone non renseigné pour cet ordre de mission.', 'err');
+  }
+  
+  const message = `Eqnovia - Ordre de mission N° ${mo.numero}\n\nCollaborateur : ${mo.employe}\nDate : ${mo.date}\nTrajet : ${mo.depart} → ${mo.arrivee}\nObjet : ${mo.objet}\nTransport : ${mo.transport}\n${mo.remarques !== '—' ? 'Remarques : ' + mo.remarques : ''}`;
+  
+  const waUrl = `https://wa.me/${cleanPhone(mo.tel)}?text=${encodeURIComponent(message)}`;
+  window.open(waUrl, '_blank');
+  toast('💬 Ouverture de WhatsApp...', 'ok');
+}
+
+// ════════════════════════════════════════════
 // ADD EXPENSE
 // ════════════════════════════════════════════
 async function addExpense() {
@@ -1541,20 +2376,7 @@ async function saveEdit() {
   const btn = document.getElementById('editSaveBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Enregistrement…';
 
-  cache[idx] = { ...cache[idx], date, desc, amount, cat, mission, comment };
-  try { lsSave(cache); } catch(e) {}
-  
-  if (useFirebase) {
-    try {
-      const { collection, getDocs, deleteDoc, doc, addDoc, serverTimestamp, query, where } = window.__fs;
-      const q = query(collection(window.__db, 'expenses'), where('id', '==', editingId));
-      const snap = await getDocs(q);
-      for (const d of snap.docs) {
-        await deleteDoc(doc(window.__db, 'expenses', d.id));
-      }
-      await addDoc(collection(window.__db, 'expenses'), { ...cache[idx], createdAt: serverTimestamp() });
-    } catch(e) { console.warn('FB edit failed', e); }
-  }
+  await dataUpdate(editingId, { date, desc, amount, cat, mission, comment });
 
   btn.disabled = false; btn.innerHTML = '💾 Enregistrer les modifications';
   closeEditModal();
@@ -1696,7 +2518,7 @@ function renderAll() {
   const tbody=document.getElementById('tbody');
 
   if(!rows.length){
-    tbody.innerHTML=`<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">🗂️</div><h3>Aucune dépense trouvée</h3><p>Ajustez vos filtres ou saisissez une nouvelle dépense.</p></div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="12"><div class="empty-state"><div class="empty-icon">🗂️</div><h3>Aucune dépense trouvée</h3><p>Ajustez vos filtres ou saisissez une nouvelle dépense.</p></div></td></tr>`;
     document.getElementById('grandTotal').innerHTML='💰 Total : <strong>0,00 DH</strong>';
     document.getElementById('rowCount').textContent='0 ligne(s)';
     return;
@@ -1711,6 +2533,8 @@ function renderAll() {
       : `<span class="badge badge-no">❌ Non</span>`;
     
     const userLabel = USERS[e.user] ? USERS[e.user].label : e.user;
+    const createdByLabel = e.createdBy ? (USERS[e.createdBy] ? USERS[e.createdBy].label : e.createdBy) : '—';
+    const modifiedByLabel = e.modifiedBy ? (USERS[e.modifiedBy] ? USERS[e.modifiedBy].label : e.modifiedBy) : '—';
     const isOwner = e.user === currentUser;
     const canEdit = isAdmin || isOwner;
     const canDelete = isAdmin;
@@ -1725,6 +2549,8 @@ function renderAll() {
       <td class="td-desc"><span title="${esc(e.comment || '')}">${esc(e.comment || '—')}</span></td>
       <td class="td-user"><span class="badge badge-user">${esc(userLabel)}</span></td>
       <td>${justifBadge}</td>
+      <td class="td-user"><span class="badge badge-user">${esc(createdByLabel)}</span></td>
+      <td class="td-user"><span class="badge badge-user">${esc(modifiedByLabel)}</span></td>
       <td><div class="action-btns">
         <button class="btn-icon edit ${!canEdit ? 'disabled' : ''}" onclick="${canEdit ? 'editRow('+e.id+')' : ''}" title="${canEdit ? 'Modifier' : 'Non autorisé'}">✏️</button>
         <button class="btn-icon ${!canDelete ? 'disabled' : ''}" onclick="${canDelete ? 'deleteRow('+e.id+')' : ''}" title="${canDelete ? 'Supprimer' : 'Non autorisé'}">✕</button>
@@ -1804,6 +2630,8 @@ function renderMonthly() {
         ? `<span class="badge badge-justif" onclick="viewJustificatif(${e.id})" title="Voir le justificatif">📎 Oui</span>`
         : `<span class="badge badge-no">❌ Non</span>`;
       const userLabel = USERS[e.user] ? USERS[e.user].label : e.user;
+      const createdByLabel = e.createdBy ? (USERS[e.createdBy] ? USERS[e.createdBy].label : e.createdBy) : '—';
+      const modifiedByLabel = e.modifiedBy ? (USERS[e.modifiedBy] ? USERS[e.modifiedBy].label : e.modifiedBy) : '—';
       const isOwner = e.user === currentUser;
       const canEdit = isAdmin || isOwner;
       const canDelete = isAdmin;
@@ -1818,6 +2646,8 @@ function renderMonthly() {
         <td class="td-desc" style="padding:8px 12px;"><span title="${esc(e.comment || '')}">${esc(e.comment || '—')}</span></td>
         <td class="td-user" style="padding:8px 12px;"><span class="badge badge-user">${esc(userLabel)}</span></td>
         <td style="padding:8px 12px;">${justifBadge}</td>
+        <td class="td-user" style="padding:8px 12px;"><span class="badge badge-user">${esc(createdByLabel)}</span></td>
+        <td class="td-user" style="padding:8px 12px;"><span class="badge badge-user">${esc(modifiedByLabel)}</span></td>
         <td style="padding:8px 12px;"><div class="action-btns">
           <button class="btn-icon edit ${!canEdit ? 'disabled' : ''}" onclick="${canEdit ? 'editRow('+e.id+')' : ''}" title="${canEdit ? 'Modifier' : 'Non autorisé'}">✏️</button>
           <button class="btn-icon ${!canDelete ? 'disabled' : ''}" onclick="${canDelete ? 'deleteRow('+e.id+')' : ''}" title="${canDelete ? 'Supprimer' : 'Non autorisé'}">✕</button>
@@ -1842,7 +2672,7 @@ function renderMonthly() {
           <table>
             <thead><tr>
               <th>#</th><th>Date</th><th>Description</th><th>Type</th>
-              <th>Total</th><th>Mission</th><th>Commentaires</th><th>User</th><th>Justif</th><th></th>
+              <th>Total</th><th>Mission</th><th>Commentaires</th><th>User</th><th>Justif</th><th>Créé par</th><th>Modifié par</th><th></th>
             </tr></thead>
             <tbody>${rows}</tbody>
           </table>
@@ -3134,6 +3964,10 @@ async function init() {
     
     // Initialize OM history (Firebase + localStorage merge)
     await dataLoadOM();  // also calls renderOMHistory() internally
+    
+    // Initialize mission orders (new system)
+    await dataLoadMissionOrders();
+    await dataLoadUserMissionOrders();
     
     // Initialize bottom nav active state
     TABS.forEach(id => {

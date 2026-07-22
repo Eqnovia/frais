@@ -30,7 +30,7 @@
   <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, serverTimestamp, where }
+    import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, serverTimestamp, where, updateDoc }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
     import {
       getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
@@ -60,7 +60,7 @@
       window.__onAuthStateChanged = onAuthStateChanged;
       window.__createAuthUser = createUserWithEmailAndPassword;
       window.__sendPasswordReset = sendPasswordResetEmail;
-      window.__fs = { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, serverTimestamp, where };
+      window.__fs = { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, serverTimestamp, where, updateDoc };
       window.__fbReady = true;
     } catch(e) {
       console.warn('Firebase non configuré, mode local actif.', e);
@@ -287,6 +287,9 @@
   <a class="nav-item" data-tooltip="Ordre de mission" onclick="switchTab('mission')" id="nav-mission">
     <span class="nav-icon">🗺️</span> <span>Ordre de mission</span>
   </a>
+  <a class="nav-item" data-tooltip="Mes ordres de mission" onclick="switchTab('user-missions')" id="nav-user-missions" style="display:none;">
+    <span class="nav-icon">📋</span> <span>Mes OM</span>
+  </a>
 
   <span class="nav-label"><span class="nav-label-icon">📤</span> Exports</span>
   <a class="nav-item" data-tooltip="PDF" onclick="exportPDF()">
@@ -304,6 +307,9 @@
   </a>
   <a class="nav-item" id="adminOMBtn" data-tooltip="Ordres de mission" onclick="switchTab('admin-om')" style="color:var(--eq-blue);">
     <span class="nav-icon">🗺️</span> <span>OM Global</span>
+  </a>
+  <a class="nav-item" id="adminCreateMobtn" data-tooltip="Créer OM" onclick="switchTab('admin-create-mo')" style="color:var(--eq-orange);">
+    <span class="nav-icon">📝</span> <span>Créer OM</span>
   </a>
   
   <span class="nav-label"><span class="nav-label-icon">ℹ️</span> Informations</span>
@@ -368,6 +374,7 @@
     <button class="tab-btn"        id="tab-comparison" role="tab" aria-selected="false" aria-controls="tab-content-comparison" onclick="switchTab('comparison')">📈 <span>Comparaison</span></button>
     <button class="tab-btn"        id="tab-mission"  role="tab" aria-selected="false" aria-controls="tab-content-mission" onclick="switchTab('mission')">🗺️ <span>Ordre de mission</span></button>
     <button class="tab-btn"        id="tab-admin-om" role="tab" aria-selected="false" aria-controls="tab-content-admin-om" onclick="switchTab('admin-om')" style="display:none;">🗺️ <span>OM Global</span></button>
+    <button class="tab-btn"        id="tab-user-missions" role="tab" aria-selected="false" aria-controls="tab-content-user-missions" onclick="switchTab('user-missions')" style="display:none;">📋 <span>Mes OM</span></button>
     <button class="tab-btn"        id="tab-policy"   role="tab" aria-selected="false" aria-controls="tab-content-policy" onclick="switchTab('policy')">📜 <span>Conditions</span></button>
   </div>
 
@@ -523,6 +530,8 @@
               <th>Commentaires</th>
               <th>User</th>
               <th>Justif</th>
+              <th>Créé par</th>
+              <th>Modifié par</th>
               <th></th>
             </tr>
           </thead>
@@ -769,6 +778,137 @@
     </div>
   </div>
 
+  <!-- ══ TAB: USER MISSIONS ══ -->
+  <div id="tab-content-user-missions" role="tabpanel" aria-labelledby="tab-user-missions" style="display:none;">
+    <div class="mobile-section-header" style="display:none;">
+      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
+      <span class="section-label">Section :</span>
+      <span class="section-name">Mes ordres de mission</span>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><div class="panel-icon blue">📋</div> Mes ordres de mission assignés</div>
+        <div class="export-group">
+          <button class="btn btn-pdf" onclick="exportUserMissionsPDF()" style="height:30px;font-size:10px;padding:0 10px;"><span>📄 </span>PDF</button>
+          <button class="btn btn-ghost" onclick="loadUserMissionOrders()" style="height:30px;font-size:10px;padding:0 10px;">🔄</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div id="userMOList">
+          <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <h3>Chargement...</h3>
+            <p>Vos ordres de mission assignés apparaîtront ici.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: ADMIN CREATE MISSION ORDER ══ -->
+  <div id="tab-content-admin-create-mo" role="tabpanel" aria-labelledby="tab-admin-create-mo" style="display:none;">
+    <div class="mobile-section-header" style="display:none;">
+      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
+      <span class="section-label">Admin :</span>
+      <span class="section-name">Créer un ordre de mission</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" class="input-form-grid">
+      <!-- Formulaire de création d'OM -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title"><div class="panel-icon blue">📝</div> Nouvel ordre de mission</div>
+        </div>
+        <div class="panel-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label" for="moNumero">N° d'ordre *</label>
+              <input type="text" class="form-input" id="moNumero" placeholder="Ex : OM-2026-001" autocomplete="off"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="moDate">Date d'émission *</label>
+              <input type="date" class="form-input" id="moDate"/>
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label" for="moEmploye">Nom du collaborateur *</label>
+              <input type="text" class="form-input" id="moEmploye" placeholder="Ex : Rachid Alami" autocomplete="off"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="moDepart">Lieu de départ</label>
+              <input type="text" class="form-input" id="moDepart" placeholder="Ex : Casablanca" autocomplete="off"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="moArrivee">Lieu de destination</label>
+              <input type="text" class="form-input" id="moArrivee" placeholder="Ex : Rabat" autocomplete="off"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="moDebut">Date de début</label>
+              <input type="date" class="form-input" id="moDebut"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="moFin">Date de fin</label>
+              <input type="date" class="form-input" id="moFin"/>
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label" for="moObjet">Objet de la mission *</label>
+              <input type="text" class="form-input" id="moObjet" placeholder="Ex : Réunion client, installation…" autocomplete="off"/>
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label" for="moTransport">Mode de transport</label>
+              <select class="form-select" id="moTransport">
+                <option value="Voiture">🚗 Voiture</option>
+                <option value="Train">🚆 Train</option>
+                <option value="Avion">✈️ Avion</option>
+                <option value="Bus">🚌 Bus</option>
+                <option value="Taxi">🚕 Taxi</option>
+                <option value="Autre">📌 Autre</option>
+              </select>
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label" for="moTel">📱 Téléphone (WhatsApp) <span style="font-weight:400;color:var(--gray-400);text-transform:none;">— pour notification</span></label>
+              <input type="tel" class="form-input" id="moTel" placeholder="Ex : 06 12 34 56 78" autocomplete="off"/>
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label" for="moRemarques">Remarques / instructions</label>
+              <textarea class="form-input" id="moRemarques" rows="3" placeholder="Consignes particulières, hébergement…" style="resize:vertical;"></textarea>
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label" for="moAssignedTo">Assigner à * <span style="font-weight:400;color:var(--gray-400);text-transform:none;">— qui recevra cet OM</span></label>
+              <select class="form-select" id="moAssignedTo">
+                <option value="">-- Sélectionner un utilisateur --</option>
+              </select>
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label" for="moComment">Commentaire interne <span style="font-weight:400;color:var(--gray-400);text-transform:none;">(optionnel)</span></label>
+              <textarea class="form-input" id="moComment" rows="2" placeholder="Notes pour l'administration..." style="resize:vertical;"></textarea>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+            <button class="btn btn-primary btn-lg" style="flex:1;min-width:140px;" onclick="createMissionOrder()" id="createMOBtn">📝 Créer l'ordre de mission</button>
+            <button class="btn btn-ghost btn-lg" style="flex:1;min-width:140px;" onclick="resetMissionOrderForm()">↺ Réinitialiser</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Liste des OM créés -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title"><div class="panel-icon orange">📋</div> Ordres de mission créés</div>
+        </div>
+        <div class="panel-body">
+          <div id="adminMOList">
+            <div class="empty-state">
+              <div class="empty-icon">📋</div>
+              <h3>Aucun ordre de mission</h3>
+              <p>Créez un nouvel ordre de mission en utilisant le formulaire.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ══ TAB: ORDRE DE MISSION ══ -->
   <div id="tab-content-mission" role="tabpanel" aria-labelledby="tab-mission" style="display:none;">
     <!-- Mobile Section Header -->
@@ -898,6 +1038,10 @@
     <span>Mission</span>
   </a>
   <a id="bnav-admin-om" style="display:none;"></a>
+  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('user-missions')" id="bnav-user-missions" role="button" aria-label="Mes ordres de mission" style="display:none;">
+    <span class="nav-icon" aria-hidden="true">📋</span>
+    <span>Mes OM</span>
+  </a>
   <a class="bottom-nav-item" tabindex="0" onclick="switchTab('policy')" id="bnav-policy" role="button" aria-label="Conditions et informations">
     <span class="nav-icon" aria-hidden="true">📜</span>
     <span>Infos</span>

@@ -123,7 +123,8 @@ service cloud.firestore {
         && isDocSizeValid()
         && request.resource.data.keys().hasAll([
           'id', 'date', 'desc', 'amount', 'cat',
-          'mission', 'comment', 'user', 'justif', '_authUid'
+          'mission', 'comment', 'user', 'justif', '_authUid',
+          'createdBy', 'createdAt', 'modifiedBy', 'modifiedAt'
         ])
         && request.resource.data.id is number
         && isValidDate(request.resource.data.date)
@@ -133,6 +134,8 @@ service cloud.firestore {
         && isValidString(request.resource.data.mission, 300)
         && isValidString(request.resource.data.comment, 500)
         && isValidString(request.resource.data.user, 20)
+        && isValidString(request.resource.data.createdBy, 20)
+        && isValidString(request.resource.data.modifiedBy, 20)
         && (request.resource.data.justif in ['Oui', 'Non'])
         && (
           request.resource.data.justif == 'Non'
@@ -148,17 +151,95 @@ service cloud.firestore {
         && request.resource.data.desc is string
         && isValidString(request.resource.data.desc, 500)
         && isValidAmount(request.resource.data.amount)
-        && isValidDate(request.resource.data.date);
+        && isValidDate(request.resource.data.date)
+        && (!('modifiedBy' in request.resource.data) || isValidString(request.resource.data.modifiedBy, 20))
+        && (!('modifiedAt' in request.resource.data) || request.resource.data.modifiedAt is string);
 
       // Suppression : admin uniquement
       allow delete: if isAuth() && isAdmin();
     }
 
     // ═══════════════════════════════════════════════════
-    //  COLLECTION : om_history
+    //  COLLECTION : mission_orders (Ordres de mission)
+    // ═══════════════════════════════════════════════════
+    match /mission_orders/{docId} {
+
+      // Lecture : admin voit tout, utilisateur voit ses OM assignées
+      allow read: if isAuth() && (
+        isAdmin()
+        || resource.data.assignedTo == request.auth.uid
+        || (isAuth() && resource.data._authUid == request.auth.uid)
+      );
+
+      // Création : uniquement l'admin peut créer des OM
+      allow create: if isAuth()
+        && isAdmin()
+        && isDocSizeValid()
+        && request.resource.data.keys().hasAll([
+          'numero', 'date', 'employe', 'objet', 'status',
+          'assignedTo', 'assignedBy', '_authUid', 'createdBy',
+          'createdAt', 'modifiedBy', 'modifiedAt'
+        ])
+        && isValidString(request.resource.data.numero, 50)
+        && isValidDate(request.resource.data.date)
+        && isValidString(request.resource.data.employe, 150)
+        && isValidString(request.resource.data.objet, 500)
+        && (request.resource.data.status in ['pending', 'approved', 'rejected'])
+        && isValidString(request.resource.data.assignedTo, 128)
+        && isValidString(request.resource.data.assignedBy, 128)
+        && isValidString(request.resource.data.createdBy, 20)
+        && isValidString(request.resource.data.modifiedBy, 20)
+        && (
+          !('depart' in request.resource.data)
+          || isValidString(request.resource.data.depart, 200)
+        )
+        && (
+          !('arrivee' in request.resource.data)
+          || isValidString(request.resource.data.arrivee, 200)
+        )
+        && (
+          !('debut' in request.resource.data)
+          || isValidDate(request.resource.data.debut)
+        )
+        && (
+          !('fin' in request.resource.data)
+          || isValidDate(request.resource.data.fin)
+        )
+        && (
+          !('transport' in request.resource.data)
+          || isValidString(request.resource.data.transport, 50)
+        )
+        && (
+          !('tel' in request.resource.data)
+          || isValidString(request.resource.data.tel, 20)
+        )
+        && (
+          !('remarques' in request.resource.data)
+          || isValidString(request.resource.data.remarques, 1000)
+        )
+        && (
+          !('comment' in request.resource.data)
+          || isValidString(request.resource.data.comment, 1000)
+        );
+
+      // Mise à jour : admin peut tout modifier, utilisateur peut seulement consulter
+      allow update: if isAuth()
+        && (isAdmin() || resource.data.assignedTo == request.auth.uid)
+        && isDocSizeValid()
+        && (
+          !('status' in request.resource.data)
+          || (request.resource.data.status in ['pending', 'approved', 'rejected'])
+        )
+        && isValidString(request.resource.data.modifiedBy, 20);
+
+      // Suppression : admin uniquement
+      allow delete: if isAuth() && isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  COLLECTION : om_history (legacy - lecture seule)
     // ═══════════════════════════════════════════════════
     match /om_history/{docId} {
-
       // Lecture : admin voit tout, utilisateur ses propres OM
       allow read: if isAuth() && (
         isAdmin() || docBelongsToUser()

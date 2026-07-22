@@ -31,6 +31,22 @@
       ]
     },
     {
+      "collectionGroup": "expenses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdBy", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "expenses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "modifiedBy", "order": "ASCENDING" },
+        { "fieldPath": "modifiedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "om_history",
       "queryScope": "COLLECTION",
       "fields": [
