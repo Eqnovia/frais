@@ -185,6 +185,18 @@
           <label class="form-label" for="editComment">Commentaires</label>
           <input type="text" class="form-input" id="editComment" placeholder="Remarques éventuelles..." autocomplete="off"/>
         </div>
+        <div class="form-group span-2">
+          <label class="form-label" for="editJustifInput">📎 Justificatif (photo/facture)</label>
+          <div id="editJustifCurrent" style="font-size:11px;color:var(--gray-400);margin-bottom:4px;"></div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input type="file" class="form-input" id="editJustifInput" accept="image/*,.pdf" multiple style="padding:6px 12px;flex:1;min-width:150px;" onchange="previewEditJustificatif(event)"/>
+            <div id="editJustifPreview" style="width:50px;height:50px;border-radius:6px;border:1px solid var(--gray-200);display:none;overflow:hidden;flex-shrink:0;">
+              <img id="editJustifPreviewImg" src="" alt="Aperçu" style="width:100%;height:100%;object-fit:cover;"/>
+            </div>
+            <button type="button" class="btn btn-ghost" id="editJustifClearBtn" style="display:none;height:30px;font-size:10px;padding:0 8px;" onclick="clearEditJustificatif()">✕ Effacer</button>
+          </div>
+          <div id="editJustifFileName" style="font-size:10px;color:var(--gray-400);margin-top:2px;"></div>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -455,7 +467,7 @@
 <div class="form-group span-2">
   <label class="form-label" for="justifInput">📎 Justificatif (photo/facture PDF)</label>
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-    <input type="file" class="form-input" id="justifInput" accept="image/*,.pdf" style="padding:6px 12px;flex:1;min-width:150px;" onchange="previewJustificatif(event)"/>
+    <input type="file" class="form-input" id="justifInput" accept="image/*,.pdf" multiple style="padding:6px 12px;flex:1;min-width:150px;" onchange="previewJustificatif(event)"/>
     <div id="justifPreview" style="width:50px;height:50px;border-radius:6px;border:1px solid var(--gray-200);display:none;overflow:hidden;flex-shrink:0;">
       <img id="justifPreviewImg" src="" alt="Aperçu" style="width:100%;height:100%;object-fit:cover;"/>
     </div>

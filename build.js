@@ -124,7 +124,7 @@ fs.writeFileSync(path.join(distPath, 'index.html'), html);
 fs.writeFileSync(path.join(__dirname, 'index.html'), html);
 
 // Copy static assets (icons, CSS, JS)
-const staticAssets = ['icon-192.png', 'icon-512.png', 'style.css', 'app.js'];
+const staticAssets = ['icon-192.png', 'icon-512.png', 'style.css', 'app.js', 'logo.PNG'];
 staticAssets.forEach((file) => {
   const src = path.join(__dirname, file);
   if (fs.existsSync(src)) {

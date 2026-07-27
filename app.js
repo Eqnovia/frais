@@ -1247,28 +1247,46 @@ function notifyOMByEmail(om, status, comment) {
 // ════════════════════════════════════════════
 // JUSTIFICATIF PREVIEW
 // ════════════════════════════════════════════
-function previewJustificatif(event) {
-  const file = event.target.files?.[0];
-  const preview = document.getElementById('justifPreview');
-  const previewImg = document.getElementById('justifPreviewImg');
-  const fileName = document.getElementById('justifFileName');
-  const clearBtn = document.getElementById('justifClearBtn');
-  if (!file) { preview.style.display='none'; fileName.textContent=''; clearBtn.style.display='none'; return; }
-  fileName.textContent = `📄 ${file.name} (${(file.size/1024).toFixed(1)} Ko)`;
-  clearBtn.style.display = '';
-  if (file.type.startsWith('image/')) {
-    const reader = new FileReader();
-    reader.onload = (e) => { previewImg.src=e.target.result; preview.style.display=''; };
-    reader.readAsDataURL(file);
-  } else { preview.style.display='none'; previewImg.src=''; }
+// ══ GENERIC JUSTIFICATIF PREVIEW (supports prefix-based ID lookup) ══
+function previewJustificatifFor(prefix) {
+  return function(event) {
+    const files = event.target.files;
+    const preview = document.getElementById(prefix + 'Preview');
+    const previewImg = document.getElementById(prefix + 'PreviewImg');
+    const fileName = document.getElementById(prefix + 'FileName');
+    const clearBtn = document.getElementById(prefix + 'ClearBtn');
+    if (!files || files.length === 0) { preview.style.display='none'; fileName.textContent=''; clearBtn.style.display='none'; return; }
+    
+    const imgFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (imgFiles.length > 0) {
+      // Show preview of the first image + count
+      const first = imgFiles[0];
+      fileName.textContent = `📄 ${files.length} fichier(s) sélectionné(s) — Aperçu: ${first.name} (${(first.size/1024).toFixed(1)} Ko)`;
+      const reader = new FileReader();
+      reader.onload = (e) => { previewImg.src=e.target.result; preview.style.display=''; };
+      reader.readAsDataURL(first);
+    } else {
+      fileName.textContent = `📄 ${files.length} fichier(s) sélectionné(s)`;
+      preview.style.display='none';
+      previewImg.src='';
+    }
+    clearBtn.style.display = '';
+  };
 }
-function clearJustificatif() {
-  document.getElementById('justifInput').value='';
-  document.getElementById('justifPreview').style.display='none';
-  document.getElementById('justifPreviewImg').src='';
-  document.getElementById('justifFileName').textContent='';
-  document.getElementById('justifClearBtn').style.display='none';
+
+function clearJustificatifFor(prefix) {
+  document.getElementById(prefix + 'Input').value='';
+  document.getElementById(prefix + 'Preview').style.display='none';
+  document.getElementById(prefix + 'PreviewImg').src='';
+  document.getElementById(prefix + 'FileName').textContent='';
+  document.getElementById(prefix + 'ClearBtn').style.display='none';
 }
+
+// ══ Specific wrappers using the generic functions ══
+const previewJustificatif = previewJustificatifFor('justif');
+function clearJustificatif() { clearJustificatifFor('justif'); }
+const previewEditJustificatif = previewJustificatifFor('editJustif');
+function clearEditJustificatif() { clearJustificatifFor('editJustif'); }
 
 // ════════════════════════════════════════════
 // MODAL
@@ -1304,6 +1322,39 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ════════════════════════════════════════════
+// MULTI-JUSTIFICATIF HELPERS
+// ════════════════════════════════════════════
+
+/**
+ * Retourne un tableau de fichiers justificatif pour une dépense.
+ * Gère la rétrocompatibilité avec l'ancien format mono-fichier (justifData).
+ */
+function getJustifFiles(exp) {
+  if (exp.justifFiles && Array.isArray(exp.justifFiles) && exp.justifFiles.length > 0) {
+    return exp.justifFiles;
+  }
+  // Backward compat: old single-file format
+  const url = exp.justifStorageUrl || exp.justifData;
+  if (url) {
+    return [{
+      data: exp.justifData,
+      name: exp.justifName || 'Justificatif',
+      storageUrl: exp.justifStorageUrl,
+      storagePath: exp.justifStoragePath
+    }];
+  }
+  return [];
+}
+
+function countJustif(exp) {
+  return getJustifFiles(exp).length;
+}
+
+function hasJustif(exp) {
+  return countJustif(exp) > 0;
+}
+
+// ════════════════════════════════════════════
 // JUSTIFICATIF MODAL
 // ════════════════════════════════════════════
 function closeJustifModal() {
@@ -1319,16 +1370,24 @@ function viewJustificatif(id) {
   if (!exp) return toast('Dépense introuvable.', 'err');
   
   const body = document.getElementById('justifBody');
+  const files = getJustifFiles(exp);
   
-  // Prefer Firebase Storage URL if available, otherwise use local base64
-  const imageUrl = exp.justifStorageUrl || exp.justifData;
-  
-  if (imageUrl) {
-    body.innerHTML = `<img src="${imageUrl}" alt="Justificatif" style="max-width:100%;border-radius:8px;border:1px solid var(--gray-200);max-height:450px;object-fit:contain;"/>
-    <p style="margin-top:10px;font-size:12px;color:var(--gray-400);">
-      ${exp.justifName ? '📎 ' + esc(exp.justifName) : 'Justificatif'}
-      ${exp.justifStorageUrl ? ' <span style="color:var(--eq-blue);">☁️ Stocké dans Firebase</span>' : ''}
-    </p>`;
+  if (files.length > 0) {
+    let html = '<div class="justif-gallery" style="display:flex;flex-direction:column;gap:12px;align-items:center;">';
+    files.forEach((f, idx) => {
+      const url = f.storageUrl || f.data;
+      if (!url) return;
+      html += `<div class="justif-gallery-item" style="width:100%;text-align:center;">
+        <img src="${url}" alt="Justificatif ${idx+1}" style="max-width:100%;border-radius:8px;border:1px solid var(--gray-200);max-height:400px;object-fit:contain;cursor:pointer;" onclick="window.open('${url}','_blank')" title="Cliquer pour agrandir"/>
+        <p style="margin-top:6px;font-size:11px;color:var(--gray-400);">
+          📎 ${esc(f.name || 'Justificatif ' + (idx+1))}
+          ${f.storageUrl ? ' <span style="color:var(--eq-blue);">☁️</span>' : ''}
+          ${files.length > 1 ? '<span style="color:var(--gray-300);"> — ' + (idx+1) + '/' + files.length + '</span>' : ''}
+        </p>
+      </div>`;
+    });
+    html += '</div>';
+    body.innerHTML = html;
   } else {
     body.innerHTML = `<p style="color:var(--gray-400);font-size:14px;">📭 Aucun justificatif pour cette dépense.</p>`;
   }
@@ -2760,14 +2819,17 @@ async function addExpense() {
   const btn = document.getElementById('addBtn');
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Enregistrement…';
 
+  // Process multiple justificatif files
+  let justifFiles = [];
   let justifData = null;
   let justifName = '';
   let justifStorageUrl = null;
   let justifStoragePath = null;
 
   if (justifFile.files && justifFile.files.length > 0) {
-    const file = justifFile.files[0];
-    if (file.type.startsWith('image/')) {
+    for (let fi = 0; fi < justifFile.files.length; fi++) {
+      const file = justifFile.files[fi];
+      if (!file.type.startsWith('image/')) continue;
       try {
         const reader = new FileReader();
         const data = await new Promise((resolve, reject) => {
@@ -2775,9 +2837,14 @@ async function addExpense() {
           reader.onerror = reject;
           reader.readAsDataURL(file);
         });
-        justifData = data;
-        justifName = file.name;
-
+        
+        const fileEntry = {
+          data: data,
+          name: file.name,
+          storageUrl: null,
+          storagePath: null
+        };
+        
         // Upload to Firebase Storage if available
         if (window.__storage && window.__fbReady) {
           try {
@@ -2785,19 +2852,25 @@ async function addExpense() {
             const fileName = `frais/${Date.now()}_${currentUser}_${file.name.replace(/[^a-z0-9]/gi, '_')}.${ext}`;
             const storageRef = window.__storageRef(window.__storage, fileName);
             await window.__uploadBytes(storageRef, file);
-            justifStorageUrl = await window.__getDownloadURL(storageRef);
-            justifStoragePath = fileName;
+            fileEntry.storageUrl = await window.__getDownloadURL(storageRef);
+            fileEntry.storagePath = fileName;
           } catch (e) {
-            console.warn('Firebase Storage upload failed, using local base64:', e);
+            console.warn('Firebase Storage upload failed for ' + file.name + ', using local base64:', e);
           }
         }
+        
+        justifFiles.push(fileEntry);
       } catch (e) {
-        console.warn('Error reading justificatif:', e);
+        console.warn('Error reading justificatif ' + file.name + ':', e);
       }
-    } else {
-      toast('Le justificatif doit être une image.', 'err');
-      btn.disabled=false; btn.innerHTML='➕ Ajouter la dépense';
-      return;
+    }
+    
+    // Keep backward compat single-file refs
+    if (justifFiles.length > 0) {
+      justifData = justifFiles[0].data;
+      justifName = justifFiles[0].name;
+      justifStorageUrl = justifFiles[0].storageUrl;
+      justifStoragePath = justifFiles[0].storagePath;
     }
   }
 
@@ -2810,11 +2883,12 @@ async function addExpense() {
     mission: mission || '',
     comment, 
     user: currentUser,
-    justif: justifData ? 'Oui' : 'Non',
+    justif: justifFiles.length > 0 ? 'Oui' : 'Non',
     justifData: justifData || null,
     justifName: justifName || null,
     justifStorageUrl: justifStorageUrl,
-    justifStoragePath: justifStoragePath
+    justifStoragePath: justifStoragePath,
+    justifFiles: justifFiles.length > 0 ? justifFiles : null
   };
   await dataAdd(exp);
 
@@ -2852,10 +2926,23 @@ function editRow(id) {
   document.getElementById('editMission').value = exp.mission || '';
   document.getElementById('editComment').value = exp.comment || '';
   
+  // Show current justificatif info (multi-file support)
+  const justifCurrent = document.getElementById('editJustifCurrent');
+  const files = getJustifFiles(exp);
+  if (files.length > 0) {
+    justifCurrent.innerHTML = `📎 Justificatifs : <strong>${files.length} fichier(s)</strong> — <span style="cursor:pointer;color:var(--eq-blue);text-decoration:underline;" onclick="viewJustificatif(${id})">👁️ Voir</span> <span style="font-size:10px;color:var(--gray-400);">(les nouveaux fichiers s'ajoutent aux existants)</span>`;
+  } else {
+    justifCurrent.innerHTML = '📭 Aucun justificatif — Vous pouvez en ajouter ci-dessous.';
+  }
+  
+  // Clear justificatif file input and preview
+  clearEditJustificatif();
+  
   document.getElementById('editModal').classList.add('open');
 }
 
 function closeEditModal() {
+  clearEditJustificatif();
   document.getElementById('editModal').classList.remove('open');
   editingId = null;
 }
@@ -2889,7 +2976,73 @@ async function saveEdit() {
   const btn = document.getElementById('editSaveBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Enregistrement…';
 
-  await dataUpdate(editingId, { date, desc, amount, cat, mission, comment });
+  // Handle multi-justificatif upload
+  const editJustifFile = document.getElementById('editJustifInput');
+  let justifUpdates = {};
+  
+  if (editJustifFile.files && editJustifFile.files.length > 0) {
+    let newFiles = [];
+    let hasNonImage = false;
+    
+    for (let fi = 0; fi < editJustifFile.files.length; fi++) {
+      const file = editJustifFile.files[fi];
+      if (!file.type.startsWith('image/')) { hasNonImage = true; continue; }
+      try {
+        const reader = new FileReader();
+        const data = await new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        
+        const fileEntry = {
+          data: data,
+          name: file.name,
+          storageUrl: null,
+          storagePath: null
+        };
+        
+        // Upload to Firebase Storage if available
+        if (window.__storage && window.__fbReady) {
+          try {
+            const ext = file.name.split('.').pop() || 'jpg';
+            const fileName = `frais/${Date.now()}_${currentUser}_${file.name.replace(/[^a-z0-9]/gi, '_')}.${ext}`;
+            const storageRef = window.__storageRef(window.__storage, fileName);
+            await window.__uploadBytes(storageRef, file);
+            fileEntry.storageUrl = await window.__getDownloadURL(storageRef);
+            fileEntry.storagePath = fileName;
+          } catch (e) {
+            console.warn('Firebase Storage upload failed for ' + file.name + ':', e);
+          }
+        }
+        
+        newFiles.push(fileEntry);
+      } catch (e) {
+        console.warn('Error reading justificatif ' + file.name + ' in edit:', e);
+      }
+    }
+    
+    if (hasNonImage) {
+      toast('Certains fichiers non-images ont été ignorés.', 'info');
+    }
+    
+    if (newFiles.length > 0) {
+      // Merge with existing files (new ones first)
+      const exp = cache.find(e => e.id === editingId);
+      const existingFiles = exp ? getJustifFiles(exp) : [];
+      const mergedFiles = [...newFiles, ...existingFiles];
+      
+      justifUpdates.justifFiles = mergedFiles;
+      justifUpdates.justif = 'Oui';
+      justifUpdates.justifData = mergedFiles[0].data;
+      justifUpdates.justifName = mergedFiles[0].name;
+      justifUpdates.justifStorageUrl = mergedFiles[0].storageUrl;
+      justifUpdates.justifStoragePath = mergedFiles[0].storagePath;
+    }
+  }
+
+  const updates = { date, desc, amount, cat, mission, comment, ...justifUpdates };
+  await dataUpdate(editingId, updates);
 
   btn.disabled = false; btn.innerHTML = '💾 Enregistrer les modifications';
   closeEditModal();
@@ -3041,8 +3194,9 @@ function renderAll() {
   rows.forEach((e,i)=>{
     total+=e.amount;
 
-    const justifBadge = e.justifData 
-      ? `<span class="badge badge-justif" onclick="viewJustificatif(${e.id})" title="Voir le justificatif">📎 Oui</span>`
+    const jCount = countJustif(e);
+    const justifBadge = jCount > 0 
+      ? `<span class="badge badge-justif" onclick="viewJustificatif(${e.id})" title="Voir les justificatifs">📎 ${jCount}</span>`
       : `<span class="badge badge-no">❌ Non</span>`;
     
     const userLabel = USERS[e.user] ? USERS[e.user].label : e.user;
@@ -3139,8 +3293,9 @@ function renderMonthly() {
     const total=items.reduce((s,e)=>s+e.amount,0);
     
     const rows=items.map((e,i)=>{
-      const justifBadge = e.justifData 
-        ? `<span class="badge badge-justif" onclick="viewJustificatif(${e.id})" title="Voir le justificatif">📎 Oui</span>`
+      const jCount = countJustif(e);
+      const justifBadge = jCount > 0 
+        ? `<span class="badge badge-justif" onclick="viewJustificatif(${e.id})" title="Voir les justificatifs">📎 ${jCount}</span>`
         : `<span class="badge badge-no">❌ Non</span>`;
       const userLabel = USERS[e.user] ? USERS[e.user].label : e.user;
       const createdByLabel = e.createdBy ? (USERS[e.createdBy] ? USERS[e.createdBy].label : e.createdBy) : '—';
@@ -5302,17 +5457,27 @@ if ('serviceWorker' in navigator) {
 
 // Get all justificatifs from cache
 function getAllJustificatifs() {
-  return cache.filter(e => e.justifData).map(e => ({
-    id: e.id,
-    date: e.date,
-    desc: e.desc,
-    user: e.user,
-    justifData: e.justifData,
-    justifName: e.justifName,
-    amount: e.amount,
-    cat: e.cat,
-    mission: e.mission
-  }));
+  const result = [];
+  cache.forEach(e => {
+    const files = getJustifFiles(e);
+    files.forEach((f, fi) => {
+      const url = f.storageUrl || f.data;
+      if (!url) return;
+      result.push({
+        id: e.id + '_' + fi,
+        expenseId: e.id,
+        date: e.date,
+        desc: e.desc + (files.length > 1 ? ` (justif ${fi+1}/${files.length})` : ''),
+        user: e.user,
+        justifData: url,
+        justifName: f.name || 'Justificatif ' + (fi+1),
+        amount: e.amount,
+        cat: e.cat,
+        mission: e.mission
+      });
+    });
+  });
+  return result;
 }
 
 // Convert base64 data URL to Blob
