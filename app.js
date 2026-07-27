@@ -200,6 +200,26 @@ function getAuthUid() {
   return (useFirebaseAuth && currentAuthUser) ? currentAuthUser.uid : null;
 }
 
+// Get Firebase Auth UID for a local username by querying user_profiles
+async function getAuthUidForUser(localUsername) {
+  if (!useFirebase || !window.__fs) return null;
+  
+  const user = USERS[localUsername];
+  if (!user || !user.email) return null;
+  
+  try {
+    const { collection, getDocs, query, where } = window.__fs;
+    const q = query(collection(window.__db, 'user_profiles'), where('email', '==', user.email));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return snap.docs[0].id; // Document ID is the Firebase Auth UID
+    }
+  } catch (e) {
+    console.warn('Failed to get auth UID for user:', e);
+  }
+  return null;
+}
+
 // ════════════════════════════════════════════
 // SYNC USERS TO FIREBASE AUTH (Admin)
 // ════════════════════════════════════════════
@@ -327,6 +347,7 @@ async function seedFirebaseAuthUsers() {
 async function login() {
   const pwd = document.getElementById('loginPassword').value.trim();
   const user = document.getElementById('loginUser').value;
+  const mode = document.getElementById('loginMode')?.value || 'auto';
   
   if (!USERS[user]) {
     document.getElementById('loginError').style.display = 'block';
@@ -336,27 +357,32 @@ async function login() {
     return;
   }
   
-  // 1. Essayer Firebase Auth d'abord (si disponible)
-  if (isFirebaseAuthAvailable()) {
+  const useFirebaseMode = mode === 'firebase' || (mode === 'auto' && isFirebaseAuthAvailable());
+  
+  // 1. Essayer Firebase Auth si le mode le permet
+  if (useFirebaseMode && isFirebaseAuthAvailable()) {
     const email = getAuthEmail(user);
-    const fbOk = await firebaseAuthSignIn(email, pwd);
-    
-    if (fbOk) {
-      // Firebase Auth réussi
-      completeLogin(user);
-      return;
+    if (email) {
+      const fbOk = await firebaseAuthSignIn(email, pwd);
+      
+      if (fbOk) {
+        // Firebase Auth réussi
+        completeLogin(user);
+        return;
+      }
+      
+      console.warn('Firebase Auth échoué, tentative locale...');
     }
-    
-    // Firebase Auth échoué -> vérifier si le mode local est un fallback acceptable
-    // Si l'utilisateur existe dans Firebase Auth mais pas avec ce mot de passe,
-    // on ne tombe pas sur le mode local
-    console.warn('Firebase Auth échoué, tentative locale...');
   }
   
   // 2. Fallback : authentification locale
   if (USERS[user].password === pwd) {
     completeLogin(user);
-    toast('ℹ️ Mode local — Les données ne sont pas synchronisées', 'info');
+    if (useFirebaseMode && !isFirebaseAuthAvailable()) {
+      toast('ℹ️ Firebase non disponible — Mode local activé', 'info');
+    } else if (mode === 'local') {
+      toast('ℹ️ Mode local — Les données ne sont pas synchronisées', 'info');
+    }
   } else {
     document.getElementById('loginError').style.display = 'block';
     document.getElementById('loginPassword').value = '';
@@ -444,7 +470,7 @@ function updateUserUI() {
   const first = userInfo.label.substring(0, 1);
   avatar.textContent = first;
   
-  const adminOnly = document.querySelectorAll('#adminOnlyLabel, #adminUsersBtn, #adminClearBtn, #adminOMBtn, #tab-admin-om');
+  const adminOnly = document.querySelectorAll('#adminOnlyLabel, #adminUsersBtn, #adminOMBtn, #tab-admin-om, #nav-mission, #tab-mission, #bnav-mission, #nav-backup, #tab-backup, #nav-policy, #tab-policy, #bnav-policy');
   adminOnly.forEach(el => el.style.display = isAdmin ? '' : 'none');
   
   // Show user missions tab for non-admin users
@@ -455,6 +481,10 @@ function updateUserUI() {
   if (userMissionsNav) userMissionsNav.style.display = isAdmin ? 'none' : '';
   if (userMissionsBnav) userMissionsBnav.style.display = isAdmin ? 'none' : '';
   
+  // Show/hide dashboard mission orders container
+  const dashboardMOContainer = document.getElementById('dashboardMOContainer');
+  if (dashboardMOContainer) dashboardMOContainer.style.display = isAdmin ? 'none' : '';
+  
   const filterUser = document.getElementById('filterUser');
   if (filterUser) {
     filterUser.style.display = isAdmin ? '' : 'none';
@@ -463,6 +493,42 @@ function updateUserUI() {
   const filterMonthUser = document.getElementById('filterMonthUser');
   if (filterMonthUser) {
     filterMonthUser.style.display = isAdmin ? '' : 'none';
+  }
+  
+  // Populate assignedTo dropdown for mission orders
+  populateAssignedToDropdown();
+}
+
+// Populate the omEmploye dropdown with available users
+function populateAssignedToDropdown() {
+  // Populate omEmploye (collaborator name)
+  const omEmployeSelect = document.getElementById('omEmploye');
+  if (omEmployeSelect) {
+    omEmployeSelect.innerHTML = '<option value="">-- Sélectionner un membre --</option>';
+    Object.entries(USERS).forEach(([key, u]) => {
+      if (key === 'admin') return; // Skip admin
+      const option = document.createElement('option');
+      option.value = u.label;
+      option.textContent = u.label;
+      omEmployeSelect.appendChild(option);
+    });
+  }
+}
+
+// Update the mode status indicator in the top bar
+function updateModeStatus() {
+  const modeStatus = document.getElementById('modeStatus');
+  const modeStatusText = document.getElementById('modeStatusText');
+  if (!modeStatus || !modeStatusText) return;
+  
+  if (useFirebase) {
+    modeStatus.className = 'db-status db-online';
+    modeStatus.querySelector('span:first-child').textContent = '☁️';
+    modeStatusText.textContent = 'Cloud';
+  } else {
+    modeStatus.className = 'db-status db-local';
+    modeStatus.querySelector('span:first-child').textContent = '💻';
+    modeStatusText.textContent = 'Local';
   }
 }
 
@@ -486,8 +552,13 @@ function openModal(id) {
   if (el) el.classList.add('open');
 }
 function closeModal(id) {
-  const el = document.getElementById(id);
-  if (el) el.classList.remove('open');
+  if (id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('open');
+  } else {
+    const el = document.getElementById('modal');
+    if (el) el.classList.remove('open');
+  }
 }
 
 document.getElementById('userModal').addEventListener('click', e => {
@@ -805,9 +876,10 @@ async function fbLoadMissionOrders() {
       // Utilisateur voit seulement ses OM assignées
       const authUid = getAuthUid();
       if (authUid) {
-        q = query(collection(window.__db, 'mission_orders'), where('assignedTo', '==', authUid), orderBy('createdAt', 'desc'));
+        q = query(collection(window.__db, 'mission_orders'), where('assignedToAuthUid', '==', authUid), orderBy('createdAt', 'desc'));
       } else {
-        q = query(collection(window.__db, 'mission_orders'), orderBy('createdAt', 'desc'));
+        // Fallback: filter by local username
+        q = query(collection(window.__db, 'mission_orders'), where('assignedTo', '==', currentUser), orderBy('createdAt', 'desc'));
       }
     }
     const snap = await getDocs(q);
@@ -819,10 +891,41 @@ async function fbLoadMissionOrdersForUser(userId) {
   if (!useFirebase) return null;
   try {
     const { collection, getDocs, query, orderBy, where } = window.__fs;
-    const q = query(collection(window.__db, 'mission_orders'), where('assignedTo', '==', userId), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ _firebaseId: d.id, ...d.data() }));
+    // Try to find by assignedToAuthUid first
+    let q = query(collection(window.__db, 'mission_orders'), where('assignedToAuthUid', '==', userId), orderBy('createdAt', 'desc'));
+    let snap = await getDocs(q);
+    if (!snap.empty) {
+      return snap.docs.map(d => ({ _firebaseId: d.id, ...d.data() }));
+    }
+    // Fallback: try by assignedTo (local username)
+    // We need to find the local username for this Firebase UID
+    const userProfile = await findUserProfileByAuthUid(userId);
+    if (userProfile && userProfile.email) {
+      const localUser = Object.entries(USERS).find(([k, u]) => u.email === userProfile.email);
+      if (localUser) {
+        q = query(collection(window.__db, 'mission_orders'), where('assignedTo', '==', localUser[0]), orderBy('createdAt', 'desc'));
+        snap = await getDocs(q);
+        return snap.docs.map(d => ({ _firebaseId: d.id, ...d.data() }));
+      }
+    }
+    return [];
   } catch(e) { console.warn('FB mission_orders load for user failed', e); return null; }
+}
+
+// Find user profile by Firebase Auth UID
+async function findUserProfileByAuthUid(authUid) {
+  if (!useFirebase || !window.__fs) return null;
+  try {
+    const { doc, getDoc } = window.__fs;
+    const docRef = doc(window.__db, 'user_profiles', authUid);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return snap.data();
+    }
+  } catch(e) {
+    console.warn('Failed to find user profile:', e);
+  }
+  return null;
 }
 
 // ════════════════════════════════════════════
@@ -902,8 +1005,22 @@ async function dataLoadMissionOrders() {
   if (useFirebase) {
     const fb = await fbLoadMissionOrders();
     if (fb !== null) {
-      missionOrdersCache = fb;
-      try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+      // Merge Firebase data with local data (Firebase wins on conflicts)
+      const localData = missionOrdersCache;
+      const fbIds = new Set(fb.map(o => o._firebaseId).filter(Boolean));
+      const merged = [...fb];
+      let changed = false;
+      for (const local of localData) {
+        if (!fbIds.has(local._firebaseId)) {
+          // Local item not in Firebase, add it
+          merged.push(local);
+          changed = true;
+        }
+      }
+      missionOrdersCache = merged;
+      if (changed) {
+        try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+      }
       return;
     }
   }
@@ -922,16 +1039,29 @@ async function dataLoadUserMissionOrders() {
     if (authUid) {
       const fb = await fbLoadMissionOrdersForUser(authUid);
       if (fb !== null) {
-        userMissionOrdersCache = fb;
+        // Merge Firebase data with local cache to include any unsynced items
+        const localData = dataUserMissionOrders();
+        const fbIds = new Set(fb.map(o => o._firebaseId).filter(Boolean));
+        const merged = [...fb];
+        let changed = false;
+        for (const local of localData) {
+          if (!fbIds.has(local._firebaseId) && !merged.find(m => m._localId === local._localId)) {
+            merged.push(local);
+            changed = true;
+          }
+        }
+        userMissionOrdersCache = merged;
+        if (changed) {
+          // Update missionOrdersCache with merged data
+          missionOrdersCache = [...merged];
+          try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+        }
         return;
       }
     }
   }
-  // Fallback: filter from local cache
-  userMissionOrdersCache = missionOrdersCache.filter(mo => {
-    if (isAdmin) return true;
-    return mo.assignedTo === currentUser || mo._authUid === getAuthUid();
-  });
+  // Fallback: filter from local cache using the unified function
+  userMissionOrdersCache = dataUserMissionOrders();
 }
 
 async function dataAddMissionOrder(mo) {
@@ -973,7 +1103,14 @@ function dataAllMissionOrders() { return [...missionOrdersCache]; }
 
 function dataUserMissionOrders() {
   if (isAdmin) return [...missionOrdersCache];
-  return missionOrdersCache.filter(mo => mo.assignedTo === currentUser || mo._authUid === getAuthUid());
+  const authUid = getAuthUid();
+  return missionOrdersCache.filter(mo => {
+    // Check by local username (for local mode)
+    if (mo.assignedTo === currentUser) return true;
+    // Check by Firebase Auth UID (for Firebase mode)
+    if (authUid && mo.assignedToAuthUid === authUid) return true;
+    return false;
+  });
 }
 
 // ════════════════════════════════════════════
@@ -1142,7 +1279,6 @@ function showModal(title,msg,cb){
   document.getElementById('modalOk').onclick=()=>{closeModal();cb&&cb();};
   document.getElementById('modal').classList.add('open');
 }
-function closeModal(){ document.getElementById('modal').classList.remove('open'); }
 document.getElementById('modal').addEventListener('click',e=>{
   if(e.target===document.getElementById('modal')) closeModal();
 });
@@ -1184,10 +1320,14 @@ function viewJustificatif(id) {
   
   const body = document.getElementById('justifBody');
   
-  if (exp.justifData) {
-    body.innerHTML = `<img src="${exp.justifData}" alt="Justificatif" style="max-width:100%;border-radius:8px;border:1px solid var(--gray-200);max-height:450px;object-fit:contain;"/>
+  // Prefer Firebase Storage URL if available, otherwise use local base64
+  const imageUrl = exp.justifStorageUrl || exp.justifData;
+  
+  if (imageUrl) {
+    body.innerHTML = `<img src="${imageUrl}" alt="Justificatif" style="max-width:100%;border-radius:8px;border:1px solid var(--gray-200);max-height:450px;object-fit:contain;"/>
     <p style="margin-top:10px;font-size:12px;color:var(--gray-400);">
       ${exp.justifName ? '📎 ' + esc(exp.justifName) : 'Justificatif'}
+      ${exp.justifStorageUrl ? ' <span style="color:var(--eq-blue);">☁️ Stocké dans Firebase</span>' : ''}
     </p>`;
   } else {
     body.innerHTML = `<p style="color:var(--gray-400);font-size:14px;">📭 Aucun justificatif pour cette dépense.</p>`;
@@ -1199,7 +1339,7 @@ function viewJustificatif(id) {
 // ════════════════════════════════════════════
 // TAB SWITCHING
 // ════════════════════════════════════════════
-const TABS = ['saisie','all','monthly','yearly','trimestre','comparison','mission','admin-om','user-missions','policy'];
+const TABS = ['saisie','all','monthly','yearly','trimestre','comparison','mission','admin-om','user-missions','policy','backup'];
 function switchTab(t) {
   activeTab = t;
   TABS.forEach(id=>{
@@ -1222,6 +1362,8 @@ function switchTab(t) {
   if (t==='comparison') renderComparison();
   if (t==='admin-om')   loadAdminOM();
   if (t==='user-missions') renderUserMissionOrders();
+  if (t==='saisie')     renderDashboardMissionOrders();
+  if (t==='backup')     renderBackupStatus();
 }
 
 // ════════════════════════════════════════════
@@ -1581,15 +1723,16 @@ function deleteOM(index) {
 
 // Override generateMissionOrder to save history
 const _origGenerate = generateMissionOrder;
-generateMissionOrder = function() {
+generateMissionOrder = async function() {
   _origGenerate();
   // Only save if generation succeeded (print button enabled = fiche generated)
   if (document.getElementById('omPrintBtn').disabled) return;
   const history = loadOMHistory();
+  const employeName = document.getElementById('omEmploye').value;
   history.push({
     numero: document.getElementById('omNumero').value,
     date: document.getElementById('omDate').value,
-    employe: document.getElementById('omEmploye').value,
+    employe: employeName,
     depart: document.getElementById('omDepart').value,
     arrivee: document.getElementById('omArrivee').value,
     debut: document.getElementById('omDebut').value,
@@ -1597,105 +1740,65 @@ generateMissionOrder = function() {
     transport: document.getElementById('omTransport').value,
     objet: document.getElementById('omObjet').value,
     remarques: document.getElementById('omRemarques').value,
-    email: findUserEmail(document.getElementById('omEmploye').value),
+    email: findUserEmail(employeName),
     tel: document.getElementById('omTel').value
   });
   saveOMHistory(history);
   renderOMHistory();
-};
 
-// ════════════════════════════════════════════
-// MISSION ORDERS — ADMIN CREATION & ASSIGNMENT
-// ════════════════════════════════════════════
-async function createMissionOrder() {
-  if (!isAdmin) {
-    return toast('Seul l\'administrateur peut créer des ordres de mission.', 'err');
-  }
-
-  const numero = sanitizeInput(document.getElementById('moNumero').value);
-  const date = document.getElementById('moDate').value;
-  const employe = sanitizeInput(document.getElementById('moEmploye').value);
-  const depart = sanitizeInput(document.getElementById('moDepart').value);
-  const arrivee = sanitizeInput(document.getElementById('moArrivee').value);
-  const debut = document.getElementById('moDebut').value;
-  const fin = document.getElementById('moFin').value;
-  const objet = sanitizeInput(document.getElementById('moObjet').value);
-  const transport = document.getElementById('moTransport').value;
-  const tel = sanitizeInput(document.getElementById('moTel').value);
-  const remarques = sanitizeInput(document.getElementById('moRemarques').value);
-  const assignedTo = document.getElementById('moAssignedTo').value;
-  const comment = sanitizeInput(document.getElementById('moComment').value);
-
-  if (!numero) return toast('Veuillez saisir le numéro d\'ordre de mission.', 'err');
-  if (!date) return toast('Veuillez saisir la date d\'émission.', 'err');
-  if (!employe) return toast('Veuillez saisir le nom du collaborateur.', 'err');
-  if (!objet) return toast('Veuillez saisir l\'objet de la mission.', 'err');
-  if (!assignedTo) return toast('Veuillez assigner l\'ordre de mission à un utilisateur.', 'err');
-
-  const btn = document.getElementById('createMOBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Création...';
-
+  // Also save to missionOrdersCache (new system) so it appears in "My OM"
   const mo = {
-    numero,
-    date,
-    employe,
-    depart: depart || '—',
-    arrivee: arrivee || '—',
-    debut: debut || '—',
-    fin: fin || '—',
-    objet,
-    transport: transport || 'Voiture',
-    tel: tel || '—',
-    remarques: remarques || '—',
-    comment: comment || '',
+    numero: document.getElementById('omNumero').value,
+    date: document.getElementById('omDate').value,
+    employe: employeName,
+    depart: document.getElementById('omDepart').value || '—',
+    arrivee: document.getElementById('omArrivee').value || '—',
+    debut: document.getElementById('omDebut').value || '—',
+    fin: document.getElementById('omFin').value || '—',
+    transport: document.getElementById('omTransport').value,
+    objet: document.getElementById('omObjet').value,
+    remarques: document.getElementById('omRemarques').value || '—',
+    tel: document.getElementById('omTel').value || '—',
     status: 'pending',
-    assignedTo,
-    assignedBy: currentUser,
-    user: assignedTo,
-    _localId: Date.now() + '_' + Math.random().toString(36).slice(2)
+    _localId: 'om_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
   };
 
-  await dataAddMissionOrder(mo);
+  // Find the local user key for the selected employee
+  const localUserKey = Object.entries(USERS).find(([k, u]) => u.label === employeName);
+  if (localUserKey) {
+    mo.assignedTo = localUserKey[0];
+  }
 
-  btn.disabled = false;
-  btn.innerHTML = '📝 Créer l\'ordre de mission';
+  // Get Firebase Auth UID for the assigned user
+  if (useFirebase && mo.assignedTo) {
+    const authUid = await getAuthUidForUser(mo.assignedTo);
+    if (authUid) {
+      mo.assignedToAuthUid = authUid;
+    }
+  }
 
-  // Reset form
-  document.getElementById('moNumero').value = '';
-  document.getElementById('moDate').value = '';
-  document.getElementById('moEmploye').value = '';
-  document.getElementById('moDepart').value = '';
-  document.getElementById('moArrivee').value = '';
-  document.getElementById('moDebut').value = '';
-  document.getElementById('moFin').value = '';
-  document.getElementById('moObjet').value = '';
-  document.getElementById('moTransport').value = 'Voiture';
-  document.getElementById('moTel').value = '';
-  document.getElementById('moRemarques').value = '';
-  document.getElementById('moAssignedTo').value = '';
-  document.getElementById('moComment').value = '';
+  // Set creator's auth UID so they can also see the OM in their list
+  const currentAuthUid = getAuthUid();
+  if (currentAuthUid) {
+    mo._authUid = currentAuthUid;
+  }
 
-  renderAdminMissionOrders();
-  toast('✅ Ordre de mission créé et assigné avec succès.', 'ok');
-}
+  missionOrdersCache.push(mo);
+  try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
 
-function resetMissionOrderForm() {
-  document.getElementById('moNumero').value = '';
-  document.getElementById('moDate').value = '';
-  document.getElementById('moEmploye').value = '';
-  document.getElementById('moDepart').value = '';
-  document.getElementById('moArrivee').value = '';
-  document.getElementById('moDebut').value = '';
-  document.getElementById('moFin').value = '';
-  document.getElementById('moObjet').value = '';
-  document.getElementById('moTransport').value = 'Voiture';
-  document.getElementById('moTel').value = '';
-  document.getElementById('moRemarques').value = '';
-  document.getElementById('moAssignedTo').value = '';
-  document.getElementById('moComment').value = '';
-  toast('🔄 Formulaire réinitialisé.', 'info');
-}
+  // Sync to Firebase
+  if (useFirebase) {
+    const fbId = await fbAddMissionOrder(mo);
+    if (fbId) {
+      mo._firebaseId = fbId;
+      try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+    }
+  }
+
+  // Refresh user mission orders display
+  renderDashboardMissionOrders();
+  renderUserMissionOrders();
+};
 
 function loadUserMissionOrders() {
   renderUserMissionOrders();
@@ -1746,44 +1849,6 @@ function exportUserMissionsPDF() {
   doc.text('eqnovia · Notes de Frais · Mes ordres de mission', 148, fy + 4, {align:'center'});
   doc.save(`mes_om_${new Date().toISOString().split('T')[0]}.pdf`);
   toast('📄 Export PDF de mes OM téléchargé !');
-}
-
-function renderAdminMissionOrders() {
-  const data = dataAllMissionOrders();
-  const container = document.getElementById('adminMOList');
-  if (!container) return;
-
-  if (!data.length) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Aucun ordre de mission</h3><p>Créez un nouvel ordre de mission en utilisant le formulaire.</p></div>';
-    return;
-  }
-
-  container.innerHTML = data.slice().reverse().map(mo => {
-    const statusClass = {approved: 'approved', rejected: 'rejected', pending: 'pending'}[mo.status] || 'pending';
-    const statusIcon = {approved: '✅', rejected: '❌', pending: '⏳'}[mo.status] || '⏳';
-    const statusLabel = {approved: 'Approuvé', rejected: 'Rejeté', pending: 'En attente'}[mo.status] || 'En attente';
-    const assignedUser = USERS[mo.assignedTo] ? USERS[mo.assignedTo].label : mo.assignedTo;
-    
-    return `
-    <div class="om-history-item">
-      <div style="flex:1;min-width:0;">
-        <div class="om-h-num">${esc(mo.numero)}</div>
-        <div class="om-h-employe">${esc(mo.employe)}</div>
-        <div class="om-h-date" style="margin-top:2px;">${esc(mo.date)}</div>
-        <div style="font-size:10px;color:var(--gray-400);margin-top:2px;">Assigné à: ${esc(assignedUser)}</div>
-      </div>
-      <div style="text-align:right;">
-        <span class="status-badge ${statusClass}" style="font-size:9px;padding:1px 8px;">${statusIcon} ${statusLabel}</span>
-      </div>
-      <div class="om-h-actions">
-        <button class="om-h-action view" onclick="viewAdminMO('${mo._firebaseId || mo._localId}')" title="Consulter">👁️</button>
-        <button class="om-h-action pdf" onclick="exportAdminOMPDF('${mo._firebaseId || mo._localId}')" title="Télécharger PDF">📄</button>
-        <button class="om-h-action" onclick="sendMOByEmail('${mo._firebaseId || mo._localId}')" title="Envoyer par Email" style="background:var(--eq-blue-pale);color:var(--eq-blue);">📧</button>
-        <button class="om-h-action" onclick="sendMOByWhatsApp('${mo._firebaseId || mo._localId}')" title="Envoyer par WhatsApp" style="background:var(--green-pale);color:var(--green);">💬</button>
-        <button class="om-h-action del" onclick="deleteAdminMO('${mo._firebaseId || mo._localId}')" title="Supprimer">✕</button>
-      </div>
-    </div>`;
-  }).join('');
 }
 
 function viewAdminMO(docId) {
@@ -1963,18 +2028,6 @@ function exportAdminOMPDF(docId) {
   }
 }
 
-async function deleteAdminMO(docId) {
-  if (!isAdmin) {
-    return toast('Seul l\'administrateur peut supprimer des ordres de mission.', 'err');
-  }
-  
-  showModal('Supprimer l\'ordre de mission', 'Voulez-vous vraiment supprimer cet ordre de mission ? Cette action est irréversible.', async () => {
-    await dataDeleteMissionOrder(docId);
-    renderAdminMissionOrders();
-    toast('🗑️ Ordre de mission supprimé.', 'ok');
-  });
-}
-
 // ════════════════════════════════════════════
 // MISSION ORDERS — USER DASHBOARD
 // ════════════════════════════════════════════
@@ -2007,6 +2060,50 @@ function renderUserMissionOrders() {
       <div class="om-h-actions">
         <button class="om-h-action view" onclick="viewUserMO('${mo._firebaseId || mo._localId}')" title="Consulter">👁️</button>
         <button class="om-h-action pdf" onclick="exportUserOMPDF('${mo._firebaseId || mo._localId}')" title="Télécharger PDF">📄</button>
+        <button class="om-h-action" onclick="sendUserMOByEmail('${mo._firebaseId || mo._localId}')" title="Envoyer par Email" style="background:var(--eq-blue-pale);color:var(--eq-blue);">📧</button>
+        ${navigator.share ? `<button class="om-h-action" onclick="shareMOByWebShare('${mo._firebaseId || mo._localId}')" title="Partager" style="background:var(--gray-100);color:var(--gray-600);">📤</button>` : ''}
+        ${mo.tel && mo.tel !== '—' && mo.tel.length > 5 ? `<button class="om-h-action" onclick="sendUserMOByWhatsApp('${mo._firebaseId || mo._localId}')" title="WhatsApp" style="background:var(--green-pale);color:var(--green);">💬</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════
+// MISSION ORDERS — DASHBOARD (USER HOME)
+// ════════════════════════════════════════════
+function renderDashboardMissionOrders() {
+  if (isAdmin) return; // Admin doesn't see this in dashboard
+  
+  const data = dataUserMissionOrders();
+  const container = document.getElementById('dashboardMOList');
+  if (!container) return;
+
+  if (!data.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><h3>Aucun ordre de mission</h3><p>Vous n\'avez aucun ordre de mission assigné pour le moment.</p></div>';
+    return;
+  }
+
+  container.innerHTML = data.slice().reverse().map(mo => {
+    const statusClass = {approved: 'approved', rejected: 'rejected', pending: 'pending'}[mo.status] || 'pending';
+    const statusIcon = {approved: '✅', rejected: '❌', pending: '⏳'}[mo.status] || '⏳';
+    const statusLabel = {approved: 'Approuvé', rejected: 'Rejeté', pending: 'En attente'}[mo.status] || 'En attente';
+    
+    return `
+    <div class="om-history-item">
+      <div style="flex:1;min-width:0;">
+        <div class="om-h-num">${esc(mo.numero)}</div>
+        <div class="om-h-employe">${esc(mo.employe)}</div>
+        <div class="om-h-date" style="margin-top:2px;">${esc(mo.date)}</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:2px;">${esc(mo.depart || '...')} → ${esc(mo.arrivee || '...')}</div>
+      </div>
+      <div style="text-align:right;">
+        <span class="status-badge ${statusClass}" style="font-size:9px;padding:1px 8px;">${statusIcon} ${statusLabel}</span>
+      </div>
+      <div class="om-h-actions">
+        <button class="om-h-action view" onclick="viewUserMO('${mo._firebaseId || mo._localId}')" title="Consulter">👁️</button>
+        <button class="om-h-action pdf" onclick="exportUserOMPDF('${mo._firebaseId || mo._localId}')" title="Télécharger PDF">📄</button>
+        <button class="om-h-action" onclick="sendUserMOByEmail('${mo._firebaseId || mo._localId}')" title="Envoyer par Email" style="background:var(--eq-blue-pale);color:var(--eq-blue);">📧</button>
+        ${navigator.share ? `<button class="om-h-action" onclick="shareMOByWebShare('${mo._firebaseId || mo._localId}')" title="Partager" style="background:var(--gray-100);color:var(--gray-600);">📤</button>` : ''}
         ${mo.tel && mo.tel !== '—' && mo.tel.length > 5 ? `<button class="om-h-action" onclick="sendUserMOByWhatsApp('${mo._firebaseId || mo._localId}')" title="WhatsApp" style="background:var(--green-pale);color:var(--green);">💬</button>` : ''}
       </div>
     </div>`;
@@ -2196,7 +2293,7 @@ function exportSingleOMPDFByData(mo) {
 // ════════════════════════════════════════════
 // MISSION ORDERS — EMAIL & WHATSAPP
 // ════════════════════════════════════════════
-function sendMOByEmail(docId) {
+async function sendMOByEmail(docId) {
   const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
   if (!mo) return toast('Ordre de mission introuvable.', 'err');
   
@@ -2207,12 +2304,410 @@ function sendMOByEmail(docId) {
     return toast('Aucune adresse email trouvée pour ce collaborateur.', 'err');
   }
   
+  // Try to send PDF via EmailJS if available
+  if (window.emailjs && EMAILJS_CONFIG.serviceID && !EMAILJS_CONFIG.serviceID.includes('xxxxxxx')) {
+    try {
+      // Generate PDF as base64
+      const pdfBase64 = await generatePDFBase64(mo);
+      
+      await emailjs.send(EMAILJS_CONFIG.serviceID, EMAILJS_CONFIG.templateID, {
+        to_email: recipientEmail,
+        to_name: mo.employe || 'Collaborateur',
+        numero: mo.numero || 'N/A',
+        date: mo.date || '—',
+        employe: mo.employe || '—',
+        depart: mo.depart || '—',
+        arrivee: mo.arrivee || '—',
+        debut: mo.debut || '—',
+        fin: mo.fin || '—',
+        objet: mo.objet || '—',
+        transport: mo.transport || '—',
+        remarques: mo.remarques && mo.remarques !== '—' ? mo.remarques : '',
+        comment: mo.comment || '',
+        subject: `Ordre de mission N° ${mo.numero} — Eqnovia`,
+        pdf_attachment: pdfBase64,
+        pdf_filename: `Ordre_Mission_${mo.numero || 'sans_numero'}.pdf`
+      });
+      toast('📧 Email avec PDF envoyé avec succès !', 'ok');
+      return;
+    } catch (e) {
+      console.warn('EmailJS PDF send failed, falling back to mailto:', e);
+    }
+  }
+  
+  // Fallback: open email client with text
   const subject = `Ordre de mission N° ${mo.numero} — Eqnovia`;
   const body = `Bonjour ${mo.employe},\n\nVeuillez trouver ci-joint votre ordre de mission N° ${mo.numero}.\n\nDétails :\n- Date d'émission : ${mo.date}\n- Lieu de départ : ${mo.depart}\n- Lieu de destination : ${mo.arrivee}\n- Date de début : ${mo.debut}\n- Date de fin : ${mo.fin}\n- Objet : ${mo.objet}\n- Mode de transport : ${mo.transport}\n\n${mo.remarques && mo.remarques !== '—' ? 'Remarques : ' + mo.remarques : ''}\n\nCordialement,\nL'administration Eqnovia`;
   
-  // Open email client
   window.location.href = `mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   toast('📧 Ouverture du client email...', 'ok');
+}
+
+async function sendUserMOByEmail(docId) {
+  const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
+  if (!mo) return toast('Ordre de mission introuvable.', 'err');
+  
+  const assignedUser = USERS[mo.assignedTo];
+  const recipientEmail = assignedUser ? assignedUser.email : '';
+  
+  if (!recipientEmail) {
+    return toast('Aucune adresse email trouvée pour ce collaborateur.', 'err');
+  }
+  
+  // Try to send PDF via EmailJS if available
+  if (window.emailjs && EMAILJS_CONFIG.serviceID && !EMAILJS_CONFIG.serviceID.includes('xxxxxxx')) {
+    try {
+      // Generate PDF as base64
+      const pdfBase64 = await generatePDFBase64(mo);
+      
+      await emailjs.send(EMAILJS_CONFIG.serviceID, EMAILJS_CONFIG.templateID, {
+        to_email: recipientEmail,
+        to_name: mo.employe || 'Collaborateur',
+        numero: mo.numero || 'N/A',
+        date: mo.date || '—',
+        employe: mo.employe || '—',
+        depart: mo.depart || '—',
+        arrivee: mo.arrivee || '—',
+        debut: mo.debut || '—',
+        fin: mo.fin || '—',
+        objet: mo.objet || '—',
+        transport: mo.transport || '—',
+        remarques: mo.remarques && mo.remarques !== '—' ? mo.remarques : '',
+        comment: mo.comment || '',
+        subject: `Mon ordre de mission N° ${mo.numero} — Eqnovia`,
+        pdf_attachment: pdfBase64,
+        pdf_filename: `Ordre_Mission_${mo.numero || 'sans_numero'}.pdf`
+      });
+      toast('📧 Email avec PDF envoyé avec succès !', 'ok');
+      return;
+    } catch (e) {
+      console.warn('EmailJS PDF send failed, falling back to mailto:', e);
+    }
+  }
+  
+  // Fallback: open email client with text
+  const subject = `Mon ordre de mission N° ${mo.numero} — Eqnovia`;
+  const body = `Bonjour ${mo.employe},\n\nVeuillez trouver ci-joint votre ordre de mission N° ${mo.numero}.\n\nDétails :\n- Date d'émission : ${mo.date}\n- Lieu de départ : ${mo.depart}\n- Lieu de destination : ${mo.arrivee}\n- Date de début : ${mo.debut}\n- Date de fin : ${mo.fin}\n- Objet : ${mo.objet}\n- Mode de transport : ${mo.transport}\n\n${mo.remarques && mo.remarques !== '—' ? 'Remarques : ' + mo.remarques : ''}\n\nCordialement,\nL'administration Eqnovia`;
+  
+  window.location.href = `mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  toast('📧 Ouverture du client email...', 'ok');
+}
+
+// Generate PDF as base64 string for email attachment
+async function generatePDFBase64(mo) {
+  return new Promise((resolve, reject) => {
+    try {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF('p', 'mm', 'a4');
+      
+      // Logo
+      try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch(e) { /* fallback */ }
+      
+      // Title
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`ORDRE DE MISSION N° ${mo.numero || 'N/A'}`, 105, 22, { align: 'center' });
+      
+      // Separator
+      doc.setDrawColor(11, 79, 158);
+      doc.setLineWidth(0.8);
+      doc.line(14, 27, 196, 27);
+      
+      // Info box
+      const leftX = 18;
+      let y = 33;
+      doc.setFontSize(10);
+      
+      const fields = [
+        ['Date d\'émission', mo.date || '—'],
+        ['Collaborateur', mo.employe || '—'],
+        ['Lieu de départ', mo.depart || '—'],
+        ['Lieu de destination', mo.arrivee || '—'],
+        ['Date de début', mo.debut || '—'],
+        ['Date de fin', mo.fin || '—'],
+        ['Mode de transport', mo.transport || '—'],
+        ['Téléphone', mo.tel || '—'],
+      ];
+      
+      fields.forEach(([label, value], fi) => {
+        const col = fi % 2;
+        const row = Math.floor(fi / 2);
+        const x = col === 0 ? leftX : 105;
+        const yy = y + row * 8;
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(142, 151, 168);
+        doc.text(label.toUpperCase(), x, yy);
+        
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(53, 61, 79);
+        doc.text(value, x, yy + 4);
+        
+        // Underline
+        doc.setDrawColor(221, 225, 234);
+        doc.setLineWidth(0.3);
+        doc.line(x, yy + 5.5, col === 0 ? 100 : 196, yy + 5.5);
+      });
+      
+      const objY = y + Math.ceil(fields.length / 2) * 8 + 6;
+      
+      // Object box
+      doc.setFillColor(235, 243, 251);
+      doc.setDrawColor(200, 223, 245);
+      doc.roundedRect(leftX - 2, objY, 176, 16, 2, 2, 'FD');
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(11, 79, 158);
+      doc.text('OBJET DE LA MISSION', leftX + 2, objY + 5);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(53, 61, 79);
+      doc.text(mo.objet || '—', leftX + 2, objY + 12);
+      
+      // Remarks
+      let lines;
+      if (mo.remarques && mo.remarques !== '—') {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(142, 151, 168);
+        doc.text('REMARQUES / INSTRUCTIONS', leftX, objY + 23);
+        
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(53, 61, 79);
+        lines = doc.splitTextToSize(mo.remarques, 175);
+        doc.text(lines, leftX, objY + 30);
+      }
+      
+      // Status
+      const statusLabel = {approved:'APPROUVÉ ✅', rejected:'REJETÉ ❌', pending:'EN ATTENTE ⏳'}[mo.status] || 'EN ATTENTE';
+      const linesHeight = (mo.remarques && mo.remarques !== '—' && lines) ? lines.length * 4 : 0;
+      const statusY = objY + (mo.remarques && mo.remarques !== '—' ? 34 + linesHeight : 28);
+      
+      doc.setDrawColor(221, 225, 234);
+      doc.setLineWidth(0.5);
+      doc.line(leftX, statusY, 196, statusY);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(142, 151, 168);
+      doc.text('STATUT', 105, statusY + 7, { align: 'center' });
+      
+      doc.setFontSize(11);
+      doc.setTextColor(11, 79, 158);
+      doc.text(statusLabel, 105, statusY + 14, { align: 'center' });
+      
+      // Comment
+      let commentLines;
+      if (mo.comment) {
+        doc.setFontSize(9);
+        doc.setTextColor(99, 110, 130);
+        commentLines = doc.splitTextToSize(`Message : ${mo.comment}`, 170);
+        doc.text(commentLines, 105, statusY + 21, { align: 'center' });
+      }
+      
+      // Signature section
+      const commentHeight = (mo.comment && commentLines) ? commentLines.length * 4 : 0;
+      const sigY = statusY + (mo.comment ? 26 + commentHeight : 22);
+      doc.setDrawColor(142, 151, 168);
+      doc.setLineWidth(0.3);
+      
+      // Left signature line
+      doc.line(30, sigY + 12, 85, sigY + 12);
+      doc.setFontSize(8);
+      doc.setTextColor(142, 151, 168);
+      doc.text('Le collaborateur', 57.5, sigY + 17, { align: 'center' });
+      
+      // Right signature line
+      doc.setLineWidth(0.3);
+      doc.line(110, sigY + 12, 165, sigY + 12);
+      doc.text('Le responsable', 137.5, sigY + 17, { align: 'center' });
+      
+      // Footer
+      const footerY = 285;
+      doc.setDrawColor(221, 225, 234);
+      doc.setLineWidth(0.3);
+      doc.line(14, footerY, 196, footerY);
+      doc.setFontSize(7);
+      doc.setTextColor(142, 151, 168);
+      doc.text(`Document généré par Eqnovia — Notes de Frais • ${mo.numero || 'N/A'}`, 105, footerY + 5, { align: 'center' });
+      doc.text(`Date: ${mo.date || '—'}`, 105, footerY + 10, { align: 'center' });
+      
+      // Convert to base64
+      const pdfOutput = doc.output('arraybuffer');
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(pdfOutput)));
+      resolve(base64);
+    } catch (e) {
+      console.warn('PDF base64 generation failed:', e);
+      reject(e);
+    }
+  });
+}
+
+// Share PDF via Web Share API (mobile)
+async function shareMOByWebShare(docId) {
+  const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
+  if (!mo) return toast('Ordre de mission introuvable.', 'err');
+  
+  if (!navigator.share) {
+    return toast('Le partage n\'est pas supporté sur ce navigateur. Utilisez le bouton PDF pour télécharger.', 'err');
+  }
+  
+  try {
+    // Generate PDF blob
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    
+    // Logo
+    try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch(e) { /* fallback */ }
+    
+    // Title
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`ORDRE DE MISSION N° ${mo.numero || 'N/A'}`, 105, 22, { align: 'center' });
+    
+    // Separator
+    doc.setDrawColor(11, 79, 158);
+    doc.setLineWidth(0.8);
+    doc.line(14, 27, 196, 27);
+    
+    // Info box
+    const leftX = 18;
+    let y = 33;
+    doc.setFontSize(10);
+    
+    const fields = [
+      ['Date d\'émission', mo.date || '—'],
+      ['Collaborateur', mo.employe || '—'],
+      ['Lieu de départ', mo.depart || '—'],
+      ['Lieu de destination', mo.arrivee || '—'],
+      ['Date de début', mo.debut || '—'],
+      ['Date de fin', mo.fin || '—'],
+      ['Mode de transport', mo.transport || '—'],
+      ['Téléphone', mo.tel || '—'],
+    ];
+    
+    fields.forEach(([label, value], fi) => {
+      const col = fi % 2;
+      const row = Math.floor(fi / 2);
+      const x = col === 0 ? leftX : 105;
+      const yy = y + row * 8;
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(142, 151, 168);
+      doc.text(label.toUpperCase(), x, yy);
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(53, 61, 79);
+      doc.text(value, x, yy + 4);
+      
+      doc.setDrawColor(221, 225, 234);
+      doc.setLineWidth(0.3);
+      doc.line(x, yy + 5.5, col === 0 ? 100 : 196, yy + 5.5);
+    });
+    
+    const objY = y + Math.ceil(fields.length / 2) * 8 + 6;
+    
+    doc.setFillColor(235, 243, 251);
+    doc.setDrawColor(200, 223, 245);
+    doc.roundedRect(leftX - 2, objY, 176, 16, 2, 2, 'FD');
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(11, 79, 158);
+    doc.text('OBJET DE LA MISSION', leftX + 2, objY + 5);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(53, 61, 79);
+    doc.text(mo.objet || '—', leftX + 2, objY + 12);
+    
+    let lines;
+    if (mo.remarques && mo.remarques !== '—') {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(142, 151, 168);
+      doc.text('REMARQUES / INSTRUCTIONS', leftX, objY + 23);
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(53, 61, 79);
+      lines = doc.splitTextToSize(mo.remarques, 175);
+      doc.text(lines, leftX, objY + 30);
+    }
+    
+    const statusLabel = {approved:'APPROUVÉ ✅', rejected:'REJETÉ ❌', pending:'EN ATTENTE ⏳'}[mo.status] || 'EN ATTENTE';
+    const linesHeight = (mo.remarques && mo.remarques !== '—' && lines) ? lines.length * 4 : 0;
+    const statusY = objY + (mo.remarques && mo.remarques !== '—' ? 34 + linesHeight : 28);
+    
+    doc.setDrawColor(221, 225, 234);
+    doc.setLineWidth(0.5);
+    doc.line(leftX, statusY, 196, statusY);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(142, 151, 168);
+    doc.text('STATUT', 105, statusY + 7, { align: 'center' });
+    
+    doc.setFontSize(11);
+    doc.setTextColor(11, 79, 158);
+    doc.text(statusLabel, 105, statusY + 14, { align: 'center' });
+    
+    let commentLines;
+    if (mo.comment) {
+      doc.setFontSize(9);
+      doc.setTextColor(99, 110, 130);
+      commentLines = doc.splitTextToSize(`Message : ${mo.comment}`, 170);
+      doc.text(commentLines, 105, statusY + 21, { align: 'center' });
+    }
+    
+    const commentHeight = (mo.comment && commentLines) ? commentLines.length * 4 : 0;
+    const sigY = statusY + (mo.comment ? 26 + commentHeight : 22);
+    doc.setDrawColor(142, 151, 168);
+    doc.setLineWidth(0.3);
+    
+    doc.line(30, sigY + 12, 85, sigY + 12);
+    doc.setFontSize(8);
+    doc.setTextColor(142, 151, 168);
+    doc.text('Le collaborateur', 57.5, sigY + 17, { align: 'center' });
+    
+    doc.setLineWidth(0.3);
+    doc.line(110, sigY + 12, 165, sigY + 12);
+    doc.text('Le responsable', 137.5, sigY + 17, { align: 'center' });
+    
+    const footerY = 285;
+    doc.setDrawColor(221, 225, 234);
+    doc.setLineWidth(0.3);
+    doc.line(14, footerY, 196, footerY);
+    doc.setFontSize(7);
+    doc.setTextColor(142, 151, 168);
+    doc.text(`Document généré par Eqnovia — Notes de Frais • ${mo.numero || 'N/A'}`, 105, footerY + 5, { align: 'center' });
+    doc.text(`Date: ${mo.date || '—'}`, 105, footerY + 10, { align: 'center' });
+    
+    // Get PDF blob
+    const pdfBlob = doc.output('blob');
+    const pdfFile = new File([pdfBlob], `Ordre_Mission_${mo.numero || 'sans_numero'}.pdf`, { type: 'application/pdf' });
+    
+    // Use Web Share API
+    await navigator.share({
+      title: `Ordre de mission N° ${mo.numero}`,
+      text: `Ordre de mission N° ${mo.numero} — ${mo.employe}\nDu ${mo.debut} au ${mo.fin}\n${mo.depart} → ${mo.arrivee}`,
+      files: [pdfFile]
+    });
+    
+    toast('📤 Ordre de mission partagé avec succès !', 'ok');
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      console.warn('Web Share failed:', e);
+      toast('❌ Erreur lors du partage.', 'err');
+    }
+  }
 }
 
 function sendMOByWhatsApp(docId) {
@@ -2267,6 +2762,8 @@ async function addExpense() {
 
   let justifData = null;
   let justifName = '';
+  let justifStorageUrl = null;
+  let justifStoragePath = null;
 
   if (justifFile.files && justifFile.files.length > 0) {
     const file = justifFile.files[0];
@@ -2280,6 +2777,20 @@ async function addExpense() {
         });
         justifData = data;
         justifName = file.name;
+
+        // Upload to Firebase Storage if available
+        if (window.__storage && window.__fbReady) {
+          try {
+            const ext = file.name.split('.').pop() || 'jpg';
+            const fileName = `frais/${Date.now()}_${currentUser}_${file.name.replace(/[^a-z0-9]/gi, '_')}.${ext}`;
+            const storageRef = window.__storageRef(window.__storage, fileName);
+            await window.__uploadBytes(storageRef, file);
+            justifStorageUrl = await window.__getDownloadURL(storageRef);
+            justifStoragePath = fileName;
+          } catch (e) {
+            console.warn('Firebase Storage upload failed, using local base64:', e);
+          }
+        }
       } catch (e) {
         console.warn('Error reading justificatif:', e);
       }
@@ -2301,7 +2812,9 @@ async function addExpense() {
     user: currentUser,
     justif: justifData ? 'Oui' : 'Non',
     justifData: justifData || null,
-    justifName: justifName || null
+    justifName: justifName || null,
+    justifStorageUrl: justifStorageUrl,
+    justifStoragePath: justifStoragePath
   };
   await dataAdd(exp);
 
@@ -2781,32 +3294,191 @@ function renderYearly() {
 // ════════════════════════════════════════════
 // OCR
 // ════════════════════════════════════════════
+// Image preprocessing for better OCR accuracy
+function preprocessImage(img) {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Resize: max dimension 2000px for performance
+    let w = img.naturalWidth || img.width;
+    let h = img.naturalHeight || img.height;
+    const MAX_DIM = 2000;
+    if (w > MAX_DIM || h > MAX_DIM) {
+      const ratio = Math.min(MAX_DIM / w, MAX_DIM / h);
+      w = Math.round(w * ratio);
+      h = Math.round(h * ratio);
+    }
+    canvas.width = w;
+    canvas.height = h;
+    
+    // Draw resized
+    ctx.drawImage(img, 0, 0, w, h);
+    
+    // Get image data for processing
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+    
+    // 1. Convert to grayscale + auto-contrast (histogram stretch)
+    let min = 255, max = 0;
+    const gray = new Uint8Array(w * h);
+    for (let i = 0; i < data.length; i += 4) {
+      // Luminosity grayscale: 0.299*R + 0.587*G + 0.114*B
+      const g = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+      gray[i / 4] = g;
+      if (g < min) min = g;
+      if (g > max) max = g;
+    }
+    
+    // 2. Apply contrast stretch and adaptive threshold (if image is too light/dark)
+    const range = max - min;
+    const useThreshold = range < 150; // Low contrast → apply binarization
+    
+    for (let i = 0; i < gray.length; i++) {
+      let g = gray[i];
+      
+      // Contrast stretch
+      if (range > 20) {
+        g = Math.round((g - min) / range * 255);
+      }
+      
+      // Clamp
+      g = Math.max(0, Math.min(255, g));
+      
+      // Apply threshold for low-contrast images (binarization)
+      if (useThreshold) {
+        // Simple Otsu-inspired threshold at 128 after stretch
+        g = g > 128 ? 255 : 0;
+      }
+      
+      const idx = i * 4;
+      data[idx] = g;
+      data[idx + 1] = g;
+      data[idx + 2] = g;
+      // Keep alpha
+    }
+    
+    ctx.putImageData(imageData, 0, 0);
+    
+    // Convert to blob for Tesseract
+    canvas.toBlob((blob) => {
+      resolve(blob);
+    }, 'image/png', 0.9);
+  });
+}
+
+// Convert PDF first page to image using canvas
+async function pdfToImage(file) {
+  try {
+    // Use PDF.js if available
+    if (window.pdfjsLib) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    }
+    // Fallback: PDF.js not loaded, show error
+    throw new Error('PDF.js non chargé. Installez la librairie PDF.js pour analyser les PDF.');
+  } catch(e) {
+    console.warn('PDF conversion error:', e);
+    throw e;
+  }
+}
+
 function onFileChosen(e) {
   const f = e.target.files[0];
   document.getElementById('fileName').textContent = f ? '📎 ' + f.name : 'Aucun fichier';
+  // Show preview thumbnail
+  showOCRPreview(f);
+}
+
+function showOCRPreview(file) {
+  const preview = document.getElementById('ocrPreview');
+  const previewImg = document.getElementById('ocrPreviewImg');
+  const previewPdfLabel = document.getElementById('ocrPreviewPdfLabel');
+  if (!file || !preview || !previewImg) return;
+  
+  // Reset: show img, hide PDF label
+  previewImg.style.display = 'block';
+  if (previewPdfLabel) previewPdfLabel.style.display = 'none';
+  preview.style.display = 'block';
+  
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      previewImg.src = e.target.result;
+      preview.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  } else if (file.type === 'application/pdf') {
+    previewImg.style.display = 'none';
+    preview.style.display = 'flex';
+    preview.style.flexDirection = 'column';
+    preview.style.alignItems = 'center';
+    preview.style.justifyContent = 'center';
+    if (previewPdfLabel) {
+      previewPdfLabel.style.display = 'block';
+    } else {
+      // Create label element on first use
+      const label = document.createElement('div');
+      label.id = 'ocrPreviewPdfLabel';
+      label.style.cssText = 'font-size:28px;text-align:center;padding:20px 0;';
+      label.innerHTML = '📄<div style="font-size:11px;color:var(--gray-400);margin-top:4px;">PDF chargé</div>';
+      preview.appendChild(label);
+    }
+  } else {
+    preview.style.display = 'none';
+  }
 }
 
 function handleDragOver(e) {
   e.preventDefault();
-  document.getElementById('uploadZone').classList.add('drag-over');
+  e.currentTarget.classList.add('drag-over');
 }
 
-function handleDragLeave() {
-  document.getElementById('uploadZone').classList.remove('drag-over');
+function handleDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
 }
 
 function handleDrop(e) {
   e.preventDefault();
-  document.getElementById('uploadZone').classList.remove('drag-over');
+  const zone = e.currentTarget;
+  zone.classList.remove('drag-over');
   const f = e.dataTransfer.files[0];
-  if (f && f.type.startsWith('image/')) {
+  if (f && (f.type.startsWith('image/') || f.type === 'application/pdf')) {
     const dt = new DataTransfer();
     dt.items.add(f);
     document.getElementById('fileInput').files = dt.files;
     document.getElementById('fileName').textContent = '📎 ' + f.name;
-    toast('Image prête pour OCR !');
+    showOCRPreview(f);
+    toast((f.type.startsWith('image/') ? 'Image' : 'PDF') + ' prêt(e) pour OCR !');
   } else {
-    toast('Veuillez déposer un fichier image.', 'err');
+    toast('Veuillez déposer un fichier image ou PDF.', 'err');
+  }
+}
+
+function handleBatchDrop(e) {
+  e.preventDefault();
+  const zone = e.currentTarget;
+  zone.classList.remove('drag-over');
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    const validFiles = Array.from(files).filter(f => f.type.startsWith('image/') || f.type === 'application/pdf');
+    if (validFiles.length === 0) {
+      toast('Veuillez déposer des images ou PDF uniquement.', 'err');
+      return;
+    }
+    const dt = new DataTransfer();
+    validFiles.forEach(f => dt.items.add(f));
+    document.getElementById('batchFileInput').files = dt.files;
+    document.getElementById('batchFileName').textContent = `📎 ${dt.files.length} fichier(s) sélectionné(s)`;
+    toast(`${dt.files.length} fichier(s) prêt(s) pour le traitement par lots !`);
   }
 }
 
@@ -2816,16 +3488,18 @@ async function runOCR() {
   const bar = document.getElementById('ocrBar');
   const prog = document.getElementById('ocrProgress');
   const btn = document.getElementById('ocrBtn');
+  const extractedPanel = document.getElementById('ocrExtractedFields');
 
   if (!fileInput.files || !fileInput.files.length) {
-    return toast('Choisissez d\'abord une image.', 'err');
+    return toast('Choisissez d\'abord une image ou un PDF.', 'err');
   }
 
   btn.disabled = true;
-  btn.textContent = '⏳ Lecture en cours…';
+  btn.textContent = '⏳ Préparation…';
   prog.style.display = 'block';
   bar.style.width = '0%';
-  out.textContent = '⏳ Initialisation de Tesseract…';
+  out.textContent = '⏳ Préparation de l\'image…';
+  if (extractedPanel) extractedPanel.style.display = 'none';
 
   try {
     const file = fileInput.files[0];
@@ -2834,14 +3508,42 @@ async function runOCR() {
       throw new Error('Tesseract.js n\'est pas chargé. Vérifiez votre connexion internet.');
     }
 
-    const imageUrl = URL.createObjectURL(file);
+    // Step 1: Convert PDF to image if needed
+    let imageBlob;
+    if (file.type === 'application/pdf') {
+      out.textContent = '⏳ Conversion PDF en image…';
+      imageBlob = await pdfToImage(file);
+    } else {
+      imageBlob = file;
+    }
+
+    // Step 2: Preprocess image for better OCR
+    out.textContent = '⏳ Optimisation de l\'image…';
+    bar.style.width = '10%';
     
-    const result = await Tesseract.recognize(imageUrl, 'fra', {
+    const img = new Image();
+    const imageUrl = URL.createObjectURL(imageBlob);
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = imageUrl;
+    });
+    
+    const processedBlob = await preprocessImage(img);
+    URL.revokeObjectURL(imageUrl);
+    
+    const processedUrl = URL.createObjectURL(processedBlob);
+    bar.style.width = '20%';
+
+    // Step 3: Run Tesseract with multiple languages
+    out.textContent = '⏳ Initialisation de Tesseract…';
+    
+    const result = await Tesseract.recognize(processedUrl, 'fra+eng', {
       logger: m => {
         if (m.status === 'recognizing text') {
           const progress = Math.round(m.progress * 100);
-          bar.style.width = Math.min(progress, 100) + '%';
-          out.textContent = `⏳ Reconnaissance en cours... ${progress}%`;
+          bar.style.width = Math.min(20 + progress * 0.75, 95) + '%';
+          out.textContent = `⏳ Reconnaissance... ${progress}%`;
         }
         if (m.status === 'loading tesseract core') {
           out.textContent = '⏳ Chargement du moteur OCR...';
@@ -2850,12 +3552,12 @@ async function runOCR() {
           out.textContent = '⏳ Initialisation...';
         }
         if (m.status === 'loading language traineddata') {
-          out.textContent = '⏳ Chargement du dictionnaire français...';
+          out.textContent = '⏳ Chargement dictionnaire français+anglais...';
         }
       }
     });
 
-    URL.revokeObjectURL(imageUrl);
+    URL.revokeObjectURL(processedUrl);
 
     ocrText = result.data.text || '';
     bar.style.width = '100%';
@@ -2863,6 +3565,8 @@ async function runOCR() {
     if (ocrText.trim()) {
       out.textContent = ocrText;
       toast('✅ Texte extrait avec succès !');
+      // Show extracted fields
+      showExtractedOCRFields(ocrText);
     } else {
       out.textContent = '⚠️ Aucun texte détecté. Vérifiez que l\'image est lisible.';
       toast('Aucun texte détecté.', 'err');
@@ -2881,101 +3585,689 @@ async function runOCR() {
   }
 }
 
-function fillFormFromOCR() {
-  if (!ocrText || ocrText.trim().length === 0) {
-    return toast('Lancez d\'abord l\'OCR.', 'err');
+// ════════════════════════════════════════════
+// INTELLIGENT OCR DATA EXTRACTION
+// ════════════════════════════════════════════
+
+// Detect category from OCR text
+function detectCategory(text) {
+  const lower = text.toLowerCase();
+  const catScores = {
+    'Transport': 0,
+    'Repas': 0,
+    'Hébergement': 0,
+    'Matériel': 0,
+    'Communication': 0,
+    'Formation': 0,
+    'Autre': 0
+  };
+  
+  // Transport keywords
+  if (/taxi|uber|essence|carburant|péage|parking|train|avion|billet|transport|voyage|location voiture|gazole|gazoil/.test(lower)) catScores['Transport'] += 3;
+  if (/km|kilométr|indemnité km|frais de déplacement|trajet|navette/.test(lower)) catScores['Transport'] += 2;
+  
+  // Meal keywords
+  if (/restaurant|repas|déjeuner|dîner|petit-déjeuner|café|nourriture|plat|menu|addition/.test(lower)) catScores['Repas'] += 3;
+  if (/note de restaurant|facture restaurant|boucher|traiteur|sandwich/.test(lower)) catScores['Repas'] += 2;
+  
+  // Hotel keywords
+  if (/hôtel|hotel|hébergement|nuitée|séjour|chambre|logement|auberge|ibis|accor|radisson|riad|gîte/.test(lower)) catScores['Hébergement'] += 3;
+  if (/booking|airbnb|expedia/.test(lower)) catScores['Hébergement'] += 2;
+  
+  // Material keywords
+  if (/fourniture|matériel|équipement|achat|article|bureau|informatique|ordinateur|clavier|souris|ecran|imprimante|cartouche/.test(lower)) catScores['Matériel'] += 3;
+  if (/papier|stylo|caisse|outil|pièce détachée|consommable/.test(lower)) catScores['Matériel'] += 2;
+  
+  // Communication keywords
+  if (/téléphone|télécom|internet|abonnement|forfait|appel|recharge|wifi|data|sim/.test(lower)) catScores['Communication'] += 3;
+  if (/orange|maroc telecom|inwi|iam|moi|facture tel/.test(lower)) catScores['Communication'] += 2;
+  
+  // Training keywords
+  if (/formation|stage|séminaire|conférence|cours|atelier|workshop|certification|learning/.test(lower)) catScores['Formation'] += 3;
+  if (/université|école|institut|formation professionnelle/.test(lower)) catScores['Formation'] += 2;
+  
+  // Find best category
+  let bestCat = 'Autre';
+  let bestScore = 0;
+  for (const [cat, score] of Object.entries(catScores)) {
+    if (score > bestScore) {
+      bestScore = score;
+      bestCat = cat;
+    }
   }
+  return bestCat;
+}
 
-  const lines = ocrText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+// Extract all fields from OCR text
+function extractOCRFields(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const fullText = text;
+  const lower = fullText.toLowerCase();
   
+  const result = {
+    date: '',
+    dateConfidence: 0,
+    amount: '',
+    amountConfidence: 0,
+    description: '',
+    descriptionConfidence: 0,
+    category: 'Autre',
+    categoryConfidence: 0,
+    vendor: '',
+    invoiceNumber: ''
+  };
+  
+  // ─── DATE EXTRACTION ───
   const datePatterns = [
-    /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/,
-    /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})/,
-    /(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/
+    // DD/MM/YYYY or DD-MM-YYYY
+    { pattern: /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/, parse: (m) => `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    // DD/MM/YY
+    { pattern: /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})(?=\D|$)/, parse: (m) => { const y = parseInt(m[3]) > 30 ? '19'+m[3] : '20'+m[3]; return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; }, confidence: 0.7 },
+    // YYYY-MM-DD
+    { pattern: /(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/, parse: (m) => `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`, confidence: 0.85 },
+    // French text dates: "12 janvier 2024" or "1er janvier 2024"
+    { pattern: /(\d{1,2})(?:er)?[\s]*janvier[\s]*(\d{4})/i, parse: (m) => `${m[2]}-01-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*février[\s]*(\d{4})/i, parse: (m) => `${m[2]}-02-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*mars[\s]*(\d{4})/i, parse: (m) => `${m[2]}-03-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*avril[\s]*(\d{4})/i, parse: (m) => `${m[2]}-04-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*mai[\s]*(\d{4})/i, parse: (m) => `${m[2]}-05-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*juin[\s]*(\d{4})/i, parse: (m) => `${m[2]}-06-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*juillet[\s]*(\d{4})/i, parse: (m) => `${m[2]}-07-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*août[\s]*(\d{4})/i, parse: (m) => `${m[2]}-08-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*septembre[\s]*(\d{4})/i, parse: (m) => `${m[2]}-09-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*octobre[\s]*(\d{4})/i, parse: (m) => `${m[2]}-10-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*novembre[\s]*(\d{4})/i, parse: (m) => `${m[2]}-11-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*décembre[\s]*(\d{4})/i, parse: (m) => `${m[2]}-12-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    // English text dates: "January 12, 2024" or "12 January 2024"
+    { pattern: /(january|february|march|april|may|june|july|august|september|october|november|december)[\s]+(\d{1,2})[,]?[\s]+(\d{4})/i, parse: (m) => { const months={january:'01',february:'02',march:'03',april:'04',may:'05',june:'06',july:'07',august:'08',september:'09',october:'10',november:'11',december:'12'}; return `${m[3]}-${months[m[1].toLowerCase()]}-${m[2].padStart(2,'0')}`; }, confidence: 0.85 },
+    { pattern: /(\d{1,2})[\s]+(january|february|march|april|may|june|july|august|september|october|november|december)[\s]+(\d{4})/i, parse: (m) => { const months={january:'01',february:'02',march:'03',april:'04',may:'05',june:'06',july:'07',august:'08',september:'09',october:'10',november:'11',december:'12'}; return `${m[3]}-${months[m[2].toLowerCase()]}-${m[1].padStart(2,'0')}`; }, confidence: 0.85 }
   ];
   
-  const amountPatterns = [
-    /(\d[\d\s,.]*[,.]\d{2})\s*(?:DH|Dhs|MAD)?/i,
-    /(?:total|ttc|montant|prix)[\s:]*(\d[\d\s,.]*[,.]\d{2})/i,
-    /(\d{1,3}(?:[\s.,]\d{3})*[,.]\d{2})/
-  ];
-
-  let foundDate = '';
-  let foundAmount = '';
-  let foundDesc = '';
-
-  for (const line of lines) {
-    for (const pattern of datePatterns) {
-      const match = line.match(pattern);
-      if (match) {
-        if (pattern === datePatterns[0]) {
-          const [_, d, m, y] = match;
-          foundDate = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
-        } else if (pattern === datePatterns[1]) {
-          const [_, d, m, y] = match;
-          const year = parseInt(y) > 30 ? '19' + y : '20' + y;
-          foundDate = `${year}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
-        } else if (pattern === datePatterns[2]) {
-          const [_, y, m, d] = match;
-          foundDate = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  // Score dates: prefer dates near "date" or "facture" keywords
+  let bestDateScore = 0;
+  let bestDate = '';
+  for (const dp of datePatterns) {
+    const match = lower.match(dp.pattern);
+    if (match) {
+      const parsed = dp.parse(match);
+      // Increase confidence if near a date keyword
+      const lineWithDate = lines.find(l => l.match(dp.pattern));
+      let lineScore = dp.confidence;
+      if (lineWithDate) {
+        const l = lineWithDate.toLowerCase();
+        if (/date|facture|invoice|émis|le|du/.test(l)) lineScore += 0.2;
+        if (/total|montant|prix/.test(l)) lineScore -= 0.2;
+      }
+      if (lineScore > bestDateScore && parsed) {
+        // Validate the date
+        const d = new Date(parsed);
+        if (!isNaN(d.getTime()) && d <= new Date() && d >= new Date('2010-01-01')) {
+          bestDateScore = lineScore;
+          bestDate = parsed;
         }
+      }
+    }
+  }
+  if (bestDate) {
+    result.date = bestDate;
+    result.dateConfidence = Math.round(bestDateScore * 100);
+  }
+  
+  // ─── AMOUNT EXTRACTION ───
+  const amountPatterns = [
+    // Keywords first: TOTAL TTC, NET A PAYER, etc.
+    { pattern: /(?:total\s*(?:ttc|general|général)?|net\s*à\s*payer|à\s*payer|net\s*payé)\s*[:\s]+(\d[\d\s,.]*[,.]\d{2})/i, score: 5 },
+    { pattern: /(?:ttc|toutes taxes comprises)\s*[:\s]+(\d[\d\s,.]*[,.]\d{2})/i, score: 4 },
+    { pattern: /(?:montant\s*(?:total|ttc)?|total|prix\s*(?:total)?|somme)\s*[:\s]+(\d[\d\s,.]*[,.]\d{2})/i, score: 3 },
+    // Number with currency suffix
+    { pattern: /(\d[\d\s,.]*[,.]\d{2})\s*(?:dh|dhs|mad|€|eur|usd|euro|dollar)/i, score: 2.5 },
+    // Currency prefix
+    { pattern: /(?:dh|mad|€|\$)\s*(\d[\d\s,.]*[,.]\d{2})/i, score: 2 },
+    // Any decimal number that looks like an amount
+    { pattern: /(\d{1,3}(?:[\s.,]?\d{3})*[.,]\d{2})(?!\s*%)(?![\d,])/, score: 1 }
+  ];
+  
+  let bestAmtScore = 0;
+  let bestAmt = '';
+  for (const ap of amountPatterns) {
+    const match = lower.match(ap.pattern);
+    if (match) {
+      let amtStr = match[1].replace(/\s/g, '').replace(',', '.');
+      const num = parseFloat(amtStr);
+      if (!isNaN(num) && num > 0 && num < 9999999) {
+        // Prefer the largest amount (total) when multiple found
+        const effectiveScore = ap.score + (num > 100 ? 0.5 : 0);
+        if (effectiveScore > bestAmtScore) {
+          bestAmtScore = effectiveScore;
+          bestAmt = num;
+        }
+      }
+    }
+  }
+  if (bestAmt) {
+    result.amount = bestAmt;
+    // Normalize confidence to 0-100
+    result.amountConfidence = Math.min(Math.round(bestAmtScore * 20), 100);
+  }
+  
+  // ─── DESCRIPTION EXTRACTION ───
+  let bestDesc = '';
+  let bestDescScore = 0;
+  for (const line of lines) {
+    let lineScore = 0;
+    if (line.length < 3 || line.length > 120) continue;
+    // Skip lines that are just numbers/dates
+    if (/^[\d\s\/\-\.:]+$/.test(line)) continue;
+    if (/^[A-Z\s]{3,}$/.test(line) && line.length < 10) continue;
+    // Skip common header/footer keywords
+    if (/^(facture|invoice|total|montant|date|client|tva|ht|ttc|ref|n°|email|tel|fax|www|\.com)/i.test(line)) continue;
+    if (/^\d{1,3}[\s.,]\d{3}/.test(line)) continue;
+    
+    // Score by content type
+    if (/prestation|service|mission|conseil|étude|analyse|intervention|maintenance|réparation/.test(line)) lineScore += 3;
+    if (/transport|taxi|restaurant|hôtel|achat|formation|repas|déplacement|location/.test(line)) lineScore += 2.5;
+    if (/^[A-Z]/.test(line) && line.length > 10) lineScore += 2; // Proper sentence
+    if (line.length > 15) lineScore += 1.5;
+    if (/\d{1,2}[\/\-]\d{1,2}/.test(line)) lineScore -= 1; // Contains a date, skip
+    
+    if (lineScore > bestDescScore) {
+      bestDescScore = lineScore;
+      bestDesc = line.substring(0, 100);
+    }
+  }
+  if (bestDesc) {
+    result.description = bestDesc;
+    result.descriptionConfidence = Math.min(Math.round(bestDescScore * 20), 100);
+  }
+  
+  // ─── VENDOR / COMPANY NAME ───
+  // Look for common invoice patterns: company name at top
+  for (const line of lines) {
+    // Skip known non-vendor lines
+    if (line.length < 3) continue;
+    if (/^(facture|invoice|total|date|montant|ht|ttc|tva|ref|n°)/i.test(line)) continue;
+    if (/^[\d\s\/\-]+$/.test(line)) continue;
+    if (line.length > 5 && line.length < 50 && /(SARL|SA|SAS|EI|SNC|EURL|Maroc|Casablanca|Rabat|Tanger)/i.test(line)) {
+      result.vendor = line;
+      break;
+    }
+  }
+  if (!result.vendor) {
+    // First line that looks like a company name
+    for (const line of lines.slice(0, 8)) {
+      if (line.length > 5 && line.length < 50 && !/^(facture|invoice|total|date)/i.test(line) && !/^[\d\s\/\-\.]+$/.test(line)) {
+        result.vendor = line;
         break;
       }
     }
-    if (foundDate) break;
   }
-
+  
+  // ─── INVOICE NUMBER ───
   for (const line of lines) {
-    for (const pattern of amountPatterns) {
-      const match = line.match(pattern);
-      if (match) {
-        let amt = match[1].replace(/\s/g, '').replace(',', '.');
-        const num = parseFloat(amt);
-        if (!isNaN(num) && num > 0 && num < 1000000) {
-          foundAmount = num;
+    const match = line.match(/(?:facture|invoice|n°|nº|no|numéro|ref)\s*[:\s]*(\w[\w\d\/\-]+)/i);
+    if (match && match[1].length > 2) {
+      result.invoiceNumber = match[1];
+      break;
+    }
+  }
+  
+  // ─── CATEGORY DETECTION ───
+  const detectedCategory = detectCategory(fullText);
+  result.category = detectedCategory;
+  result.categoryConfidence = detectedCategory !== 'Autre' ? 70 : 0;
+  
+  return result;
+}
+
+// Display extracted fields in the OCR panel
+function showExtractedOCRFields(text) {
+  const container = document.getElementById('ocrExtractedFields');
+  if (!container) return;
+  
+  const fields = extractOCRFields(text);
+  
+  container.style.display = 'block';
+  
+  function confidenceBar(val) {
+    const color = val > 70 ? 'var(--green)' : val > 40 ? 'var(--eq-orange)' : 'var(--red)';
+    return `<div style="display:flex;align-items:center;gap:6px;"><div style="flex:1;height:4px;background:var(--gray-100);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${val}%;background:${color};border-radius:2px;transition:width .5s;"></div></div><span style="font-size:9px;color:var(--gray-400);font-weight:600;">${val}%</span></div>`;
+  }
+  
+  container.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+      <span>📊 Données extraites</span>
+      <span style="font-size:9px;color:var(--gray-400);font-weight:400;">— Vérifiez avant de remplir</span>
+    </div>
+    <div style="display:grid;gap:6px;">
+      <div class="ocr-field-row">
+        <span class="ocr-field-label">📅 Date</span>
+        <span class="ocr-field-value ${fields.date ? 'found' : ''}">${fields.date || 'Non détectée'}</span>
+        ${fields.date ? confidenceBar(fields.dateConfidence) : ''}
+      </div>
+      <div class="ocr-field-row">
+        <span class="ocr-field-label">💰 Montant TTC</span>
+        <span class="ocr-field-value ${fields.amount ? 'found' : ''}">${fields.amount ? fmtDH(fields.amount) : 'Non détecté'}</span>
+        ${fields.amount ? confidenceBar(fields.amountConfidence) : ''}
+      </div>
+      <div class="ocr-field-row">
+        <span class="ocr-field-label">📝 Description</span>
+        <span class="ocr-field-value ${fields.description ? 'found' : ''}">${fields.description || 'Non détectée'}</span>
+        ${fields.description ? confidenceBar(fields.descriptionConfidence) : ''}
+      </div>
+      <div class="ocr-field-row">
+        <span class="ocr-field-label">🏷️ Catégorie</span>
+        <span class="ocr-field-value ${fields.category !== 'Autre' ? 'found' : ''}">${fields.category}</span>
+        ${fields.category !== 'Autre' ? confidenceBar(fields.categoryConfidence) : ''}
+      </div>
+      <div class="ocr-field-row">
+        <span class="ocr-field-label">🏢 Fournisseur</span>
+        <span class="ocr-field-value ${fields.vendor ? 'found' : ''}">${fields.vendor || 'Non détecté'}</span>
+      </div>
+      <div class="ocr-field-row">
+        <span class="ocr-field-label">🔢 N° Facture</span>
+        <span class="ocr-field-value ${fields.invoiceNumber ? 'found' : ''}">${fields.invoiceNumber || 'Non détecté'}</span>
+      </div>
+    </div>
+    <div style="margin-top:8px;display:flex;gap:6px;">
+      <button class="btn btn-primary btn-full" onclick="fillFormFromExtracted()" style="height:32px;font-size:11px;">
+        ⬅️ Remplir le formulaire
+      </button>
+    </div>
+  `;
+  
+  // Store extracted fields for use by fillFormFromExtracted
+  window._ocrExtracted = fields;
+}
+
+// Fill form using the extracted data
+function fillFormFromExtracted() {
+  const fields = window._ocrExtracted;
+  if (!fields) {
+    return fillFormFromOCR(); // Fallback to old method
+  }
+  
+  let filled = 0;
+  if (fields.date) {
+    document.getElementById('dateInput').value = fields.date;
+    filled++;
+  }
+  if (fields.amount) {
+    document.getElementById('amountInput').value = fields.amount;
+    filled++;
+  }
+  if (fields.description) {
+    document.getElementById('descInput').value = fields.description;
+    filled++;
+  }
+  if (fields.category !== 'Autre') {
+    // Try to set category if it exists in select
+    const catSelect = document.getElementById('catInput');
+    if (catSelect) {
+      for (const opt of catSelect.options) {
+        if (opt.value.toLowerCase() === fields.category.toLowerCase()) {
+          catSelect.value = opt.value;
           break;
         }
       }
     }
-    if (foundAmount) break;
+    filled++;
   }
-
-  let bestDesc = '';
-  let bestDescLength = 0;
-  for (const line of lines) {
-    if (line.length > 5 && 
-        !line.match(/^(facture|invoice|total|montant|date|client|tva|ht|ttc|ref|n°)/i) &&
-        !line.match(/^\d+$/) &&
-        !line.match(/^[\d\s,.]*$/) &&
-        !line.match(/^[A-Z]{2,}$/)) {
-      if (line.length > bestDescLength) {
-        bestDescLength = line.length;
-        bestDesc = line.substring(0, 80);
-      }
+  
+  // Use vendor as mission object if available
+  if (fields.vendor) {
+    const missionInput = document.getElementById('missionInput');
+    if (missionInput && !missionInput.value) {
+      missionInput.value = fields.vendor;
     }
   }
-
-  if (bestDesc) foundDesc = bestDesc;
-
-  let filled = 0;
-  if (foundDate) {
-    document.getElementById('dateInput').value = foundDate;
-    filled++;
-  }
-  if (foundAmount) {
-    document.getElementById('amountInput').value = foundAmount;
-    filled++;
-  }
-  if (foundDesc) {
-    document.getElementById('descInput').value = foundDesc;
-    filled++;
-  }
-
+  
   toast(filled > 0 ? 
     `${filled} champ(s) rempli(s) — Vérifiez les valeurs avant d'ajouter.` : 
     'Aucun champ détecté. Vérifiez que l\'image contient une facture lisible.', 
     filled > 0 ? 'ok' : 'err'
   );
+}
+
+// Legacy fillFormFromOCR - keep for backward compatibility
+function fillFormFromOCR() {
+  if (!ocrText || ocrText.trim().length === 0) {
+    return toast('Lancez d\'abord l\'OCR.', 'err');
+  }
+  // Use the new extraction pipeline
+  const fields = extractOCRFields(ocrText);
+  window._ocrExtracted = fields;
+  fillFormFromExtracted();
+}
+
+// ════════════════════════════════════════════
+// BATCH OCR — Traitement par lots
+// ════════════════════════════════════════════
+
+// Store for batch OCR results
+window._batchOCRResults = [];
+
+function onBatchFilesChosen(e) {
+  const files = e.target.files;
+  const label = document.getElementById('batchFileName');
+  if (!files || !files.length) {
+    label.textContent = 'Aucun fichier sélectionné';
+    return;
+  }
+  label.textContent = `📎 ${files.length} fichier(s) sélectionné(s)`;
+  toast(`${files.length} fichier(s) chargé(s) — Prêt pour le traitement par lots.`, 'info');
+}
+
+async function runBatchOCR() {
+  const fileInput = document.getElementById('batchFileInput');
+  const files = fileInput.files;
+  if (!files || !files.length) {
+    return toast('Sélectionnez d\'abord des fichiers.', 'err');
+  }
+
+  const totalFiles = files.length;
+  const btn = document.getElementById('batchOcrBtn');
+  const progress = document.getElementById('batchOcrProgress');
+  const bar = document.getElementById('batchOcrBar');
+  const status = document.getElementById('batchStatus');
+  const resultsContainer = document.getElementById('batchResults');
+  const resultsList = document.getElementById('batchResultsList');
+  const countSpan = document.getElementById('batchCount');
+
+  if (typeof Tesseract === 'undefined') {
+    return toast('Tesseract.js n\'est pas chargé.', 'err');
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Traitement en cours…';
+  progress.style.display = 'block';
+  bar.style.width = '0%';
+  status.textContent = 'Préparation…';
+  resultsContainer.style.display = 'none';
+  window._batchOCRResults = [];
+
+  let successCount = 0;
+  let errorCount = 0;
+
+  for (let i = 0; i < totalFiles; i++) {
+    const file = files[i];
+    const fileProgress = ((i) / totalFiles * 100);
+    bar.style.width = fileProgress + '%';
+    
+    status.textContent = `📄 Traitement ${i + 1}/${totalFiles} : ${file.name}`;
+    
+    try {
+      // Convert PDF to image if needed
+      let imageBlob;
+      if (file.type === 'application/pdf') {
+        status.textContent = `📄 ${i + 1}/${totalFiles} : Conversion PDF → ${file.name}`;
+        imageBlob = await pdfToImage(file);
+      } else {
+        imageBlob = file;
+      }
+
+      // Preprocess image
+      status.textContent = `📄 ${i + 1}/${totalFiles} : Optimisation → ${file.name}`;
+      const img = new Image();
+      const imageUrl = URL.createObjectURL(imageBlob);
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = imageUrl;
+      });
+      
+      const processedBlob = await preprocessImage(img);
+      URL.revokeObjectURL(imageUrl);
+      const processedUrl = URL.createObjectURL(processedBlob);
+
+      // Run Tesseract
+      status.textContent = `📄 ${i + 1}/${totalFiles} : OCR en cours → ${file.name}`;
+      let ocrResultText = '';
+      try {
+        const result = await Tesseract.recognize(processedUrl, 'fra+eng', {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              const subProgress = Math.round(m.progress * 100);
+              bar.style.width = Math.min(fileProgress + (subProgress / totalFiles), 98) + '%';
+            }
+          }
+        });
+        ocrResultText = result.data.text || '';
+      } finally {
+        URL.revokeObjectURL(processedUrl);
+      }
+
+      const text = ocrResultText;
+      if (text.trim()) {
+        // Extract fields
+        const fields = extractOCRFields(text);
+        fields._fileName = file.name;
+        fields._fileSize = file.size;
+        fields._text = text.substring(0, 300);
+        fields._dateAdded = new Date().toISOString();
+        
+        // Store the file reference for justificatif (only images)
+        if (file.type.startsWith('image/')) {
+          fields._file = file;
+        }
+        
+        window._batchOCRResults.push(fields);
+        successCount++;
+      } else {
+        // Push entry with error flag
+        window._batchOCRResults.push({
+          _fileName: file.name,
+          _fileSize: file.size,
+          _text: '',
+          _error: 'Aucun texte détecté',
+          date: '', amount: '', description: '', category: 'Autre', vendor: '', invoiceNumber: '',
+          dateConfidence: 0, amountConfidence: 0, descriptionConfidence: 0, categoryConfidence: 0
+        });
+        errorCount++;
+      }
+    } catch (err) {
+      console.warn('Batch OCR error for', file.name, ':', err);
+      window._batchOCRResults.push({
+        _fileName: file.name,
+        _fileSize: file.size,
+        _text: '',
+        _error: err.message || 'Erreur inconnue',
+        date: '', amount: '', description: '', category: 'Autre', vendor: '', invoiceNumber: '',
+        dateConfidence: 0, amountConfidence: 0, descriptionConfidence: 0, categoryConfidence: 0
+      });
+      errorCount++;
+    }
+    
+    // Tiny delay for UI updates
+    await new Promise(r => setTimeout(r, 50));
+  }
+
+  bar.style.width = '100%';
+  
+  if (successCount > 0) {
+    status.textContent = `✅ Traitement terminé : ${successCount} facture(s) lue(s), ${errorCount} erreur(s)`;
+    toast(`✅ ${successCount} facture(s) traitées avec succès !`, 'ok');
+  } else {
+    status.textContent = '❌ Aucune facture n\'a pu être lue.';
+    toast('Aucune facture n\'a pu être lue.', 'err');
+  }
+  
+  // Render results
+  renderBatchResults();
+  
+  btn.disabled = false;
+  btn.textContent = '📚 Traiter toutes les factures';
+  setTimeout(() => { progress.style.display = 'none'; bar.style.width = '0%'; }, 2000);
+}
+
+function renderBatchResults() {
+  const results = window._batchOCRResults;
+  const container = document.getElementById('batchResults');
+  const list = document.getElementById('batchResultsList');
+  const countSpan = document.getElementById('batchCount');
+  const addAllBtn = document.getElementById('batchAddAllBtn');
+  
+  if (!results.length) {
+    container.style.display = 'none';
+    return;
+  }
+  
+  container.style.display = 'block';
+  if (countSpan) countSpan.textContent = results.length;
+  
+  // Check if all results are valid (have at least date OR amount OR description)
+  const validCount = results.filter(r => r.date || r.amount || r.description).length;
+  if (addAllBtn) {
+    addAllBtn.textContent = validCount > 0 ? `➕ Ajouter ${validCount} facture(s) valide(s)` : '➕ Ajouter tout (⚠️ aucune valide)';
+    addAllBtn.disabled = validCount === 0;
+  }
+  
+  list.innerHTML = results.map((r, idx) => {
+    const isError = r._error;
+    const hasData = r.date || r.amount || r.description;
+    
+    return `
+    <div class="batch-result-item ${isError ? 'batch-error' : ''} ${!isError && !hasData ? 'batch-warning' : ''}">
+      <div class="batch-result-header">
+        <span class="batch-result-num">#${idx + 1}</span>
+        <span class="batch-result-file">📄 ${esc(r._fileName)}${r._fileSize ? ' (' + Math.round(r._fileSize / 1024) + ' Ko)' : ''}</span>
+        ${isError ? `<span class="batch-result-err">❌ ${esc(r._error)}</span>` : ''}
+        <div class="batch-result-actions">
+          ${!isError && hasData ? `<button class="btn btn-primary" onclick="addBatchExpense(${idx})" style="height:26px;font-size:9px;padding:0 8px;">➕ Ajouter</button>` : ''}
+          <button class="btn btn-ghost" onclick="removeBatchResult(${idx})" style="height:26px;font-size:9px;padding:0 8px;color:var(--red);">✕</button>
+        </div>
+      </div>
+      ${!isError ? `
+      <div class="batch-result-fields">
+        <div class="batch-field"><span class="batch-field-label">📅 Date</span><span class="batch-field-value ${r.date ? 'found' : ''}">${r.date || '—'}</span></div>
+        <div class="batch-field"><span class="batch-field-label">💰 Montant</span><span class="batch-field-value ${r.amount ? 'found' : ''}">${r.amount ? fmtDH(r.amount) : '—'}</span></div>
+        <div class="batch-field" style="flex:2;"><span class="batch-field-label">📝 Description</span><span class="batch-field-value ${r.description ? 'found' : ''}">${r.description || '—'}</span></div>
+        <div class="batch-field"><span class="batch-field-label">🏷️ Catégorie</span><span class="batch-field-value ${r.category !== 'Autre' ? 'found' : ''}">${r.category}</span></div>
+        <div class="batch-field"><span class="batch-field-label">🏢 Fournisseur</span><span class="batch-field-value ${r.vendor ? 'found' : ''}">${r.vendor || '—'}</span></div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+async function addBatchExpense(idx, skipToast = false) {
+  const results = window._batchOCRResults;
+  if (idx < 0 || idx >= results.length) return;
+  
+  const r = results[idx];
+  if (!r.date && !r.amount && !r.description) {
+    if (!skipToast) toast('Impossible d\'ajouter : aucune donnée extraite.', 'err');
+    return false;
+  }
+  
+  // Build expense object
+  const exp = {
+    id: Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+    date: r.date || today(),
+    desc: r.description || 'Facture ' + r._fileName,
+    amount: r.amount || 0,
+    cat: r.category && r.category !== 'Autre' ? r.category : document.getElementById('catInput').value,
+    mission: r.vendor || '',
+    comment: 'Ajouté via OCR batch — ' + r._fileName,
+    user: currentUser,
+    justif: 'Non',
+    justifData: null,
+    justifName: null,
+    justifStorageUrl: null,
+    justifStoragePath: null
+  };
+  
+  // If we have the file, try to read it as justificatif
+  if (r._file && r._file.type.startsWith('image/')) {
+    try {
+      const reader = new FileReader();
+      const data = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(r._file);
+      });
+      if (data) {
+        exp.justif = 'Oui';
+        exp.justifData = data;
+        exp.justifName = r._fileName;
+        
+        // Try Firebase Storage upload
+        if (window.__storage && window.__fbReady) {
+          try {
+            const ext = r._fileName.split('.').pop() || 'jpg';
+            const fileName = `frais/${Date.now()}_${currentUser}_${r._fileName.replace(/[^a-z0-9]/gi, '_')}.${ext}`;
+            const storageRef = window.__storageRef(window.__storage, fileName);
+            await window.__uploadBytes(storageRef, r._file);
+            exp.justifStorageUrl = await window.__getDownloadURL(storageRef);
+            exp.justifStoragePath = fileName;
+          } catch (e) {
+            console.warn('Firebase Storage upload failed:', e);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error reading justificatif from batch:', e);
+    }
+  }
+  
+  await dataAdd(exp);
+  
+  // Remove from results
+  window._batchOCRResults.splice(idx, 1);
+  renderBatchResults();
+  
+  updateKPIs();
+  if (activeTab !== 'saisie') switchTab(activeTab); else renderAll();
+  
+  if (!skipToast) toast('✅ Dépense ajoutée : ' + (r.description || r._fileName), 'ok');
+  return true;
+}
+
+async function addAllBatchExpenses() {
+  const results = window._batchOCRResults;
+  if (!results.length) return toast('Aucun résultat à ajouter.', 'err');
+  
+  const btn = document.getElementById('batchAddAllBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Ajout en cours…';
+  
+  let added = 0;
+  let errors = 0;
+  
+  // Process in reverse to maintain correct indices after deletion
+  for (let i = results.length - 1; i >= 0; i--) {
+    const r = results[i];
+    if (r.date || r.amount || r.description) {
+      const ok = await addBatchExpense(i, true);
+      if (ok) added++;
+      else errors++;
+    } else {
+      errors++;
+    }
+  }
+  
+  btn.disabled = false;
+  btn.textContent = '➕ Ajouter tout';
+  
+  renderBatchResults();
+  updateKPIs();
+  if (activeTab !== 'saisie') switchTab(activeTab); else renderAll();
+  
+  toast(`✅ ${added} dépense(s) ajoutée(s)${errors > 0 ? ', ' + errors + ' ignorée(s)' : ''}`, 'ok');
+}
+
+function removeBatchResult(idx) {
+  window._batchOCRResults.splice(idx, 1);
+  renderBatchResults();
+}
+
+function clearBatchResults() {
+  if (window._batchOCRResults.length === 0) return;
+  if (!confirm('Effacer tous les résultats OCR batch ?')) return;
+  window._batchOCRResults = [];
+  document.getElementById('batchResults').style.display = 'none';
+  document.getElementById('batchStatus').textContent = '';
+  document.getElementById('batchFileInput').value = '';
+  document.getElementById('batchFileName').textContent = 'Aucun fichier sélectionné';
+  toast('🗑️ Résultats effacés.', 'info');
 }
 
 // ════════════════════════════════════════════
@@ -3293,9 +4585,9 @@ function renderComparison() {
     return {pct: `${arrow} ${Math.abs(chg).toFixed(1)}%`, cls: chg > 0 ? 'up' : chg < 0 ? 'down' : 'same', arrow};
   }
 
-  const totalChg = fmtChange(total1, total2);
-  const countChg = fmtChange(count1, count2);
-  const avgChg = fmtChange(avg1, avg2);
+  const totalChg = fmtChange(total2, total1);
+  const countChg = fmtChange(count2, count1);
+  const avgChg = fmtChange(avg2, avg1);
 
   // Category breakdown
   const cats1 = {}, cats2 = {};
@@ -3376,11 +4668,15 @@ function renderComparison() {
         <div class="cmp-header"><div class="cmp-icon red">💡</div> Recommandations</div>
         <div class="cmp-body">
           <div style="font-size:12px;color:var(--gray-700);line-height:1.7;">
-            ${total2 > total1
-              ? `<p>⚠️ Les dépenses ont <strong>augmenté de ${Math.abs(((total2-total1)/total1*100)).toFixed(1)}%</strong> entre les deux périodes.</p>`
-              : total2 < total1
-              ? `<p>✅ Les dépenses ont <strong>baissé de ${Math.abs(((total2-total1)/total1*100)).toFixed(1)}%</strong> entre les deux périodes. Bonne tendance !</p>`
-              : `<p>➡️ Les dépenses sont stables entre les deux périodes.</p>`
+            ${total1 > 0
+              ? (total2 > total1
+                  ? `<p>⚠️ Les dépenses ont <strong>augmenté de ${Math.abs(((total2-total1)/total1*100)).toFixed(1)}%</strong> entre les deux périodes.</p>`
+                  : total2 < total1
+                  ? `<p>✅ Les dépenses ont <strong>baissé de ${Math.abs(((total2-total1)/total1*100)).toFixed(1)}%</strong> entre les deux périodes. Bonne tendance !</p>`
+                  : `<p>➡️ Les dépenses sont stables entre les deux périodes.</p>`)
+              : total2 > 0
+                ? `<p>⚠️ Les dépenses ont <strong>augmenté</strong> entre les deux périodes (période précédente à 0).</p>`
+                : `<p>➡️ Les dépenses sont stables entre les deux périodes.</p>`
             }
             ${allCats.filter(c => {
               const v1 = cats1[c]||0, v2 = cats2[c]||0;
@@ -3389,7 +4685,7 @@ function renderComparison() {
               ? `<p>🔴 Catégories en hausse : ${allCats.filter(c => { const v1=cats1[c]||0,v2=cats2[c]||0; return v1>0&&v2>v1*1.2; }).join(', ')}</p>`
               : ''
             }
-            ${count2 > count1 * 1.2
+            ${count1 > 0 && count2 > count1 * 1.2
               ? `<p>📌 Le nombre de dépenses a augmenté de ${((count2-count1)/count1*100).toFixed(0)}%. Vérifiez si toutes sont justifiées.</p>`
               : ''
             }
@@ -3581,7 +4877,7 @@ function _filterByPeriod(data, periodType, periodValue) {
   if (periodType === 'month') return data.filter(e => e.date?.substring(0,7) === periodValue);
   else if (periodType === 'trimestre') {
     const [y, t] = periodValue.split('-T');
-    const months = getTrimesterMonths(parseInt(t));
+    const months = getTrimesterMonths(parseInt(t.replace('T', '')));
     return data.filter(e => e.date?.substring(0,4) === y && months.includes(e.date?.substring(5,7)));
   } else return data.filter(e => e.date?.substring(0,4) === periodValue);
 }
@@ -3957,6 +5253,9 @@ async function init() {
       toast('💾 Mode local (localStorage)', 'info');
     }
 
+    // Update mode status indicator
+    updateModeStatus();
+
     await dataLoad();
     updateUserUI();
     updateKPIs();
@@ -3968,6 +5267,9 @@ async function init() {
     // Initialize mission orders (new system)
     await dataLoadMissionOrders();
     await dataLoadUserMissionOrders();
+    
+    // Render dashboard mission orders for non-admin users
+    if (!isAdmin) renderDashboardMissionOrders();
     
     // Initialize bottom nav active state
     TABS.forEach(id => {
@@ -3992,6 +5294,184 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   });
+}
+
+// ════════════════════════════════════════════
+// BACKUP MODULE — Justificatifs Photos
+// ════════════════════════════════════════════
+
+// Get all justificatifs from cache
+function getAllJustificatifs() {
+  return cache.filter(e => e.justifData).map(e => ({
+    id: e.id,
+    date: e.date,
+    desc: e.desc,
+    user: e.user,
+    justifData: e.justifData,
+    justifName: e.justifName,
+    amount: e.amount,
+    cat: e.cat,
+    mission: e.mission
+  }));
+}
+
+// Convert base64 data URL to Blob
+function dataURLtoBlob(dataURL) {
+  const parts = dataURL.split(',');
+  const mime = parts[0].match(/:(.*?);/)[1];
+  const bstr = atob(parts[1]);
+  const n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    u8arr[i] = bstr.charCodeAt(i);
+  }
+  return new Blob([u8arr], { type: mime });
+}
+
+// Local backup: Create ZIP and download
+async function backupLocal() {
+  const justificatifs = getAllJustificatifs();
+  if (!justificatifs.length) {
+    toast('Aucun justificatif à sauvegarder.', 'err');
+    return;
+  }
+
+  toast('Création de la sauvegarde locale...', 'ok');
+
+  try {
+    const zip = new JSZip();
+    const folder = zip.folder('justificatifs_backup');
+
+    // Add metadata
+    const metadata = justificatifs.map(j => ({
+      id: j.id,
+      date: j.date,
+      description: j.desc,
+      utilisateur: j.user,
+      montant: j.amount,
+      categorie: j.cat,
+      mission: j.mission,
+      nom_fichier: j.justifName
+    }));
+    folder.file('metadata.json', JSON.stringify(metadata, null, 2));
+
+    // Add images
+    for (const j of justificatifs) {
+      const blob = dataURLtoBlob(j.justifData);
+      const ext = j.justifName ? j.justifName.split('.').pop() : 'jpg';
+      const fileName = `${j.id}_${j.date}_${j.desc.replace(/[^a-z0-9]/gi, '_').substring(0, 30)}.${ext}`;
+      folder.file(fileName, blob);
+    }
+
+    const content = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(content);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup_justificatifs_${new Date().toISOString().split('T')[0]}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast(`Sauvegarde locale créée: ${justificatifs.length} justificatif(s)`, 'ok');
+  } catch (e) {
+    console.error('Local backup error:', e);
+    toast('Erreur lors de la sauvegarde locale.', 'err');
+  }
+}
+
+// Firebase Storage backup
+async function backupFirebase() {
+  const justificatifs = getAllJustificatifs();
+  if (!justificatifs.length) {
+    toast('Aucun justificatif à sauvegarder sur Firebase.', 'err');
+    return;
+  }
+
+  if (!window.__storage || !window.__fbReady) {
+    toast('Firebase Storage non disponible. Vérifiez la configuration.', 'err');
+    return;
+  }
+
+  toast('Sauvegarde sur Firebase Storage...', 'ok');
+  let successCount = 0;
+  let errorCount = 0;
+
+  for (const j of justificatifs) {
+    try {
+      const blob = dataURLtoBlob(j.justifData);
+      const ext = j.justifName ? j.justifName.split('.').pop() : 'jpg';
+      const fileName = `frais/${j.id}_${j.date}_${j.user}.${ext}`;
+
+      const storageRef = window.__storageRef(window.__storage, fileName);
+      await window.__uploadBytes(storageRef, blob);
+      const downloadURL = await window.__getDownloadURL(storageRef);
+
+      // Update Firestore document with storage URL
+      const { collection, getDocs, doc, query, where, updateDoc } = window.__fs;
+      const q = query(collection(window.__db, 'expenses'), where('id', '==', j.id));
+      const snap = await getDocs(q);
+      for (const d of snap.docs) {
+        await updateDoc(doc(window.__db, 'expenses', d.id), {
+          justifStorageUrl: downloadURL,
+          justifStoragePath: fileName
+        });
+      }
+
+      successCount++;
+    } catch (e) {
+      console.error('Firebase backup error for', j.id, e);
+      errorCount++;
+    }
+  }
+
+  if (errorCount === 0) {
+    toast(`Sauvegarde Firebase terminée: ${successCount} fichier(s) uploadé(s)`, 'ok');
+  } else {
+    toast(`Sauvegarde Firebase: ${successCount} succès, ${errorCount} erreur(s)`, 'err');
+  }
+}
+
+// Backup all justificatifs
+async function backupAll() {
+  const justificatifs = getAllJustificatifs();
+  if (!justificatifs.length) {
+    toast('Aucun justificatif à sauvegarder.', 'err');
+    return;
+  }
+
+  toast(`Début de la sauvegarde de ${justificatifs.length} justificatif(s)...`, 'ok');
+
+  // Local backup
+  await backupLocal();
+
+  // Firebase backup
+  if (window.__fbReady && window.__storage) {
+    await backupFirebase();
+  }
+
+  toast('Sauvegarde terminée !', 'ok');
+}
+
+// Render backup status
+function renderBackupStatus() {
+  const justificatifs = getAllJustificatifs();
+  const count = justificatifs.length;
+  const statusEl = document.getElementById('backupStatus');
+  if (statusEl) {
+    statusEl.innerHTML = `
+      <div class="backup-status-card">
+        <div class="backup-stat">
+          <span class="backup-stat-number">${count}</span>
+          <span class="backup-stat-label">Justificatifs disponibles</span>
+        </div>
+        <div class="backup-stat">
+          <span class="backup-stat-number">${window.__fbReady ? '✅' : '❌'}</span>
+          <span class="backup-stat-label">Firebase</span>
+        </div>
+      </div>
+    `;
+  }
 }
 
 // PWA Install Button

@@ -26,6 +26,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>if(typeof pdfjsLib!=='undefined'){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
   
   <!-- Firebase SDK -->
   <script type="module">
@@ -36,6 +39,8 @@
       getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
       createUserWithEmailAndPassword, sendPasswordResetEmail
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getStorage, ref, uploadBytes, uploadString, getDownloadURL, deleteObject }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
     const firebaseConfig = {
       // ⚠️ Ces valeurs sont remplacées via .env + build.js pour la production
@@ -49,18 +54,26 @@
 
     let db = null;
     let auth = null;
+    let storage = null;
     try {
       const app = initializeApp(firebaseConfig);
       db = getFirestore(app);
       auth = getAuth(app);
+      storage = getStorage(app);
       window.__db = db;
       window.__auth = auth;
+      window.__storage = storage;
       window.__signInWithEmail = signInWithEmailAndPassword;
       window.__signOut = signOut;
       window.__onAuthStateChanged = onAuthStateChanged;
       window.__createAuthUser = createUserWithEmailAndPassword;
       window.__sendPasswordReset = sendPasswordResetEmail;
       window.__fs = { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, serverTimestamp, where, updateDoc };
+      window.__storageRef = ref;
+      window.__uploadBytes = uploadBytes;
+      window.__uploadString = uploadString;
+      window.__getDownloadURL = getDownloadURL;
+      window.__deleteObject = deleteObject;
       window.__fbReady = true;
     } catch(e) {
       console.warn('Firebase non configuré, mode local actif.', e);
@@ -90,6 +103,14 @@
         <option value="user4">Larbi Ramzi</option>
         <option value="user5">Ibrahime</option>
         <option value="user6">Hamza</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="loginMode">Mode de connexion</label>
+      <select class="form-input" id="loginMode" style="height:44px;">
+        <option value="auto">🔄 Automatique (Firebase si disponible)</option>
+        <option value="firebase">☁️ Cloud (Firebase)</option>
+        <option value="local">💻 Local (localStorage)</option>
       </select>
     </div>
     <div class="form-group">
@@ -242,10 +263,13 @@
   <div class="topbar-sep"></div>
   <span class="topbar-title">Notes de Frais</span>
   <div class="topbar-right">
-    <input type="text" class="form-input" id="globalSearch" placeholder="🔍 Rechercher..." oninput="handleGlobalSearch(this.value)"/>
-    <div class="db-status db-local" id="dbStatus">
-      <span>⏳</span> <span id="dbStatusText">Connexion…</span>
-    </div>
+  <input type="text" class="form-input" id="globalSearch" placeholder="🔍 Rechercher..." oninput="handleGlobalSearch(this.value)"/>
+  <div class="db-status db-local" id="dbStatus">
+    <span>⏳</span> <span id="dbStatusText">Connexion…</span>
+  </div>
+  <div class="db-status" id="modeStatus" style="margin-left:8px;">
+    <span>💻</span> <span id="modeStatusText">Local</span>
+  </div>
     <!-- From Uiverse.io by ZAKARIAE48CHELLE -->
     <button id="installBtn" class="btn-install" style="display:none;" onclick="installPWA()">
       <svg class="svgIcon" viewBox="0 0 384 512" height="1em" xmlns="http://www.w3.org/2000/svg">
@@ -284,8 +308,8 @@
   <a class="nav-item" data-tooltip="Comparaison" onclick="switchTab('comparison')" id="nav-comparison">
     <span class="nav-icon">📈</span> <span>Comparaison</span>
   </a>
-  <a class="nav-item" data-tooltip="Ordre de mission" onclick="switchTab('mission')" id="nav-mission">
-    <span class="nav-icon">🗺️</span> <span>Ordre de mission</span>
+  <a class="nav-item" data-tooltip="Ordre de mission" onclick="switchTab('mission')" id="nav-mission" style="display:none;">
+    <span class="nav-icon">📝</span> <span>Ordre de mission</span>
   </a>
   <a class="nav-item" data-tooltip="Mes ordres de mission" onclick="switchTab('user-missions')" id="nav-user-missions" style="display:none;">
     <span class="nav-icon">📋</span> <span>Mes OM</span>
@@ -299,17 +323,17 @@
     <span class="nav-icon">📊</span> <span>Excel</span>
   </a>
 
+  <span class="nav-label"><span class="nav-label-icon">💾</span> Sauvegarde</span>
+  <a class="nav-item" data-tooltip="Sauvegarde" onclick="switchTab('backup')" id="nav-backup">
+    <span class="nav-icon">📦</span> <span>Backup Justificatifs</span>
+  </a>
+
   <span class="nav-label" id="adminOnlyLabel"><span class="nav-label-icon">⚙️</span> Gestion</span>
   <a class="nav-item" id="adminUsersBtn" data-tooltip="Gestion utilisateurs" onclick="openUserManager()">
     <span class="nav-icon">👥</span> <span>Utilisateurs</span>
-  </a>  <a class="nav-item" id="adminClearBtn" data-tooltip="Tout effacer" onclick="confirmClear()" style="color:var(--red);">
-    <span class="nav-icon">🗑️</span> <span>Tout effacer</span>
   </a>
   <a class="nav-item" id="adminOMBtn" data-tooltip="Ordres de mission" onclick="switchTab('admin-om')" style="color:var(--eq-blue);">
-    <span class="nav-icon">🗺️</span> <span>OM Global</span>
-  </a>
-  <a class="nav-item" id="adminCreateMobtn" data-tooltip="Créer OM" onclick="switchTab('admin-create-mo')" style="color:var(--eq-orange);">
-    <span class="nav-icon">📝</span> <span>Créer OM</span>
+    <span class="nav-icon">📋</span> <span>OM Global</span>
   </a>
   
   <span class="nav-label"><span class="nav-label-icon">ℹ️</span> Informations</span>
@@ -372,10 +396,11 @@
     <button class="tab-btn"        id="tab-yearly"   role="tab" aria-selected="false" aria-controls="tab-content-yearly" onclick="switchTab('yearly')">📆 <span>Par année</span></button>
     <button class="tab-btn"        id="tab-trimestre"  role="tab" aria-selected="false" aria-controls="tab-content-trimestre" onclick="switchTab('trimestre')">📊 <span>Par trimestre</span></button>
     <button class="tab-btn"        id="tab-comparison" role="tab" aria-selected="false" aria-controls="tab-content-comparison" onclick="switchTab('comparison')">📈 <span>Comparaison</span></button>
-    <button class="tab-btn"        id="tab-mission"  role="tab" aria-selected="false" aria-controls="tab-content-mission" onclick="switchTab('mission')">🗺️ <span>Ordre de mission</span></button>
-    <button class="tab-btn"        id="tab-admin-om" role="tab" aria-selected="false" aria-controls="tab-content-admin-om" onclick="switchTab('admin-om')" style="display:none;">🗺️ <span>OM Global</span></button>
+    <button class="tab-btn"        id="tab-mission"  role="tab" aria-selected="false" aria-controls="tab-content-mission" onclick="switchTab('mission')" style="display:none;">📝 <span>Ordre de mission</span></button>
+    <button class="tab-btn"        id="tab-admin-om" role="tab" aria-selected="false" aria-controls="tab-content-admin-om" onclick="switchTab('admin-om')" style="display:none;">📋 <span>OM Global</span></button>
     <button class="tab-btn"        id="tab-user-missions" role="tab" aria-selected="false" aria-controls="tab-content-user-missions" onclick="switchTab('user-missions')" style="display:none;">📋 <span>Mes OM</span></button>
     <button class="tab-btn"        id="tab-policy"   role="tab" aria-selected="false" aria-controls="tab-content-policy" onclick="switchTab('policy')">📜 <span>Conditions</span></button>
+    <button class="tab-btn"        id="tab-backup"   role="tab" aria-selected="false" aria-controls="tab-content-backup" onclick="switchTab('backup')">💾 <span>Backup</span></button>
   </div>
 
   <!-- ══ TAB: SAISIE & OCR ══ -->
@@ -452,20 +477,82 @@
         </div>
         <div class="panel-body">
           <p style="font-size:12px;color:var(--gray-400);margin-bottom:10px;">
-            Importez une photo de facture — Tesseract.js extrait automatiquement la date, le montant et la description.
+            Importez une photo ou un PDF de facture — le moteur OCR extrait automatiquement la date, le montant, la description et la catégorie.
           </p>
           <div class="upload-zone" id="uploadZone"
                onclick="document.getElementById('fileInput').click()"
                ondragover="handleDragOver(event)" ondragleave="handleDragLeave()" ondrop="handleDrop(event)">
             <div class="upload-icon">📤</div>
-            <p>Cliquez ou glissez-déposez une image</p>
+            <p>Cliquez ou glissez-déposez une image ou un PDF</p>
             <div class="file-selected" id="fileName">Aucun fichier</div>
-            <input type="file" id="fileInput" accept="image/*" onchange="onFileChosen(event)"/>
+            <input type="file" id="fileInput" accept="image/*,.pdf" onchange="onFileChosen(event)"/>
+          </div>
+          <!-- Image preview -->
+          <div id="ocrPreview" style="display:none;margin-top:8px;border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--gray-200);max-height:120px;">
+            <img id="ocrPreviewImg" src="" alt="Aperçu" style="width:100%;height:120px;object-fit:cover;"/>
           </div>
           <div class="ocr-progress" id="ocrProgress"><div class="ocr-progress-bar" id="ocrBar"></div></div>
           <button class="btn btn-orange btn-full" style="margin-top:12px;" onclick="runOCR()" id="ocrBtn">🔍 Lire et extraire</button>
           <div class="ocr-output" id="ocrOutput">Le texte extrait apparaîtra ici…</div>
+          <!-- Extracted fields preview -->
+          <div id="ocrExtractedFields" style="display:none;margin-top:10px;background:var(--eq-blue-pale);border:1px solid var(--eq-blue-mid);border-radius:var(--radius-md);padding:12px;">
+          </div>
           <button class="btn btn-ghost btn-full" style="margin-top:8px;" onclick="fillFormFromOCR()">⬅️ Remplir le formulaire</button>
+        </div>
+      </div>
+
+      <!-- BATCH OCR -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title"><div class="panel-icon orange">📚</div> OCR — Traitement par lots</div>
+        </div>
+        <div class="panel-body">
+          <p style="font-size:12px;color:var(--gray-400);margin-bottom:10px;">
+            Sélectionnez plusieurs factures à traiter en une seule fois — les données extraites seront listées ci-dessous.
+          </p>
+          <div class="upload-zone" id="batchUploadZone"
+               onclick="document.getElementById('batchFileInput').click()"
+               ondragover="handleDragOver(event)" ondragleave="handleDragLeave()" ondrop="handleBatchDrop(event)">
+            <div class="upload-icon">📚</div>
+            <p>Cliquez ou glissez-déposez plusieurs images/PDF</p>
+            <div class="file-selected" id="batchFileName">Aucun fichier sélectionné</div>
+            <input type="file" id="batchFileInput" accept="image/*,.pdf" multiple onchange="onBatchFilesChosen(event)"/>
+          </div>
+          <div class="ocr-progress" id="batchOcrProgress"><div class="ocr-progress-bar" id="batchOcrBar"></div></div>
+          <div class="batch-status" id="batchStatus"></div>
+          <button class="btn btn-orange btn-full" style="margin-top:12px;" onclick="runBatchOCR()" id="batchOcrBtn">📚 Traiter toutes les factures</button>
+          <div id="batchResults" style="display:none;margin-top:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+              <span style="font-size:11px;font-weight:700;color:var(--gray-500);">Résultats extraits (<span id="batchCount">0</span>)</span>
+              <div style="display:flex;gap:6px;">
+                <button class="btn btn-primary" onclick="addAllBatchExpenses()" id="batchAddAllBtn" style="height:30px;font-size:10px;padding:0 10px;">➕ Ajouter tout</button>
+                <button class="btn btn-ghost" onclick="clearBatchResults()" style="height:30px;font-size:10px;padding:0 10px;">🗑️ Effacer</button>
+              </div>
+            </div>
+            <div class="batch-results-container" id="batchResultsList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ MES ORDRES DE MISSION (DASHBOARD) ══ -->
+    <div id="dashboardMOContainer" style="margin-top:16px;display:none;">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title"><div class="panel-icon blue">📋</div> Mes ordres de mission assignés</div>
+          <div class="export-group">
+            <button class="btn btn-pdf" onclick="exportUserMissionsPDF()" style="height:30px;font-size:10px;padding:0 10px;"><span>📄 </span>PDF</button>
+            <button class="btn btn-ghost" onclick="renderDashboardMissionOrders()" style="height:30px;font-size:10px;padding:0 10px;">🔄</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="dashboardMOList">
+            <div class="empty-state">
+              <div class="empty-icon">📭</div>
+              <h3>Chargement...</h3>
+              <p>Vos ordres de mission assignés apparaîtront ici.</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -649,6 +736,75 @@
     </div>
   </div>
 
+  <!-- ══ TAB: BACKUP ══ -->
+  <div id="tab-content-backup" role="tabpanel" aria-labelledby="tab-backup" style="display:none;">
+    <div class="mobile-section-header" style="display:none;">
+      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
+      <span class="section-label">Section :</span>
+      <span class="section-name">Sauvegarde des justificatifs</span>
+    </div>
+    <div style="padding:20px;">
+      <div class="panel" style="margin-bottom:20px;">
+        <div class="panel-header">
+          <div class="panel-title"><div class="panel-icon green">💾</div> Sauvegarde des justificatifs</div>
+        </div>
+        <div style="padding:20px;">
+          <p style="color:var(--gray-600);font-size:14px;margin-bottom:20px;">
+            Sauvegardez toutes les photos de justificatifs sur trois supports différents pour une sécurité maximale.
+          </p>
+
+          <!-- Status -->
+          <div id="backupStatus" style="margin-bottom:24px;"></div>
+
+          <!-- Backup Actions -->
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;">
+            <!-- Local Backup -->
+            <div class="backup-card">
+              <div class="backup-card-icon local">💻</div>
+              <div class="backup-card-content">
+                <h4 style="font-size:15px;font-weight:700;color:var(--gray-900);margin-bottom:6px;">Sauvegarde locale</h4>
+                <p style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">
+                  Télécharge un fichier ZIP contenant tous les justificatifs avec les métadonnées.
+                </p>
+                <button class="btn btn-primary" onclick="backupLocal()" style="width:100%;">
+                  📦 Télécharger ZIP
+                </button>
+              </div>
+            </div>
+
+            <!-- Firebase Backup -->
+            <div class="backup-card">
+              <div class="backup-card-icon firebase">☁️</div>
+              <div class="backup-card-content">
+                <h4 style="font-size:15px;font-weight:700;color:var(--gray-900);margin-bottom:6px;">Sauvegarde Firebase</h4>
+                <p style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">
+                  Upload les justificatifs vers Firebase Storage pour une sauvegarde cloud.
+                </p>
+                <button class="btn btn-primary" onclick="backupFirebase()" style="width:100%;" id="fbBackupBtn">
+                  ☁️ Sauvegarder sur Firebase
+                </button>
+              </div>
+            </div>
+
+
+          </div>
+
+          <!-- Backup All -->
+          <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200);">
+            <button class="btn btn-primary" onclick="backupAll()" style="width:100%;max-width:400px;display:block;margin:0 auto;padding:14px 24px;font-size:15px;">
+              💾 Sauvegarder tous les justificatifs
+            </button>
+            <p style="text-align:center;font-size:12px;color:var(--gray-400);margin-top:10px;">
+              Cette action va sauvegarder sur les 2 supports disponibles.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+
   <!-- ══ TAB: TRIMESTRE ══ -->
   <div id="tab-content-trimestre" role="tabpanel" aria-labelledby="tab-trimestre" style="display:none;">
     <div class="mobile-section-header" style="display:none;">
@@ -741,7 +897,7 @@
 
     <div class="panel">
       <div class="panel-header">
-        <div class="panel-title"><div class="panel-icon blue">🗺️</div> Tous les ordres de mission (Firebase)</div>
+        <div class="panel-title"><div class="panel-icon blue">📋</div> Tous les ordres de mission (Firebase)</div>
         <div class="export-group">
           <button class="btn btn-pdf" onclick="adminOMExportPDF()" style="height:30px;font-size:10px;padding:0 10px;"><span>📄 </span>PDF</button>
           <button class="btn btn-excel" onclick="adminOMExportExcel()" style="height:30px;font-size:10px;padding:0 10px;"><span>📊 </span>Excel</button>
@@ -806,109 +962,6 @@
     </div>
   </div>
 
-  <!-- ══ TAB: ADMIN CREATE MISSION ORDER ══ -->
-  <div id="tab-content-admin-create-mo" role="tabpanel" aria-labelledby="tab-admin-create-mo" style="display:none;">
-    <div class="mobile-section-header" style="display:none;">
-      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
-      <span class="section-label">Admin :</span>
-      <span class="section-name">Créer un ordre de mission</span>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" class="input-form-grid">
-      <!-- Formulaire de création d'OM -->
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><div class="panel-icon blue">📝</div> Nouvel ordre de mission</div>
-        </div>
-        <div class="panel-body">
-          <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label" for="moNumero">N° d'ordre *</label>
-              <input type="text" class="form-input" id="moNumero" placeholder="Ex : OM-2026-001" autocomplete="off"/>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="moDate">Date d'émission *</label>
-              <input type="date" class="form-input" id="moDate"/>
-            </div>
-            <div class="form-group span-2">
-              <label class="form-label" for="moEmploye">Nom du collaborateur *</label>
-              <input type="text" class="form-input" id="moEmploye" placeholder="Ex : Rachid Alami" autocomplete="off"/>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="moDepart">Lieu de départ</label>
-              <input type="text" class="form-input" id="moDepart" placeholder="Ex : Casablanca" autocomplete="off"/>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="moArrivee">Lieu de destination</label>
-              <input type="text" class="form-input" id="moArrivee" placeholder="Ex : Rabat" autocomplete="off"/>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="moDebut">Date de début</label>
-              <input type="date" class="form-input" id="moDebut"/>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="moFin">Date de fin</label>
-              <input type="date" class="form-input" id="moFin"/>
-            </div>
-            <div class="form-group span-2">
-              <label class="form-label" for="moObjet">Objet de la mission *</label>
-              <input type="text" class="form-input" id="moObjet" placeholder="Ex : Réunion client, installation…" autocomplete="off"/>
-            </div>
-            <div class="form-group span-2">
-              <label class="form-label" for="moTransport">Mode de transport</label>
-              <select class="form-select" id="moTransport">
-                <option value="Voiture">🚗 Voiture</option>
-                <option value="Train">🚆 Train</option>
-                <option value="Avion">✈️ Avion</option>
-                <option value="Bus">🚌 Bus</option>
-                <option value="Taxi">🚕 Taxi</option>
-                <option value="Autre">📌 Autre</option>
-              </select>
-            </div>
-            <div class="form-group span-2">
-              <label class="form-label" for="moTel">📱 Téléphone (WhatsApp) <span style="font-weight:400;color:var(--gray-400);text-transform:none;">— pour notification</span></label>
-              <input type="tel" class="form-input" id="moTel" placeholder="Ex : 06 12 34 56 78" autocomplete="off"/>
-            </div>
-            <div class="form-group span-2">
-              <label class="form-label" for="moRemarques">Remarques / instructions</label>
-              <textarea class="form-input" id="moRemarques" rows="3" placeholder="Consignes particulières, hébergement…" style="resize:vertical;"></textarea>
-            </div>
-            <div class="form-group span-2">
-              <label class="form-label" for="moAssignedTo">Assigner à * <span style="font-weight:400;color:var(--gray-400);text-transform:none;">— qui recevra cet OM</span></label>
-              <select class="form-select" id="moAssignedTo">
-                <option value="">-- Sélectionner un utilisateur --</option>
-              </select>
-            </div>
-            <div class="form-group span-2">
-              <label class="form-label" for="moComment">Commentaire interne <span style="font-weight:400;color:var(--gray-400);text-transform:none;">(optionnel)</span></label>
-              <textarea class="form-input" id="moComment" rows="2" placeholder="Notes pour l'administration..." style="resize:vertical;"></textarea>
-            </div>
-          </div>
-          <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
-            <button class="btn btn-primary btn-lg" style="flex:1;min-width:140px;" onclick="createMissionOrder()" id="createMOBtn">📝 Créer l'ordre de mission</button>
-            <button class="btn btn-ghost btn-lg" style="flex:1;min-width:140px;" onclick="resetMissionOrderForm()">↺ Réinitialiser</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Liste des OM créés -->
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><div class="panel-icon orange">📋</div> Ordres de mission créés</div>
-        </div>
-        <div class="panel-body">
-          <div id="adminMOList">
-            <div class="empty-state">
-              <div class="empty-icon">📋</div>
-              <h3>Aucun ordre de mission</h3>
-              <p>Créez un nouvel ordre de mission en utilisant le formulaire.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- ══ TAB: ORDRE DE MISSION ══ -->
   <div id="tab-content-mission" role="tabpanel" aria-labelledby="tab-mission" style="display:none;">
     <!-- Mobile Section Header -->
@@ -923,7 +976,7 @@
       <!-- Formulaire d'ordre de mission -->
       <div class="panel">
         <div class="panel-header">
-          <div class="panel-title"><div class="panel-icon blue">🗺️</div> Nouvel ordre de mission</div>
+          <div class="panel-title"><div class="panel-icon blue">📝</div> Nouvel ordre de mission</div>
         </div>
         <div class="panel-body">
           <div class="form-grid">
@@ -937,7 +990,9 @@
             </div>
             <div class="form-group span-2">
               <label class="form-label" for="omEmploye">Nom du collaborateur *</label>
-              <input type="text" class="form-input" id="omEmploye" placeholder="Ex : Rachid Alami" autocomplete="off"/>
+              <select class="form-select" id="omEmploye">
+                <option value="">-- Sélectionner un membre --</option>
+              </select>
             </div>
             <div class="form-group">
               <label class="form-label" for="omDepart">Lieu de départ</label>
@@ -1033,8 +1088,8 @@
     <span class="nav-icon" aria-hidden="true">📈</span>
     <span>Comparer</span>
   </a>
-  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('mission')" id="bnav-mission" role="button" aria-label="Ordre de mission">
-    <span class="nav-icon" aria-hidden="true">🗺️</span>
+  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('mission')" id="bnav-mission" role="button" aria-label="Ordre de mission" style="display:none;">
+    <span class="nav-icon" aria-hidden="true">📝</span>
     <span>Mission</span>
   </a>
   <a id="bnav-admin-om" style="display:none;"></a>
@@ -1045,6 +1100,10 @@
   <a class="bottom-nav-item" tabindex="0" onclick="switchTab('policy')" id="bnav-policy" role="button" aria-label="Conditions et informations">
     <span class="nav-icon" aria-hidden="true">📜</span>
     <span>Infos</span>
+  </a>
+  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('backup')" id="bnav-backup" role="button" aria-label="Sauvegarde des justificatifs">
+    <span class="nav-icon" aria-hidden="true">💾</span>
+    <span>Backup</span>
   </a>
 </nav>
 

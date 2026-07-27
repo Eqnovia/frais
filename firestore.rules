@@ -167,7 +167,7 @@ service cloud.firestore {
       // Lecture : admin voit tout, utilisateur voit ses OM assignées
       allow read: if isAuth() && (
         isAdmin()
-        || resource.data.assignedTo == request.auth.uid
+        || resource.data.assignedToAuthUid == request.auth.uid
         || (isAuth() && resource.data._authUid == request.auth.uid)
       );
 
@@ -177,7 +177,7 @@ service cloud.firestore {
         && isDocSizeValid()
         && request.resource.data.keys().hasAll([
           'numero', 'date', 'employe', 'objet', 'status',
-          'assignedTo', 'assignedBy', '_authUid', 'createdBy',
+          'assignedTo', 'assignedToAuthUid', 'assignedBy', '_authUid', 'createdBy',
           'createdAt', 'modifiedBy', 'modifiedAt'
         ])
         && isValidString(request.resource.data.numero, 50)
@@ -186,6 +186,7 @@ service cloud.firestore {
         && isValidString(request.resource.data.objet, 500)
         && (request.resource.data.status in ['pending', 'approved', 'rejected'])
         && isValidString(request.resource.data.assignedTo, 128)
+        && isValidString(request.resource.data.assignedToAuthUid, 128)
         && isValidString(request.resource.data.assignedBy, 128)
         && isValidString(request.resource.data.createdBy, 20)
         && isValidString(request.resource.data.modifiedBy, 20)
@@ -222,9 +223,9 @@ service cloud.firestore {
           || isValidString(request.resource.data.comment, 1000)
         );
 
-      // Mise à jour : admin peut tout modifier, utilisateur peut seulement consulter
+      // Mise à jour : admin peut tout modifier, utilisateur assigné peut modifier
       allow update: if isAuth()
-        && (isAdmin() || resource.data.assignedTo == request.auth.uid)
+        && (isAdmin() || resource.data.assignedToAuthUid == request.auth.uid)
         && isDocSizeValid()
         && (
           !('status' in request.resource.data)

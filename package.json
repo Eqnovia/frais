@@ -14,7 +14,8 @@
     "deploy:hosting": "firebase deploy --only hosting"
   },
   "dependencies": {
-    "jimp": "^1.6.1"
+    "jimp": "^1.6.1",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "serve": "^14.2.4"
