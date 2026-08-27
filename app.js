@@ -4980,6 +4980,23 @@ function getFilteredDataForExport() {
   const allData = dataAll();
   const data = getUserExpenses(allData);
   
+  // Detect which tab is active and use corresponding filters
+  if (activeTab === 'monthly') {
+    // Monthly tab filters
+    const yearF = document.getElementById('filterYearMonth')?.value || 'all';
+    const monthF = document.getElementById('filterMonthSelect')?.value || 'all';
+    const userF = document.getElementById('filterMonthUser')?.value || 'all';
+    return data.filter(e => {
+      const y = e.date.substring(0,4);
+      const m = e.date.substring(5,7);
+      const userMatch = userF === 'all' || e.user === userF;
+      return (yearF === 'all' || y === yearF)
+        && (monthF === 'all' || m === monthF)
+        && userMatch;
+    });
+  }
+  
+  // Default: Toutes tab filters
   const yearF = document.getElementById('filterYear')?.value || 'all';
   const monthF = document.getElementById('filterMonth')?.value || 'all';
   const catF = document.getElementById('filterCat')?.value || 'all';
