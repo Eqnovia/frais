@@ -347,7 +347,6 @@ async function seedFirebaseAuthUsers() {
 async function login() {
   const pwd = document.getElementById('loginPassword').value.trim();
   const user = document.getElementById('loginUser').value;
-  const mode = document.getElementById('loginMode')?.value || 'auto';
   
   if (!USERS[user]) {
     document.getElementById('loginError').style.display = 'block';
@@ -357,31 +356,27 @@ async function login() {
     return;
   }
   
-  const useFirebaseMode = mode === 'firebase' || (mode === 'auto' && isFirebaseAuthAvailable());
+  // Sauvegarder l'utilisateur sélectionné en cache
+  try { localStorage.setItem('eqnovia_lastUser', user); } catch(e) {}
   
-  // 1. Essayer Firebase Auth si le mode le permet
-  if (useFirebaseMode && isFirebaseAuthAvailable()) {
+  // Essayer Firebase Auth si disponible
+  if (isFirebaseAuthAvailable()) {
     const email = getAuthEmail(user);
     if (email) {
       const fbOk = await firebaseAuthSignIn(email, pwd);
-      
       if (fbOk) {
-        // Firebase Auth réussi
         completeLogin(user);
         return;
       }
-      
       console.warn('Firebase Auth échoué, tentative locale...');
     }
   }
   
-  // 2. Fallback : authentification locale
+  // Fallback : authentification locale
   if (USERS[user].password === pwd) {
     completeLogin(user);
-    if (useFirebaseMode && !isFirebaseAuthAvailable()) {
+    if (!isFirebaseAuthAvailable()) {
       toast('ℹ️ Firebase non disponible — Mode local activé', 'info');
-    } else if (mode === 'local') {
-      toast('ℹ️ Mode local — Les données ne sont pas synchronisées', 'info');
     }
   } else {
     document.getElementById('loginError').style.display = 'block';
@@ -470,7 +465,7 @@ function updateUserUI() {
   const first = userInfo.label.substring(0, 1);
   avatar.textContent = first;
   
-  const adminOnly = document.querySelectorAll('#adminOnlyLabel, #adminUsersBtn, #adminOMBtn, #tab-admin-om, #nav-mission, #tab-mission, #bnav-mission, #nav-backup, #tab-backup, #nav-policy, #tab-policy, #bnav-policy');
+  const adminOnly = document.querySelectorAll('#adminOnlyLabel, #adminUsersBtn, #adminOMBtn, #tab-admin-om, #nav-mission, #tab-mission, #bnav-mission, #nav-trimestre, #tab-trimestre, #bnav-trimestre, #nav-comparison, #tab-comparison, #bnav-comparison, #adminOnlyBackupLabel, #nav-backup, #tab-backup, #bnav-backup, #adminOnlyInfoLabel, #nav-policy, #tab-policy, #bnav-policy');
   adminOnly.forEach(el => el.style.display = isAdmin ? '' : 'none');
   
   // Show user missions tab for non-admin users
@@ -5441,6 +5436,13 @@ document.addEventListener('DOMContentLoaded', function() {
   // Synchronise les listes déroulantes avec les utilisateurs persistés
   updateLoginUserSelect();
   updateUserSelector();
+  // Restaurer le dernier utilisateur sélectionné depuis le cache
+  try {
+    const lastUser = localStorage.getItem('eqnovia_lastUser');
+    if (lastUser && USERS[lastUser]) {
+      document.getElementById('loginUser').value = lastUser;
+    }
+  } catch(e) {}
   document.getElementById('loginOverlay').classList.remove('hidden');
 });
 
