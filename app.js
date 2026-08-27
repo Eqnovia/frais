@@ -15,6 +15,7 @@ let ocrText = '';
 let currentUser = 'admin';
 let isAdmin = true;
 let isAuthenticated = false;
+let loginAsAdmin = true; // Track if original login was admin (for user switching)
 
 // ══ Firebase Auth state ══
 let currentAuthUser = null;     // Firebase Auth user object or null
@@ -22,6 +23,59 @@ let authReady = false;          // True once auth state is initialized
 let useFirebaseAuth = false;    // True if Firebase Auth is available and configured
 
 const FIREBASE_AUTH_EMULATOR = false; // Set to true for local testing with emulator
+
+// ============================================
+// ANTI-BOUCLE INFINIE - GLOBAL RENDER LOCK
+// ============================================
+const __RENDER = {
+    locked: false,
+    depth: 0,
+    maxDepth: 15,
+    queue: [],
+    
+    safe(fn, name = 'anonymous') {
+        if (this.depth > this.maxDepth) {
+            console.error('\u274c BOUCLE INFINIE D\u00c9TECT\u00c9E dans', name, '\u2014 arr\u00eat for\u00e9.');
+            this.depth = 0;
+            this.locked = false;
+            return;
+        }
+        if (this.locked) {
+            // Queue instead of skip to avoid lost renders
+            if (this.queue.length < 20) {
+                this.queue.push({ fn, name });
+            }
+            return;
+        }
+        this.locked = true;
+        this.depth++;
+        try {
+            fn();
+        } catch (e) {
+            console.error('\u274c Erreur dans', name, ':', e);
+        } finally {
+            this.locked = false;
+            this.depth--;
+            // Process queue
+            if (this.queue.length > 0) {
+                const next = this.queue.shift();
+                setTimeout(() => __RENDER.safe(next.fn, next.name), 0);
+            }
+        }
+    }
+};
+
+function safeRender(fn, name) {
+    __RENDER.safe(fn, name);
+}
+
+// Timeout helper for Firebase operations (prevents hanging)
+function withTimeout(promise, ms, label) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout ' + label + ' (' + ms + 'ms)')), ms))
+    ]);
+}
 
 // ════════════════════════════════════════════
 // USERS CONFIG
@@ -87,6 +141,280 @@ if (!localStorage.getItem(USERS_STORAGE_KEY)) saveUsers();
 
 // Initialiser l'écouteur Firebase Auth au démarrage
 initFirebaseAuthListener();
+
+// ════════════════════════════════════════════
+// CENTRALIZED USER LIST
+// ════════════════════════════════════════════
+
+/**
+ * Retourne la liste triée de tous les utilisateurs.
+ * @param {boolean} excludeAdmin - Exclure l'admin de la liste
+ * @returns {Array} Tableau de [key, userData] trié alphabétiquement
+ */
+function getSortedUsers(excludeAdmin = false) {
+  return Object.entries(USERS)
+    .filter(([key]) => excludeAdmin ? key !== 'admin' : true)
+    .sort((a, b) => {
+      // Admin always first (if included)
+      if (a[0] === 'admin') return -1;
+      if (b[0] === 'admin') return 1;
+      return a[1].label.localeCompare(b[1].label, 'fr');
+    });
+}
+
+// ════════════════════════════════════════════
+// CUSTOM USER DROPDOWN COMPONENT
+// ════════════════════════════════════════════
+
+const userDropdownInstances = {};
+
+/**
+ * Crée un dropdown utilisateur personnalisé qui remplace un <select> natif.
+ * Le select original est masqué mais conserve ses options pour la rétrocompatibilité.
+ * @param {string} selectId - ID du <select> à remplacer
+ * @param {Object} config - Configuration du dropdown
+ * @returns {Object} Instance du dropdown { getValue, setValue, refresh, destroy }
+ */
+function createUserDropdown(selectId, config = {}) {
+  const select = document.getElementById(selectId);
+  if (!select) return null;
+
+  const cfg = {
+    excludeAdmin: false,
+    showAll: false,
+    allLabel: '\u{1f464} Tous',
+    allValue: 'all',
+    placeholder: '-- S\u00e9lectionner --',
+    variant: '', // 'compact' for sidebar, 'filter' for filter bars
+    ...config
+  };
+
+  // Masquer le select original
+  select.setAttribute('aria-hidden', 'true');
+  select.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;clip:rect(0,0,0,0);';
+
+  // Créer le wrapper
+  let wrap = select.parentNode.querySelector('.ud-wrap');
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.className = 'ud-wrap' + (cfg.variant ? ' ud-' + cfg.variant : '');
+    select.parentNode.insertBefore(wrap, select);
+  }
+  wrap.appendChild(select);
+
+  // Create separate UI container that won't destroy the select
+  let uiContainer = wrap.querySelector('.ud-ui');
+  if (!uiContainer) {
+    uiContainer = document.createElement('div');
+    uiContainer.className = 'ud-ui';
+    wrap.appendChild(uiContainer);
+  }
+
+  let isOpen = false;
+  let searchQuery = '';
+
+  function getDisplayValue() {
+    const val = select.value;
+    if (cfg.showAll && val === cfg.allValue) return cfg.allLabel;
+    // Look up the option text from the select element directly
+    const opt = select.querySelector('option[value="' + val.replace(/"/g, '\"') + '"]');
+    if (opt) return opt.textContent.replace(/^[\u{1f464}\s]+/u, '').trim();
+    return cfg.placeholder;
+  }
+
+  function getInitials() {
+    const val = select.value;
+    if (cfg.showAll && val === cfg.allValue) return '\u{1f464}';
+    // Get first letter from the display text
+    const display = getDisplayValue();
+    if (display && display !== cfg.placeholder) return display.substring(0, 1).toUpperCase();
+    return '?';
+  }
+
+  function render() {
+    const users = getSortedUsers(cfg.excludeAdmin);
+    const query = searchQuery.toLowerCase();
+    const filtered = query
+      ? users.filter(([k, u]) => u.label.toLowerCase().includes(query) || (u.email && u.email.toLowerCase().includes(query)))
+      : users;
+
+    const displayVal = getDisplayValue();
+    const initials = getInitials();
+    const isPlaceholderState = select.value === '' || (cfg.showAll && select.value === cfg.allValue);
+
+    uiContainer.innerHTML = `
+      <div class="ud-trigger ${isOpen ? 'open' : ''}" role="combobox" aria-expanded="${isOpen}" aria-haspopup="listbox" tabindex="0">
+        <div class="ud-avatar" style="${isPlaceholderState && !cfg.showAll ? 'background:var(--gray-200);color:var(--gray-500);' : ''}">${initials}</div>
+        <span class="ud-name ${isPlaceholderState && !cfg.showAll ? 'ud-placeholder' : ''}">${esc(displayVal)}</span>
+        <span class="ud-arrow"></span>
+      </div>
+      <div class="ud-panel ${isOpen ? 'open' : ''}" role="listbox">
+        <div class="ud-search">
+          <input type="text" placeholder="\u{1f50d} Rechercher un nom..." value="${esc(searchQuery)}" autocomplete="off" />
+        </div>
+        <div class="ud-list">
+          ${cfg.showAll ? `
+            <div class="ud-item ${select.value === cfg.allValue ? 'active' : ''}" data-value="${cfg.allValue}" role="option">
+              <div class="ud-item-avatar" style="background:var(--eq-blue-pale);color:var(--eq-blue);font-size:14px;">\u{1f464}</div>
+              <div class="ud-item-info">
+                <div class="ud-item-name" style="font-weight:600;">${esc(cfg.allLabel)}</div>
+              </div>
+              <div class="ud-item-check">\u2713</div>
+            </div>
+          ` : ''}
+          ${filtered.length === 0 ? '<div class="ud-empty">Aucun r\u00e9sultat trouv\u00e9</div>' : ''}
+          ${filtered.map(([key, user]) => {
+            // Check active state: match by key OR by label (for selects that use label as value)
+            const isActive = key === select.value || user.label === select.value;
+            return `
+              <div class="ud-item ${isActive ? 'active' : ''} ${key === 'admin' ? 'ud-item-admin' : ''}" data-value="${key}" role="option">
+                <div class="ud-item-avatar">${user.label.substring(0, 1).toUpperCase()}</div>
+                <div class="ud-item-info">
+                  <div class="ud-item-name">${esc(user.label)}</div>
+                  ${user.email ? `<div class="ud-item-email">${esc(user.email)}</div>` : ''}
+                </div>
+                <div class="ud-item-check">\u2713</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+
+    bindEvents();
+  }
+
+  function bindEvents() {
+    const trigger = uiContainer.querySelector('.ud-trigger');
+    const searchInput = uiContainer.querySelector('.ud-search input');
+    const items = uiContainer.querySelectorAll('.ud-item[data-value]');
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      isOpen = !isOpen;
+      render();
+      if (isOpen) {
+        const input = uiContainer.querySelector('.ud-search input');
+        if (input) { input.focus(); input.select(); }
+      }
+    });
+
+    trigger.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        trigger.click();
+      } else if (e.key === 'Escape' && isOpen) {
+        isOpen = false;
+        searchQuery = '';
+        render();
+      }
+    });
+
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        searchQuery = e.target.value;
+        render();
+        const input = uiContainer.querySelector('.ud-search input');
+        if (input) {
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+      });
+      searchInput.addEventListener('click', (e) => e.stopPropagation());
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          isOpen = false;
+          searchQuery = '';
+          render();
+        } else if (e.key === 'Enter') {
+          // Select first visible item
+          const firstItem = uiContainer.querySelector('.ud-item[data-value]:not(.ud-empty)');
+          if (firstItem) firstItem.click();
+        }
+      });
+    }
+
+    items.forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        select.value = item.dataset.value;
+        isOpen = false;
+        searchQuery = '';
+        render();
+        // Dispatch change event on the original select
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      item.addEventListener('mouseenter', () => {
+        item.style.transition = 'background 0.1s';
+      });
+    });
+  }
+
+  // Fermer au clic extérieur
+  function closeOnOutsideClick(e) {
+    if (isOpen && !wrap.contains(e.target)) {
+      isOpen = false;
+      searchQuery = '';
+      render();
+    }
+  }
+  document.addEventListener('click', closeOnOutsideClick);
+
+  // Observer les changements d'options du select pour rafraîchir
+  // Throttled to prevent cascade re-renders when renderAll() rebuilds select options
+  let _observerTimeout = null;
+  const observer = new MutationObserver(() => {
+    if (_observerTimeout) return;
+    _observerTimeout = setTimeout(() => {
+      _observerTimeout = null;
+      render();
+    }, 50); // 50ms throttle prevents cascade loops
+  });
+  observer.observe(select, { childList: true, subtree: true });
+
+  render();
+
+  const instance = {
+    getValue: () => select.value,
+    setValue: (v) => { select.value = v; render(); },
+    refresh: () => render(),
+    setOnChange: (fn) => {
+      select.removeEventListener('change', select._udHandler);
+      select._udHandler = fn;
+      if (fn) select.addEventListener('change', fn);
+    },
+    destroy: () => {
+      document.removeEventListener('click', closeOnOutsideClick);
+      observer.disconnect();
+      select.style.cssText = '';
+      select.removeAttribute('aria-hidden');
+      wrap.parentNode.insertBefore(select, wrap);
+      wrap.remove();
+      delete userDropdownInstances[selectId];
+    }
+  };
+
+  userDropdownInstances[selectId] = instance;
+  return instance;
+}
+
+/**
+ * Rafraîchit un dropdown utilisateur existant
+ */
+function refreshUserDropdown(selectId) {
+  const instance = userDropdownInstances[selectId];
+  if (instance) instance.refresh();
+}
+
+/**
+ * Récupère la valeur d'un dropdown utilisateur
+ */
+function getUserDropdownValue(selectId) {
+  const instance = userDropdownInstances[selectId];
+  if (instance) return instance.getValue();
+  const select = document.getElementById(selectId);
+  return select ? select.value : '';
+}
 
 // ════════════════════════════════════════════
 // SIDEBAR TOGGLE (MOBILE)
@@ -390,11 +718,13 @@ function completeLogin(user) {
   isAuthenticated = true;
   currentUser = user;
   isAdmin = USERS[user].isAdmin;
+  loginAsAdmin = USERS[user].isAdmin;
   
   document.getElementById('loginOverlay').classList.add('hidden');
   document.querySelectorAll('#appContent').forEach(el => el.style.display = '');
   
   document.getElementById('userSelector').value = user;
+  refreshUserDropdown('userSelector');
   updateUserUI();
   
   // Initialize bottom nav active state
@@ -410,6 +740,7 @@ function completeLogin(user) {
 async function logout() {
   if (confirm('Voulez-vous vraiment vous déconnecter ?')) {
     isAuthenticated = false;
+    loginAsAdmin = false;
     
     // Déconnexion Firebase Auth si actif
     if (useFirebaseAuth) {
@@ -439,9 +770,10 @@ document.getElementById('loginPassword').addEventListener('keydown', function(e)
 // USER MANAGEMENT
 // ════════════════════════════════════════════
 function switchUser(userId) {
-  if (!isAdmin) {
+  if (!loginAsAdmin) {
     toast('Seul l\'administrateur peut changer d\'utilisateur.', 'err');
     document.getElementById('userSelector').value = currentUser;
+    refreshUserDropdown('userSelector');
     return;
   }
   currentUser = userId;
@@ -451,6 +783,8 @@ function switchUser(userId) {
   renderAll();
   renderMonthly();
   renderYearly();
+  renderTrimester();
+  renderComparison();
   toast('👤 Changement vers ' + USERS[userId].label, 'info');
 }
 
@@ -496,12 +830,11 @@ function updateUserUI() {
 
 // Populate the omEmploye dropdown with available users
 function populateAssignedToDropdown() {
-  // Populate omEmploye (collaborator name)
+  // Populate omEmploye (collaborator name) using centralized user list
   const omEmployeSelect = document.getElementById('omEmploye');
   if (omEmployeSelect) {
     omEmployeSelect.innerHTML = '<option value="">-- Sélectionner un membre --</option>';
-    Object.entries(USERS).forEach(([key, u]) => {
-      if (key === 'admin') return; // Skip admin
+    getSortedUsers(true).forEach(([key, u]) => {
       const option = document.createElement('option');
       option.value = u.label;
       option.textContent = u.label;
@@ -684,11 +1017,10 @@ function updateUserSelector() {
   if (!sel) return;
   
   const currentVal = sel.value;
-  sel.innerHTML = '<option value="admin"> Admin</option>' +
-    Object.entries(USERS)
-      .filter(([k]) => k !== 'admin')
-      .map(([k, u]) => `<option value="${k}">👤 ${esc(u.label)}</option>`)
-      .join('');
+  // Build options using centralized sorted user list
+  sel.innerHTML = getSortedUsers().map(([k, u]) => 
+    `<option value="${k}">👤 ${esc(u.label)}</option>`
+  ).join('');
   
   if (Object.keys(USERS).includes(currentVal)) {
     sel.value = currentVal;
@@ -701,9 +1033,10 @@ function updateLoginUserSelect() {
   if (!sel) return;
 
   const currentVal = sel.value;
-  sel.innerHTML = Object.entries(USERS)
-    .map(([k, u]) => `<option value="${k}">${u.isAdmin ? 'Administrateur' : esc(u.label)}</option>`)
-    .join('');
+  // Build options using centralized sorted user list
+  sel.innerHTML = getSortedUsers().map(([k, u]) => 
+    `<option value="${k}">${u.isAdmin ? 'Administrateur' : esc(u.label)}</option>`
+  ).join('');
 
   if (USERS[currentVal]) sel.value = currentVal;
 }
@@ -1243,45 +1576,136 @@ function notifyOMByEmail(om, status, comment) {
 // JUSTIFICATIF PREVIEW
 // ════════════════════════════════════════════
 // ══ GENERIC JUSTIFICATIF PREVIEW (supports prefix-based ID lookup) ══
-function previewJustificatifFor(prefix) {
-  return function(event) {
-    const files = event.target.files;
-    const preview = document.getElementById(prefix + 'Preview');
-    const previewImg = document.getElementById(prefix + 'PreviewImg');
-    const fileName = document.getElementById(prefix + 'FileName');
-    const clearBtn = document.getElementById(prefix + 'ClearBtn');
-    if (!files || files.length === 0) { preview.style.display='none'; fileName.textContent=''; clearBtn.style.display='none'; return; }
-    
-    const imgFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
-    if (imgFiles.length > 0) {
-      // Show preview of the first image + count
-      const first = imgFiles[0];
-      fileName.textContent = `📄 ${files.length} fichier(s) sélectionné(s) — Aperçu: ${first.name} (${(first.size/1024).toFixed(1)} Ko)`;
-      const reader = new FileReader();
-      reader.onload = (e) => { previewImg.src=e.target.result; preview.style.display=''; };
-      reader.readAsDataURL(first);
-    } else {
-      fileName.textContent = `📄 ${files.length} fichier(s) sélectionné(s)`;
-      preview.style.display='none';
-      previewImg.src='';
-    }
-    clearBtn.style.display = '';
-  };
+// ════════════════════════════════════════════
+// JUSTIFICATIF FILE UPLOAD — GLOBAL STATE
+// ════════════════════════════════════════════
+let selectedJustifFiles = [];
+
+/**
+ * Called when user picks files via input or drag-and-drop.
+ * Receives a FileList or File[].
+ */
+function onJustifFilesChosen(fileList) {
+  if (!fileList || fileList.length === 0) return;
+  selectedJustifFiles = Array.from(fileList);
+  renderJustifPreview();
 }
 
-function clearJustificatifFor(prefix) {
-  document.getElementById(prefix + 'Input').value='';
-  document.getElementById(prefix + 'Preview').style.display='none';
-  document.getElementById(prefix + 'PreviewImg').src='';
-  document.getElementById(prefix + 'FileName').textContent='';
-  document.getElementById(prefix + 'ClearBtn').style.display='none';
+/**
+ * Update the UI to reflect selectedJustifFiles.
+ */
+function renderJustifPreview() {
+  const fileName = document.getElementById('justifFileName');
+  const clearBtn = document.getElementById('justifClearBtn');
+  const preview = document.getElementById('justifPreview');
+  const previewImg = document.getElementById('justifPreviewImg');
+
+  if (selectedJustifFiles.length === 0) {
+    fileName.innerHTML = '';
+    clearBtn.style.display = 'none';
+    preview.style.display = 'none';
+    if (previewImg) previewImg.src = '';
+    return;
+  }
+
+  const totalSize = selectedJustifFiles.reduce((s, f) => s + f.size, 0);
+  const sizeStr = totalSize > 1048576 ? (totalSize / 1048576).toFixed(1) + ' Mo' : (totalSize / 1024).toFixed(1) + ' Ko';
+  let names = selectedJustifFiles.map(f => f.name).join(', ');
+  if (names.length > 60) names = names.substring(0, 57) + '...';
+  fileName.innerHTML = '<span style="color:var(--eq-blue);font-weight:600;">📄 ' + selectedJustifFiles.length + ' fichier(s) sélectionné(s)</span> — ' + sizeStr + '<br/><span style="font-size:9px;">' + esc(names) + '</span>';
+  clearBtn.style.display = '';
+
+  const firstImg = selectedJustifFiles.find(f => f.type.startsWith('image/'));
+  if (firstImg && previewImg) {
+    const reader = new FileReader();
+    reader.onload = (e) => { previewImg.src = e.target.result; preview.style.display = ''; };
+    reader.readAsDataURL(firstImg);
+  } else if (preview) {
+    preview.style.display = 'none';
+    if (previewImg) previewImg.src = '';
+  }
 }
 
-// ══ Specific wrappers using the generic functions ══
-const previewJustificatif = previewJustificatifFor('justif');
-function clearJustificatif() { clearJustificatifFor('justif'); }
-const previewEditJustificatif = previewJustificatifFor('editJustif');
-function clearEditJustificatif() { clearJustificatifFor('editJustif'); }
+/**
+ * Called by the <input type=file> onchange.
+ */
+function previewJustificatif(event) {
+  onJustifFilesChosen(event.target.files);
+}
+
+/**
+ * Called by drag-and-drop on the upload zone.
+ */
+function onJustifDrop(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const zone = document.getElementById('justifUploadZone');
+  if (zone) zone.classList.remove('drag-over');
+  if (event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+    onJustifFilesChosen(event.dataTransfer.files);
+  }
+}
+
+/**
+ * Clear selected justificatif files.
+ */
+function clearJustificatif() {
+  selectedJustifFiles = [];
+  const input = document.getElementById('justifInput');
+  if (input) input.value = '';
+  renderJustifPreview();
+}
+
+// Edit modal versions
+let selectedEditJustifFiles = [];
+
+function onEditJustifFilesChosen(fileList) {
+  if (!fileList || fileList.length === 0) return;
+  selectedEditJustifFiles = Array.from(fileList);
+  renderEditJustifPreview();
+}
+
+function renderEditJustifPreview() {
+  const fileName = document.getElementById('editJustifFileName');
+  const clearBtn = document.getElementById('editJustifClearBtn');
+  const preview = document.getElementById('editJustifPreview');
+  const previewImg = document.getElementById('editJustifPreviewImg');
+  if (!fileName) return;
+
+  if (selectedEditJustifFiles.length === 0) {
+    fileName.innerHTML = '';
+    if (clearBtn) clearBtn.style.display = 'none';
+    if (preview) preview.style.display = 'none';
+    if (previewImg) previewImg.src = '';
+    return;
+  }
+  const totalSize = selectedEditJustifFiles.reduce((s, f) => s + f.size, 0);
+  const sizeStr = totalSize > 1048576 ? (totalSize / 1048576).toFixed(1) + ' Mo' : (totalSize / 1024).toFixed(1) + ' Ko';
+  let names = selectedEditJustifFiles.map(f => f.name).join(', ');
+  if (names.length > 60) names = names.substring(0, 57) + '...';
+  fileName.innerHTML = '📄 ' + selectedEditJustifFiles.length + ' fichier(s) — ' + sizeStr + '<br/><span style="font-size:9px;">' + esc(names) + '</span>';
+  if (clearBtn) clearBtn.style.display = '';
+  const firstImg = selectedEditJustifFiles.find(f => f.type.startsWith('image/'));
+  if (firstImg && previewImg) {
+    const reader = new FileReader();
+    reader.onload = (e) => { previewImg.src = e.target.result; preview.style.display = ''; };
+    reader.readAsDataURL(firstImg);
+  } else if (preview) {
+    preview.style.display = 'none';
+    if (previewImg) previewImg.src = '';
+  }
+}
+
+function previewEditJustificatif(event) {
+  onEditJustifFilesChosen(event.target.files);
+}
+
+function clearEditJustificatif() {
+  selectedEditJustifFiles = [];
+  const input = document.getElementById('editJustifInput');
+  if (input) input.value = '';
+  renderEditJustifPreview();
+}
 
 // ════════════════════════════════════════════
 // MODAL
@@ -2804,7 +3228,6 @@ async function addExpense() {
   const cat     = document.getElementById('catInput').value;
   const mission = sanitizeInput(document.getElementById('missionInput').value);
   const comment = sanitizeInput(document.getElementById('commentInput').value);
-  const justifFile = document.getElementById('justifInput');
 
   if (!date)                    return toast('Veuillez saisir une date.','err');
   if (!desc)                    return toast('Veuillez saisir une description.','err');
@@ -2813,18 +3236,28 @@ async function addExpense() {
 
   const btn = document.getElementById('addBtn');
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Enregistrement…';
+  const _expenseStartTime = Date.now();
 
-  // Process multiple justificatif files
+  try {
+  // Process justificatif files from global state
   let justifFiles = [];
   let justifData = null;
   let justifName = '';
   let justifStorageUrl = null;
   let justifStoragePath = null;
 
-  if (justifFile.files && justifFile.files.length > 0) {
-    for (let fi = 0; fi < justifFile.files.length; fi++) {
-      const file = justifFile.files[fi];
-      if (!file.type.startsWith('image/')) continue;
+  if (selectedJustifFiles && selectedJustifFiles.length > 0) {
+    const MAX_FILE_SIZE = 5 * 1024 * 1024;
+    for (let fi = 0; fi < selectedJustifFiles.length; fi++) {
+      const file = selectedJustifFiles[fi];
+      if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+        toast('Fichier non supporté: ' + file.name, 'err');
+        continue;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        toast('Fichier trop volumineux: ' + file.name + ' (max 5 Mo)', 'err');
+        continue;
+      }
       try {
         const reader = new FileReader();
         const data = await new Promise((resolve, reject) => {
@@ -2836,21 +3269,22 @@ async function addExpense() {
         const fileEntry = {
           data: data,
           name: file.name,
+          type: file.type,
+          size: file.size,
           storageUrl: null,
           storagePath: null
         };
         
-        // Upload to Firebase Storage if available
         if (window.__storage && window.__fbReady) {
           try {
             const ext = file.name.split('.').pop() || 'jpg';
             const fileName = `frais/${Date.now()}_${currentUser}_${file.name.replace(/[^a-z0-9]/gi, '_')}.${ext}`;
             const storageRef = window.__storageRef(window.__storage, fileName);
-            await window.__uploadBytes(storageRef, file);
-            fileEntry.storageUrl = await window.__getDownloadURL(storageRef);
+            await withTimeout(window.__uploadBytes(storageRef, file), 30000, 'Firebase Storage upload');
+            fileEntry.storageUrl = await withTimeout(window.__getDownloadURL(storageRef), 15000, 'Firebase getDownloadURL');
             fileEntry.storagePath = fileName;
           } catch (e) {
-            console.warn('Firebase Storage upload failed for ' + file.name + ', using local base64:', e);
+            console.warn('Firebase Storage upload failed for ' + file.name + ':', e);
           }
         }
         
@@ -2860,7 +3294,6 @@ async function addExpense() {
       }
     }
     
-    // Keep backward compat single-file refs
     if (justifFiles.length > 0) {
       justifData = justifFiles[0].data;
       justifName = justifFiles[0].name;
@@ -2885,15 +3318,25 @@ async function addExpense() {
     justifStoragePath: justifStoragePath,
     justifFiles: justifFiles.length > 0 ? justifFiles : null
   };
-  await dataAdd(exp);
+  await withTimeout(dataAdd(exp), 30000, 'dataAdd');
 
-  btn.disabled=false; btn.innerHTML='➕ Ajouter la dépense';
+  } catch (e) {
+    console.error('Erreur enregistrement dépense:', e);
+    toast('❌ Erreur lors de l\'enregistrement: ' + e.message, 'err');
+  } finally {
+    const elapsed = Date.now() - _expenseStartTime;
+    const remaining = Math.max(0, 30000 - elapsed);
+    if (remaining > 0) {
+      await new Promise(r => setTimeout(r, remaining));
+    }
+    btn.disabled=false; btn.innerHTML='➕ Ajouter la dépense';
+  }
   
   document.getElementById('descInput').value='';
   document.getElementById('amountInput').value='';
   document.getElementById('missionInput').value='';
   document.getElementById('commentInput').value='';
-  document.getElementById('justifInput').value='';
+  clearJustificatif();
   
   updateKPIs();
   if (activeTab!=='saisie') switchTab(activeTab); else renderAll();
@@ -3003,8 +3446,8 @@ async function saveEdit() {
             const ext = file.name.split('.').pop() || 'jpg';
             const fileName = `frais/${Date.now()}_${currentUser}_${file.name.replace(/[^a-z0-9]/gi, '_')}.${ext}`;
             const storageRef = window.__storageRef(window.__storage, fileName);
-            await window.__uploadBytes(storageRef, file);
-            fileEntry.storageUrl = await window.__getDownloadURL(storageRef);
+            await withTimeout(window.__uploadBytes(storageRef, file), 30000, 'Firebase Storage upload');
+            fileEntry.storageUrl = await withTimeout(window.__getDownloadURL(storageRef), 15000, 'Firebase getDownloadURL');
             fileEntry.storagePath = fileName;
           } catch (e) {
             console.warn('Firebase Storage upload failed for ' + file.name + ':', e);
@@ -3111,6 +3554,8 @@ function handleGlobalSearch(query) {
 // KPIs
 // ════════════════════════════════════════════
 function updateKPIs() {
+  safeRender(() => {
+  console.log('\ud83d\udd35 updateKPIs appelé, depth:', __RENDER.depth);
   const all   = dataAll();
   const userData = getUserExpenses(all);
   const now   = new Date();
@@ -3122,6 +3567,7 @@ function updateKPIs() {
   document.getElementById('kpiCount').textContent      = userData.length + ' dépense(s)';
   document.getElementById('kpiMonth').textContent      = fmtDH(mData.reduce((s,e)=>s+e.amount,0));
   document.getElementById('kpiMonthLabel').textContent = MONTHS_FR[now.getMonth()] + ' ' + now.getFullYear();
+  }, 'updateKPIs');
 }
 
 // ════════════════════════════════════════════
@@ -3136,6 +3582,8 @@ function sortBy(col){
 // RENDER ALL
 // ════════════════════════════════════════════
 function renderAll() {
+  safeRender(() => {
+  console.log('\ud83d\udd35 renderAll appelé, depth:', __RENDER.depth);
   const allData = dataAll();
   const data = getUserExpenses(allData);
   const yearF   = document.getElementById('filterYear').value;
@@ -3153,15 +3601,15 @@ function renderAll() {
 
   const userSel = document.getElementById('filterUser');
   const userVal = userSel.value;
-  const userOptions = isAdmin ? Object.keys(USERS) : [currentUser];
+  // Use centralized sorted user list for filter dropdown
   userSel.innerHTML='<option value="all">👤 Tous</option>';
-  userOptions.forEach(u=>{
+  getSortedUsers().forEach(([k, u])=>{
     const o=document.createElement('option');
-    o.value=u;
-    o.textContent=USERS[u].label;
+    o.value=k;
+    o.textContent=u.label;
     userSel.appendChild(o);
   });
-  if(userOptions.includes(userVal)) userSel.value=userVal;
+  if(Object.keys(USERS).includes(userVal)) userSel.value=userVal; else userSel.value='all';
 
   let rows = data.filter(e=>{
     const y=e.date.substring(0,4), m=e.date.substring(5,7);
@@ -3222,6 +3670,7 @@ function renderAll() {
   tbody.innerHTML=html;
   document.getElementById('grandTotal').innerHTML=`💰 Total TTC : <strong>${fmtDH(total)}</strong>`;
   document.getElementById('rowCount').textContent=rows.length+' ligne(s) — Total TTC : '+fmtDH(total);
+  }, 'renderAll');
 }
 
 function resetFilters(){
@@ -3237,6 +3686,8 @@ function resetFilters(){
 // RENDER MONTHLY
 // ════════════════════════════════════════════
 function renderMonthly() {
+  safeRender(() => {
+  console.log('\ud83d\udd35 renderMonthly appelé, depth:', __RENDER.depth);
   const allData = dataAll();
   const data = getUserExpenses(allData);
   const yearF  = document.getElementById('filterYearMonth').value;
@@ -3249,12 +3700,12 @@ function renderMonthly() {
   years.forEach(y=>{const o=document.createElement('option');o.value=y;o.textContent=y;ySel.appendChild(o);});
   if(years.includes(yVal)) ySel.value=yVal;
 
-  // Populate user filter dynamically
+  // Populate user filter dynamically using centralized sorted user list
   const userSel = document.getElementById('filterMonthUser');
   const userVal = userSel?.value || 'all';
   if (userSel && isAdmin) {
     userSel.innerHTML = '<option value="all">👤 Tous</option>' +
-      Object.keys(USERS).map(u => `<option value="${u}">${u === 'admin' ? 'Admin' : esc(USERS[u].label)}</option>`).join('');
+      getSortedUsers().map(([k, u]) => `<option value="${k}">${k === 'admin' ? 'Admin' : esc(u.label)}</option>`).join('');
     if (Object.keys(USERS).includes(userVal)) userSel.value = userVal;
   }
 
@@ -3346,6 +3797,7 @@ function renderMonthly() {
       </div>
     </div>`;
   }).join('');
+  }, 'renderMonthly');
 }
 
 function toggleGroup(key){
@@ -3359,6 +3811,8 @@ function toggleGroup(key){
 // RENDER YEARLY
 // ════════════════════════════════════════════
 function renderYearly() {
+  safeRender(() => {
+  console.log('\ud83d\udd35 renderYearly appelé, depth:', __RENDER.depth);
   const allData = dataAll();
   const data = getUserExpenses(allData);
   const groups={};
@@ -3439,6 +3893,7 @@ function renderYearly() {
       </div>
     </div>`;
   }).join('');
+  }, 'renderYearly');
 }
 
 // ════════════════════════════════════════════
@@ -4574,6 +5029,8 @@ function getTrimesterMonths(t) {
 }
 
 function renderTrimester() {
+  safeRender(() => {
+  console.log('\ud83d\udd35 renderTrimester appelé, depth:', __RENDER.depth);
   const container = document.getElementById('trimesterContent');
   if (!container) return;
 
@@ -4586,9 +5043,8 @@ function renderTrimester() {
   yearSel.innerHTML = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
   if (!yearSel.value && years.length) yearSel.value = years[years.length-1];
 
-  // Populate user filter
-  const users = [...new Set(data.map(e=>e.user).filter(Boolean))];
-  userSel.innerHTML = '<option value="">Tous les collaborateurs</option>' + users.map(u => `<option value="${u}">${USERS[u]?.label||u}</option>`).join('');
+  // Populate user filter using centralized sorted user list
+  userSel.innerHTML = '<option value="">Tous les collaborateurs</option>' + getSortedUsers().map(([k, u]) => `<option value="${k}">${k === 'admin' ? 'Admin' : esc(u.label)}</option>`).join('');
 
   const selectedYear = yearSel.value;
   const selectedUser = userSel.value;
@@ -4659,12 +5115,15 @@ function renderTrimester() {
   tableHtml += `<div class="table-footer"><span class="total-info">Total annuel</span><span class="total-amount">${fmtDH(grandTotal)}</span></div>`;
 
   container.innerHTML = cardsHtml + '<div style="margin-top:10px;">' + tableHtml + '</div>';
+  }, 'renderTrimester');
 }
 
 // ════════════════════════════════════════════════════
 // COMPARAISON DE PÉRIODES
 // ════════════════════════════════════════════════════
 function renderComparison() {
+  safeRender(() => {
+  console.log('\ud83d\udd35 renderComparison appelé, depth:', __RENDER.depth);
   const container = document.getElementById('comparisonContent');
   if (!container) return;
 
@@ -4706,10 +5165,9 @@ function renderComparison() {
   const date1 = document.getElementById('cmpDate1').value;
   const date2 = document.getElementById('cmpDate2').value;
 
-  // Populate user filter
-  const users = [...new Set(data.map(e=>e.user).filter(Boolean))];
+  // Populate user filter using centralized sorted user list
   const uSel = document.getElementById('cmpUserFilter');
-  uSel.innerHTML = '<option value="">Tous</option>' + users.map(u => `<option value="${u}">${USERS[u]?.label||u}</option>`).join('');
+  uSel.innerHTML = '<option value="">Tous</option>' + getSortedUsers().map(([k, u]) => `<option value="${k}">${k === 'admin' ? 'Admin' : esc(u.label)}</option>`).join('');
 
   if (!date1 || !date2) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">📈</div><h3>Sélectionnez deux périodes</h3><p>Choisissez deux périodes à comparer.</p></div>';
@@ -4851,6 +5309,7 @@ function renderComparison() {
       </div>
     </div>
   `;
+  }, 'renderComparison');
 }
 
 // ════════════════════════════════════════════════════
@@ -5095,9 +5554,9 @@ function populateAdminFilters() {
   yearSel.innerHTML = '<option value="">Toutes années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
   if (currentYear) yearSel.value = currentYear;
 
-  const employes = [...new Set(data.map(o => o.employe).filter(Boolean))].sort();
+  // Use centralized sorted user list for collaborator filter
   const currentEmp = empSel.value;
-  empSel.innerHTML = '<option value="">Tous collaborateurs</option>' + employes.map(e => `<option value="${e}">${e}</option>`).join('');
+  empSel.innerHTML = '<option value="">Tous collaborateurs</option>' + getSortedUsers(true).map(([k, u]) => `<option value="${u.label}">${esc(u.label)}</option>`).join('');
   if (currentEmp) empSel.value = currentEmp;
 }
 
@@ -5443,8 +5902,101 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('loginUser').value = lastUser;
     }
   } catch(e) {}
+
+  // Initialiser les dropdowns utilisateurs personnalisés
+  initUserDropdowns();
+
   document.getElementById('loginOverlay').classList.remove('hidden');
 });
+
+// ════════════════════════════════════════════
+// INIT USER DROPDOWNS
+// ════════════════════════════════════════════
+function initUserDropdowns() {
+  // Sidebar user selector (admin switch)
+  createUserDropdown('userSelector', {
+    excludeAdmin: false,
+    showAll: false,
+    placeholder: 'Sélectionner...',
+    variant: 'compact',
+    onChange: (val) => switchUser(val)
+  });
+
+  // Filter user in Toutes tab
+  createUserDropdown('filterUser', {
+    excludeAdmin: false,
+    showAll: true,
+    allLabel: '\u{1f464} Tous',
+    allValue: 'all',
+    placeholder: 'Utilisateur',
+    variant: 'filter',
+    onChange: () => renderAll()
+  });
+
+  // Filter user in Par mois tab
+  createUserDropdown('filterMonthUser', {
+    excludeAdmin: false,
+    showAll: true,
+    allLabel: '\u{1f464} Tous',
+    allValue: 'all',
+    placeholder: 'Utilisateur',
+    variant: 'filter',
+    onChange: () => renderMonthly()
+  });
+
+  // OM collaborator select
+  createUserDropdown('omEmploye', {
+    excludeAdmin: true,
+    showAll: false,
+    placeholder: '-- Sélectionner un membre --',
+    variant: 'filter'
+  });
+
+  // Trimester filter
+  createUserDropdown('triUserFilter', {
+    excludeAdmin: false,
+    showAll: true,
+    allLabel: 'Tous les collaborateurs',
+    allValue: '',
+    placeholder: 'Collaborateur',
+    variant: 'filter',
+    onChange: () => renderTrimester()
+  });
+
+  // Comparison filter
+  createUserDropdown('cmpUserFilter', {
+    excludeAdmin: false,
+    showAll: true,
+    allLabel: 'Tous',
+    allValue: '',
+    placeholder: 'Collaborateur',
+    variant: 'filter',
+    onChange: () => renderComparison()
+  });
+
+  // Admin OM collaborator filter
+  createUserDropdown('adminOMEmploye', {
+    excludeAdmin: true,
+    showAll: true,
+    allLabel: 'Tous collaborateurs',
+    allValue: '',
+    placeholder: 'Collaborateur',
+    variant: 'filter',
+    onChange: () => renderAdminOM()
+  });
+
+  // Login user select
+  createUserDropdown('loginUser', {
+    excludeAdmin: false,
+    showAll: false,
+    placeholder: '-- Sélectionner --',
+    variant: 'filter',
+    onChange: (val) => {
+      // Auto-focus password field when user is selected
+      if (val) document.getElementById('loginPassword')?.focus();
+    }
+  });
+}
 
 // Service Worker PWA
 if ('serviceWorker' in navigator) {

@@ -349,7 +349,7 @@
     <div class="sidebar-bottom-row">
       <div class="user-selector">
         <label>   </label>
-        <select id="userSelector" onchange="switchUser(this.value)">
+        <select id="userSelector">
           <option value="admin"> Admin</option>
           <option value="user1">👤 Rachid Bayed</option>
           <option value="user2">👤 Soufiane Laraichi</option>
@@ -458,14 +458,17 @@
             </div>
 <div class="form-group span-2">
   <label class="form-label" for="justifInput">📎 Justificatif (photo/facture PDF)</label>
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-    <input type="file" class="form-input" id="justifInput" accept="image/*,.pdf" multiple style="padding:6px 12px;flex:1;min-width:150px;" onchange="previewJustificatif(event)"/>
-    <div id="justifPreview" style="width:50px;height:50px;border-radius:6px;border:1px solid var(--gray-200);display:none;overflow:hidden;flex-shrink:0;">
-      <img id="justifPreviewImg" src="" alt="Aperçu" style="width:100%;height:100%;object-fit:cover;"/>
-    </div>
-    <button type="button" class="btn btn-ghost" id="justifClearBtn" style="display:none;height:30px;font-size:10px;padding:0 8px;" onclick="clearJustificatif()">✕ Effacer</button>
+  <div class="upload-zone" id="justifUploadZone" style="cursor:pointer;padding:16px 12px;" onclick="document.getElementById('justifInput').click()" ondragover="event.preventDefault();this.classList.add('drag-over');" ondragleave="this.classList.remove('drag-over');" ondrop="onJustifDrop(event)">
+    <div style="font-size:24px;margin-bottom:4px;">📤</div>
+    <p style="font-size:12px;color:var(--gray-500);margin:0;">Cliquez pour ajouter des photos ou PDF</p>
+    <p style="font-size:10px;color:var(--gray-400);margin:2px 0 0;">JPG, PNG, PDF — Max 5 Mo par fichier</p>
+    <input type="file" id="justifInput" accept="image/*,.pdf" multiple onchange="previewJustificatif(event)" style="display:none;"/>
   </div>
-  <div id="justifFileName" style="font-size:10px;color:var(--gray-400);margin-top:2px;"></div>
+  <div id="justifPreview" style="width:60px;height:60px;border-radius:8px;border:1px solid var(--gray-200);display:none;overflow:hidden;margin-top:8px;">
+    <img id="justifPreviewImg" src="" alt="Aperçu" style="width:100%;height:100%;object-fit:cover;"/>
+  </div>
+  <div id="justifFileName" style="font-size:11px;color:var(--gray-500);margin-top:4px;"></div>
+  <button type="button" class="btn btn-ghost" id="justifClearBtn" style="display:none;height:28px;font-size:10px;padding:0 10px;margin-top:4px;" onclick="clearJustificatif()">✕ Effacer</button>
 </div>
           </div>
           <button class="btn btn-primary btn-lg btn-full" style="margin-top:14px;" onclick="addExpense()" id="addBtn">
@@ -601,7 +604,7 @@
           <option value="Formation">🎓 Formation</option>
           <option value="Autre">📌 Autre</option>
         </select>
-        <select class="form-select" id="filterUser" onchange="renderAll()">
+        <select class="form-select" id="filterUser">
           <option value="all">👤 Tous</option>
         </select>
         <div class="filter-sep"></div>
@@ -649,7 +652,7 @@
         <select class="form-select" id="filterYearMonth" onchange="renderMonthly()" style="height:32px;width:auto;font-size:12px;">
           <option value="all">Toutes années</option>
         </select>
-        <select class="form-select" id="filterMonthUser" onchange="renderMonthly()" style="height:32px;width:auto;font-size:12px;">
+        <select class="form-select" id="filterMonthUser" style="height:32px;width:auto;font-size:12px;">
           <option value="all">👤 Tous</option>
         </select>
       </div>
@@ -829,7 +832,7 @@
         <div class="filters-bar" style="border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:14px;">
           <select class="form-select" id="triYearFilter" onchange="renderTrimester()" style="min-width:100px;"></select>
           <div class="filter-sep"></div>
-          <select class="form-select" id="triUserFilter" onchange="renderTrimester()" style="min-width:100px;">
+          <select class="form-select" id="triUserFilter" style="min-width:100px;">
             <option value="">Tous les collaborateurs</option>
           </select>
         </div>
@@ -875,7 +878,7 @@
           </select>
           <select class="form-select" id="cmpDate2" onchange="renderComparison()" style="min-width:120px;"></select>
           <div class="filter-sep"></div>
-          <select class="form-select" id="cmpUserFilter" onchange="renderComparison()" style="min-width:100px;">
+          <select class="form-select" id="cmpUserFilter" style="min-width:100px;">
             <option value="">Tous</option>
           </select>
           <button class="btn btn-primary" onclick="renderComparison()" style="height:32px;font-size:11px;">🔄 Comparer</button>
@@ -915,7 +918,7 @@
           <select class="form-select" id="adminOMYear" onchange="renderAdminOM()" style="min-width:90px;">
             <option value="">Toutes années</option>
           </select>
-          <select class="form-select" id="adminOMEmploye" onchange="renderAdminOM()" style="min-width:120px;">
+          <select class="form-select" id="adminOMEmploye" style="min-width:120px;">
             <option value="">Tous collaborateurs</option>
           </select>
           <div class="filter-sep"></div>
