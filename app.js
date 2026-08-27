@@ -5051,77 +5051,107 @@ function exportPDF() {
   if (!data.length) return toast('Aucune dépense à exporter avec ces filtres.', 'err');
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const W = 297;
-  
-  const logoUrl = 'logo.PNG';
-  try {
-    doc.addImage(logoUrl, 'PNG', 14, 4, 20, 18);
-  } catch (e) {
-    console.warn('Logo not found in PDF export', e);
-  }
-  
-  doc.setFillColor(11, 79, 158);
-  doc.rect(0, 0, W, 22, 'F');
+  const W = 297, M = 12;
+  const cx = W / 2;
+  const blue = [0, 85, 164];
+  const dark = [33, 37, 41];
+  const gray = [108, 117, 125];
+  const lightGray = [233, 236, 239];
+
+  // Header bar
+  doc.setFillColor(...blue);
+  doc.rect(0, 0, W, 24, 'F');
+  try { doc.addImage('logo.PNG', 'PNG', M, 4, 18, 16); } catch(e) {}
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(255, 255, 255);
-  doc.text('eqnovia', 38, 14);
-  doc.setFillColor(247, 147, 30);
-  doc.circle(38 + doc.getTextWidth('eqnovia') - 2, 8, 1.5, 'F');
-  doc.setFontSize(10);
+  doc.text('EQNOVIA', 34, 12);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(200, 223, 245);
-  doc.text('Note de Frais — Document officiel', 14, 20);
-  const now = new Date();
   doc.setFontSize(9);
-  doc.text(`Édité le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`, W - 14, 14, { align: 'right' });
-  doc.setTextColor(11, 79, 158);
+  doc.setTextColor(200, 223, 245);
+  doc.text('Note de Frais — Récapitulatif des dépenses', 34, 19);
+  const now = new Date();
+  doc.setFontSize(8);
+  doc.text(now.toLocaleDateString('fr-FR'), W - M, 12, { align: 'right' });
+
+  // Title
+  let y = 32;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.text('Récapitulatif des dépenses professionnelles', 14, 30);
-  doc.setFontSize(10);
+  doc.setFontSize(12);
+  doc.setTextColor(...blue);
+  doc.text('Récapitulatif des dépenses professionnelles', cx, y, { align: 'center' });
+  y += 6;
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(53, 61, 79);
-  doc.text(`Utilisateur : ${USERS[currentUser].label}`, 14, 36);
-  doc.text(`Filtres actifs : Oui`, 180, 36);
-  
-  const sorted = [...data].sort((a, b) => b.date.localeCompare(a.date));
-  const total = sorted.reduce((s, e) => s + e.amount, 0);
-  const head = [['#', 'Date', 'Description', 'Type', 'Total TTC', 'Mission', 'Commentaires', 'User', 'Justif']];
+  doc.setFontSize(9);
+  doc.setTextColor(...gray);
+  const userLabel = USERS[currentUser]?.label || currentUser;
+  doc.text(`Collaborateur : ${userLabel}    |    ${sorted.length} dépense(s)    |    Total TTC : ${fmtDH(total)}`, cx, y, { align: 'center' });
+  y += 6;
+
+  // Separator line
+  doc.setDrawColor(...blue);
+  doc.setLineWidth(0.5);
+  doc.line(M, y, W - M, y);
+  y += 4;
+
+  // Table
+  const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+  const head = [['#', 'Date', 'Description', 'Categorie', 'Total TTC', 'Mission', 'Commentaires', 'Utilisateur', 'Justif']];
   const body = sorted.map((e, i) => [
-    i + 1, fmtDate(e.date), e.desc, e.cat || 'Autre', fmtDH(e.amount), e.mission || '—', e.comment || '—',
+    i + 1,
+    fmtDate(e.date),
+    e.desc.length > 40 ? e.desc.substring(0, 37) + '...' : e.desc,
+    e.cat || 'Autre',
+    fmtDH(e.amount),
+    (e.mission || '—').length > 25 ? (e.mission || '—').substring(0, 22) + '...' : (e.mission || '—'),
+    (e.comment || '—').length > 22 ? (e.comment || '—').substring(0, 19) + '...' : (e.comment || '—'),
     USERS[e.user]?.label || e.user,
     e.justifData ? 'Oui' : 'Non'
   ]);
   doc.autoTable({
-    head, body, startY: 40,
-    styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 2.5, valign: 'middle' },
-    headStyles: { fillColor: [11, 79, 158], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
-    alternateRowStyles: { fillColor: [235, 243, 251] },
+    head, body, startY: y,
+    styles: {
+      font: 'helvetica', fontSize: 7.5, cellPadding: 2.5,
+      valign: 'middle', lineColor: [230, 230, 230], lineWidth: 0.2
+    },
+    headStyles: {
+      fillColor: blue, textColor: [255, 255, 255],
+      fontStyle: 'bold', fontSize: 7.5, halign: 'center'
+    },
+    alternateRowStyles: { fillColor: [245, 248, 252] },
     columnStyles: {
-      0: { cellWidth: 6, halign: 'center', textColor: [100, 110, 130] },
-      1: { cellWidth: 18, textColor: [100, 110, 130] },
-      2: { cellWidth: 38 },
-      3: { cellWidth: 20 },
-      4: { cellWidth: 22, halign: 'right', fontStyle: 'bold', textColor: [11, 79, 158] },
-      5: { cellWidth: 28 },
-      6: { cellWidth: 25 },
-      7: { cellWidth: 18 },
+      0: { cellWidth: 8, halign: 'center', textColor: gray },
+      1: { cellWidth: 22, halign: 'center' },
+      2: { cellWidth: 48 },
+      3: { cellWidth: 26, halign: 'center' },
+      4: { cellWidth: 24, halign: 'right', fontStyle: 'bold', textColor: blue },
+      5: { cellWidth: 36 },
+      6: { cellWidth: 32 },
+      7: { cellWidth: 28, halign: 'center' },
       8: { cellWidth: 14, halign: 'center' }
     },
-    foot: [['', '', '', 'TOTAL', fmtDH(total), '', '', '', '']],
-    footStyles: { fillColor: [235, 243, 251], fontStyle: 'bold' },
-    margin: { left: 10, right: 10 }
+    foot: [['', '', '', 'TOTAL TTC', fmtDH(total), '', '', '', '']],
+    footStyles: { fillColor: lightGray, fontStyle: 'bold', textColor: blue, halign: 'right' },
+    margin: { left: M, right: M },
+    didParseCell: function(hookData) {
+      // Right-align amount column
+      if (hookData.section === 'body' && hookData.column.index === 4) {
+        hookData.cell.styles.halign = 'right';
+      }
+    }
   });
-  const fy = doc.lastAutoTable.finalY + 8;
-  doc.setFillColor(247, 147, 30);
-  doc.rect(10, fy, 6, 6, 'F');
+
+  // Footer
+  const fy = doc.lastAutoTable.finalY + 6;
+  doc.setDrawColor(...lightGray);
+  doc.setLineWidth(0.3);
+  doc.line(M, fy, W - M, fy);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(100, 110, 130);
-  doc.text(`Eqnovia · ${sorted.length} dépense(s) · Total TTC : ${fmtDH(total)}`, 20, fy + 4);
-  doc.save(`note-de-frais_${USERS[currentUser].label.replace(/ /g, '_')}_${today()}.pdf`);
-  toast('Export PDF téléchargé !');
+  doc.setFontSize(7);
+  doc.setTextColor(...gray);
+  doc.text('\u00a9 ' + now.getFullYear() + ' EQNOVIA \u2014 Notes de Frais', cx, fy + 5, { align: 'center' });
+  doc.save('note-de-frais_' + userLabel.replace(/ /g, '_') + '_' + today() + '.pdf');
+  toast('Export PDF telecharge.', 'ok');
 }
 
 // ════════════════════════════════════════════════════
