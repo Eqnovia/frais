@@ -343,6 +343,8 @@ function createUserDropdown(selectId, config = {}) {
         render();
         // Dispatch change event on the original select
         select.dispatchEvent(new Event('change', { bubbles: true }));
+        // Fire config onChange callback if provided
+        if (cfg.onChange) cfg.onChange(select.value);
       });
       item.addEventListener('mouseenter', () => {
         item.style.transition = 'background 0.1s';
@@ -824,19 +826,35 @@ function updateUserUI() {
     filterMonthUser.style.display = isAdmin ? '' : 'none';
   }
   
+  // Hide/show user selector in sidebar — only admin can switch accounts
+  const userSelectorWrap = document.getElementById('userSelector')?.closest('.user-selector');
+  if (userSelectorWrap) {
+    userSelectorWrap.style.display = isAdmin ? '' : 'none';
+  }
+
   // Populate assignedTo dropdown for mission orders
   populateAssignedToDropdown();
+}
+
+// Resolve a user label (e.g. "Rachid Bayed") to its key (e.g. "user1")
+function resolveUserKey(label) {
+  if (!label) return '';
+  for (const [key, u] of Object.entries(USERS)) {
+    if (u.label === label) return key;
+  }
+  return label; // fallback: return as-is if not found
 }
 
 // Populate the omEmploye dropdown with available users
 function populateAssignedToDropdown() {
   // Populate omEmploye (collaborator name) using centralized user list
+  // IMPORTANT: option.value must use key (not label) to match createUserDropdown's data-value
   const omEmployeSelect = document.getElementById('omEmploye');
   if (omEmployeSelect) {
     omEmployeSelect.innerHTML = '<option value="">-- Sélectionner un membre --</option>';
     getSortedUsers(true).forEach(([key, u]) => {
       const option = document.createElement('option');
-      option.value = u.label;
+      option.value = key;
       option.textContent = u.label;
       omEmployeSelect.appendChild(option);
     });
@@ -886,6 +904,9 @@ function closeModal(id) {
   } else {
     const el = document.getElementById('modal');
     if (el) el.classList.remove('open');
+    // Restore confirm button in case it was hidden (e.g. by showOMPopup)
+    const okBtn = document.getElementById('modalOk');
+    if (okBtn) okBtn.style.display = '';
   }
 }
 
@@ -1854,7 +1875,8 @@ function getOMValue(id) {
 function generateMissionOrder() {
   const numero  = getOMValue('omNumero');
   const date    = document.getElementById('omDate').value;
-  const employe = getOMValue('omEmploye');
+  const employeKey = getOMValue('omEmploye');
+  const employe = USERS[employeKey]?.label || employeKey;
   const objet   = getOMValue('omObjet');
 
   if (!numero || !date || !employe || !objet) {
@@ -1872,34 +1894,55 @@ function generateMissionOrder() {
 
   const fiche = document.getElementById('omFiche');
   fiche.innerHTML = `
+    <!-- EN-TÊTE AVEC LOGO -->
     <div class="om-header">
       <div class="om-brand"><img src="logo.PNG" alt="Eqnovia" class="om-logo"/></div>
       <div class="om-title">ORDRE DE MISSION<small>N° ${esc(numero)}</small></div>
     </div>
+
+    <!-- GRILLE D'INFORMATIONS -->
     <div class="om-grid">
-      <div class="om-field"><span class="om-label">Date d'émission</span><span class="om-value">${esc(date)}</span></div>
-      <div class="om-field"><span class="om-label">Collaborateur</span><span class="om-value">${esc(employe)}</span></div>
-      <div class="om-field"><span class="om-label">Lieu de départ</span><span class="om-value">${esc(depart)}</span></div>
-      <div class="om-field"><span class="om-label">Lieu de destination</span><span class="om-value">${esc(arrivee)}</span></div>
-      <div class="om-field"><span class="om-label">Date de début</span><span class="om-value">${esc(debut)}</span></div>
-      <div class="om-field"><span class="om-label">Date de fin</span><span class="om-value">${esc(fin)}</span></div>
-      <div class="om-field"><span class="om-label">Mode de transport</span><span class="om-value">${esc(transport)}</span></div>
+      <div class="om-field"><span class="om-label">📅 Date d'émission</span><span class="om-value">${esc(date)}</span></div>
+      <div class="om-field"><span class="om-label">👤 Collaborateur</span><span class="om-value">${esc(employe)}</span></div>
+      <div class="om-field"><span class="om-label">📍 Lieu de départ</span><span class="om-value">${esc(depart)}</span></div>
+      <div class="om-field"><span class="om-label">📍 Lieu de destination</span><span class="om-value">${esc(arrivee)}</span></div>
+      <div class="om-field"><span class="om-label">📆 Date de début</span><span class="om-value">${esc(debut)}</span></div>
+      <div class="om-field"><span class="om-label">📆 Date de fin</span><span class="om-value">${esc(fin)}</span></div>
+      <div class="om-field"><span class="om-label">🚗 Mode de transport</span><span class="om-value">${esc(transport)}</span></div>
       <div class="om-field"><span class="om-label">📱 Téléphone</span><span class="om-value om-phone-print">${esc(telephone)}</span></div>
     </div>
+
+    <!-- OBJET DE LA MISSION -->
     <div class="om-objet">
-      <span class="om-label">Objet de la mission</span>
+      <span class="om-label">📝 Objet de la mission</span>
       <span class="om-value">${esc(objet)}</span>
     </div>
-    <div class="om-field full" style="margin-bottom:14px;">
-      <span class="om-label">Remarques / instructions</span>
-      <span class="om-value" style="font-weight:500;white-space:pre-wrap;">${esc(remarques)}</span>
-    </div>
-    <div class="om-sign">
-      <div class="om-sign-box"><div class="om-sign-line">Le collaborateur</div></div>
-      <div class="om-sign-box"><div class="om-sign-line">Le responsable</div></div>
-    </div>
-    <div class="om-footer">Document généré par Eqnovia — Notes de Frais • ${esc(numero)}</div>
 
+    <!-- REMARQUES -->
+    ${remarques && remarques !== '—' ? `<div class="om-field full" style="margin-bottom:18px;">
+      <span class="om-label">📋 Remarques / instructions</span>
+      <span class="om-value" style="font-weight:500;white-space:pre-wrap;">${esc(remarques)}</span>
+    </div>` : ''}
+
+    <!-- SIGNATURES -->
+    <div class="om-sign">
+      <div class="om-sign-box">
+        <div style="font-size:12px;font-weight:700;color:#666;margin-bottom:4px;">Le collaborateur</div>
+        <div class="om-sign-line"></div>
+        <div style="font-size:9px;color:#aaa;margin-top:4px;">Signature & date</div>
+      </div>
+      <div class="om-sign-box">
+        <div style="font-size:12px;font-weight:700;color:#666;margin-bottom:4px;">Le responsable</div>
+        <div class="om-sign-line"></div>
+        <div style="font-size:9px;color:#aaa;margin-top:4px;">Signature & date</div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="om-footer">
+      <div class="om-footer-text">© ${new Date().getFullYear()} EQNOVIA — Notes de Frais • ${esc(numero)}</div>
+      <div class="om-footer-copy">Document généré automatiquement</div>
+    </div>
   `;
 
   // Look up status & comment from history (if saved)
@@ -1909,20 +1952,31 @@ function generateMissionOrder() {
   const comment = (saved && saved._comment) || '';
   
   const statusHtml = {
-    approved: '<span class="status-badge approved">✅ Approuvé</span>',
-    rejected: '<span class="status-badge rejected">❌ Rejeté</span>',
-    pending: '<span class="status-badge pending">⏳ En attente de validation</span>'
-  }[status] || '<span class="status-badge pending">⏳ En attente de validation</span>';
+    approved: '<span class="om-status-badge approved">✅ Approuvé</span>',
+    rejected: '<span class="om-status-badge rejected">❌ Rejeté</span>',
+    pending: '<span class="om-status-badge pending">⏳ En attente de validation</span>'
+  }[status] || '<span class="om-status-badge pending">⏳ En attente de validation</span>';
   
-  // Append status after the sign section
-  fiche.innerHTML += `
-    <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--gray-200);text-align:center;">
-      <div style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Statut de la mission</div>
-      ${statusHtml}
-      ${comment ? `<div style="margin-top:8px;padding:8px 14px;background:var(--gray-50);border-radius:var(--radius-md);font-size:11px;color:var(--gray-500);text-align:left;border-left:3px solid ${status === 'approved' ? 'var(--green)' : status === 'rejected' ? 'var(--red)' : 'var(--gray-300)'};"><strong>Message de l'administration :</strong><br>${esc(comment)}</div>` : ''}
-      ${telephone && telephone !== '—' ? `<div style="margin-top:10px;" class="no-print"><a class="btn btn-primary" href="https://wa.me/${cleanPhone(telephone)}?text=${encodeURIComponent('Eqnovia - Ordre de mission N° ' + numero + '\n\nCollaborateur : ' + employe + '\nDate : ' + date + '\nTrajet : ' + depart + ' → ' + arrivee + '\nObjet : ' + objet + '\nTransport : ' + transport + '\n' + (remarques !== '—' ? 'Remarques : ' + remarques : ''))}" target="_blank" style="text-decoration:none;font-size:12px;padding:6px 16px;">💬 Envoyer par WhatsApp</a></div>` : ''}
-    </div>
+  // Insert status section before signatures
+  const signSection = fiche.querySelector('.om-sign');
+  const statusSection = document.createElement('div');
+  statusSection.className = 'om-status-section';
+  statusSection.innerHTML = `
+    <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">Statut de la mission</div>
+    ${statusHtml}
+    ${comment ? `<div style="margin-top:10px;padding:10px 16px;background:#fff;border-radius:8px;font-size:11px;color:#666;text-align:left;border-left:3px solid ${status === 'approved' ? '#28a745' : status === 'rejected' ? '#dc3545' : '#ccc'};"><strong>Message de l'administration :</strong><br>${esc(comment)}</div>` : ''}
+    ${telephone && telephone !== '—' ? `<div style="margin-top:12px;" class="no-print"><a class="btn btn-primary" href="https://wa.me/${cleanPhone(telephone)}?text=${encodeURIComponent('Eqnovia - Ordre de mission N° ' + numero + '\n\nCollaborateur : ' + employe + '\nDate : ' + date + '\nTrajet : ' + depart + ' → ' + arrivee + '\nObjet : ' + objet + '\nTransport : ' + transport + '\n' + (remarques !== '—' ? 'Remarques : ' + remarques : ''))}" target="_blank" style="text-decoration:none;font-size:12px;padding:8px 20px;border-radius:20px;">💬 Envoyer par WhatsApp</a></div>` : ''}
   `;
+  if (signSection) {
+    fiche.insertBefore(statusSection, signSection);
+  } else {
+    fiche.appendChild(statusSection);
+  }
+  // Re-insert signatures and footer after status
+  if (signSection) fiche.appendChild(signSection);
+  // Move footer to end
+  const footerEl = fiche.querySelector('.om-footer');
+  if (footerEl) fiche.appendChild(footerEl);
 
   document.getElementById('omPrintBtn').disabled = false;
   toast('✅ Fiche d\'ordre de mission générée.', 'success');
@@ -2003,7 +2057,7 @@ function editOM(index) {
   // Load data into the form fields
   document.getElementById('omNumero').value = om.numero || '';
   document.getElementById('omDate').value = om.date || '';
-  document.getElementById('omEmploye').value = om.employe || '';
+  document.getElementById('omEmploye').value = resolveUserKey(om.employe) || '';
   document.getElementById('omDepart').value = om.depart || '';
   document.getElementById('omArrivee').value = om.arrivee || '';
   document.getElementById('omDebut').value = om.debut || '';
@@ -2024,12 +2078,60 @@ function viewOM(index) {
   const history = loadOMHistory();
   const om = history[index];
   if (!om) return toast('Ordre de mission introuvable.', 'err');
+  showOMPopup(om);
+}
+
+/**
+ * Affiche un ordre de mission en lecture seule dans une popup.
+ * Ne modifie PAS le formulaire et ne crée PAS de nouvel OM.
+ */
+function showOMPopup(om) {
+  const statusMap = {
+    approved: '<span style="color:var(--green);font-weight:700;">✅ Approuvé</span>',
+    rejected: '<span style="color:var(--red);font-weight:700;">❌ Rejeté</span>',
+    pending: '<span style="color:var(--eq-orange);font-weight:700;">⏳ En attente</span>'
+  };
+  const status = statusMap[om._status] || statusMap.pending;
+  const comment = om._comment ? `<div style="margin-top:10px;padding:10px;background:var(--gray-50);border-radius:var(--radius-md);border-left:3px solid var(--eq-blue);">
+    <div style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;margin-bottom:4px;">Commentaire admin</div>
+    <div style="font-size:12px;color:var(--gray-700);">${esc(om._comment)}</div>
+  </div>` : '';
   
-  // Load into form, generate the fiche, and scroll to it
-  editOM(index);
-  generateMissionOrder();
-  document.getElementById('omFiche')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  toast('👁️ Fiche affichée.', 'ok');
+  const body = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+      <div style="width:44px;height:44px;border-radius:50%;background:var(--eq-blue-pale);color:var(--eq-blue);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;">📝</div>
+      <div>
+        <div style="font-size:16px;font-weight:800;color:var(--gray-900);">OM N° ${esc(om.numero || '—')}</div>
+        <div style="font-size:12px;color:var(--gray-400);">${esc(om.employe || '—')}</div>
+      </div>
+      <div style="margin-left:auto;">${status}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="om-field"><span class="om-label">Date d'émission</span><span class="om-value">${esc(om.date || '—')}</span></div>
+      <div class="om-field"><span class="om-label">Collaborateur</span><span class="om-value">${esc(om.employe || '—')}</span></div>
+      <div class="om-field"><span class="om-label">Départ</span><span class="om-value">${esc(om.depart || '—')}</span></div>
+      <div class="om-field"><span class="om-label">Destination</span><span class="om-value">${esc(om.arrivee || '—')}</span></div>
+      <div class="om-field"><span class="om-label">Date début</span><span class="om-value">${esc(om.debut || '—')}</span></div>
+      <div class="om-field"><span class="om-label">Date fin</span><span class="om-value">${esc(om.fin || '—')}</span></div>
+      <div class="om-field"><span class="om-label">Transport</span><span class="om-value">${esc(om.transport || '—')}</span></div>
+      <div class="om-field"><span class="om-label">Téléphone</span><span class="om-value">${esc(om.tel || '—')}</span></div>
+    </div>
+    <div style="margin-top:10px;">
+      <div style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;margin-bottom:4px;">Objet de la mission</div>
+      <div style="font-size:13px;color:var(--gray-700);background:var(--gray-50);padding:10px;border-radius:var(--radius-md);">${esc(om.objet || '—')}</div>
+    </div>
+    ${om.remarques && om.remarques !== '—' ? `<div style="margin-top:10px;">
+      <div style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;margin-bottom:4px;">Remarques</div>
+      <div style="font-size:12px;color:var(--gray-600);white-space:pre-wrap;">${esc(om.remarques)}</div>
+    </div>` : ''}
+    ${comment}
+  `;
+  
+  // Inject into modal
+  document.getElementById('modalTitle').textContent = '📋 Ordre de Mission';
+  document.getElementById('modalMsg').innerHTML = body;
+  document.getElementById('modalOk').style.display = 'none'; // hide confirm btn
+  document.getElementById('modal').classList.add('open');
 }
 
 function exportSingleOMPDF(index) {
@@ -2040,25 +2142,39 @@ function exportSingleOMPDF(index) {
   try {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF('p', 'mm', 'a4');
-    
-    // Logo
-    try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch(e) { /* fallback */ }
-    
-    // Title
-    doc.setFontSize(16);
+    const W = 210, M = 20; // page width, margin
+    const cx = W / 2; // center X
+    const blue = [0, 85, 164]; // #0055A4
+    const dark = [33, 37, 41];
+    const gray = [108, 117, 125];
+    let y = 20;
+
+    // ═══ LOGO (centered) ═══
+    try {
+      doc.addImage('logo.PNG', 'PNG', cx - 20, y, 40, 14);
+    } catch(e) { /* no logo */ }
+    y += 22;
+
+    // ═══ TITLE (centered) ═══
     doc.setFont('helvetica', 'bold');
-    doc.text(`ORDRE DE MISSION N° ${om.numero || 'N/A'}`, 105, 22, { align: 'center' });
-    
-    // Separator
-    doc.setDrawColor(11, 79, 158);
+    doc.setFontSize(20);
+    doc.setTextColor(...blue);
+    doc.text('ORDRE DE MISSION', cx, y, { align: 'center' });
+    y += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(12);
+    doc.setTextColor(...gray);
+    doc.text('N° ' + (om.numero || 'N/A'), cx, y, { align: 'center' });
+    y += 6;
+
+    // ═══ LINE ═══
+    doc.setDrawColor(...blue);
     doc.setLineWidth(0.8);
-    doc.line(14, 27, 196, 27);
-    
-    // Info box
-    const leftX = 18;
-    let y = 33;
-    doc.setFontSize(10);
-    
+    doc.line(M, y, W - M, y);
+    y += 12;
+
+    // ═══ INFO GRID (2 columns, centered text) ═══
+    const colW = (W - 2 * M) / 2;
     const fields = [
       ['Date d\'émission', om.date || '—'],
       ['Collaborateur', om.employe || '—'],
@@ -2073,116 +2189,120 @@ function exportSingleOMPDF(index) {
     fields.forEach(([label, value], fi) => {
       const col = fi % 2;
       const row = Math.floor(fi / 2);
-      const x = col === 0 ? leftX : 105;
-      const yy = y + row * 8;
+      const x = M + col * colW;
+      const yy = y + row * 16;
+      const cellW = colW - 4;
       
+      // Label (small, gray, centered)
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7);
-      doc.setTextColor(142, 151, 168);
-      doc.text(label.toUpperCase(), x, yy);
+      doc.setTextColor(...gray);
+      doc.text(label.toUpperCase(), x + cellW / 2, yy, { align: 'center' });
       
-      doc.setFont('helvetica', 'normal');
+      // Value (larger, dark, centered)
+      doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
-      doc.setTextColor(53, 61, 79);
-      doc.text(value, x, yy + 4);
+      doc.setTextColor(...dark);
+      doc.text(value, x + cellW / 2, yy + 5, { align: 'center' });
       
       // Underline
-      doc.setDrawColor(221, 225, 234);
+      doc.setDrawColor(220, 220, 220);
       doc.setLineWidth(0.3);
-      doc.line(x, yy + 5.5, col === 0 ? 100 : 196, yy + 5.5);
+      doc.line(x + 4, yy + 7, x + cellW, yy + 7);
     });
     
-    const objY = y + Math.ceil(fields.length / 2) * 8 + 6;
-    
-    // Object box
-    doc.setFillColor(235, 243, 251);
-    doc.setDrawColor(200, 223, 245);
-    doc.roundedRect(leftX - 2, objY, 176, 16, 2, 2, 'FD');
-    
+    y += Math.ceil(fields.length / 2) * 16 + 4;
+
+    // ═══ OBJET BOX ═══
+    doc.setFillColor(240, 244, 255);
+    doc.roundedRect(M, y, W - 2 * M, 18, 2, 2, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
-    doc.setTextColor(11, 79, 158);
-    doc.text('OBJET DE LA MISSION', leftX + 2, objY + 5);
-    
+    doc.setFontSize(8);
+    doc.setTextColor(...blue);
+    doc.text('OBJET DE LA MISSION', cx, y + 6, { align: 'center' });
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(53, 61, 79);
-    doc.text(om.objet || '—', leftX + 2, objY + 12);
-    
-    // Remarks
-    let lines;
+    doc.setFontSize(11);
+    doc.setTextColor(...dark);
+    doc.text(om.objet || '—', cx, y + 13, { align: 'center' });
+    y += 24;
+
+    // ═══ REMARQUES (if any) ═══
     if (om.remarques && om.remarques !== '—') {
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7);
-      doc.setTextColor(142, 151, 168);
-      doc.text('REMARQUES / INSTRUCTIONS', leftX, objY + 23);
-      
+      doc.setFontSize(8);
+      doc.setTextColor(...gray);
+      doc.text('REMARQUES', cx, y, { align: 'center' });
+      y += 5;
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
-      doc.setTextColor(53, 61, 79);
-      lines = doc.splitTextToSize(om.remarques, 175);
-      doc.text(lines, leftX, objY + 30);
+      doc.setTextColor(...dark);
+      const remLines = doc.splitTextToSize(om.remarques, W - 2 * M - 10);
+      doc.text(remLines, cx, y, { align: 'center' });
+      y += remLines.length * 4 + 6;
     }
+
+    // ═══ STATUS ═══
+    const statusText = { approved: 'APPROUVE', rejected: 'REJETE', pending: 'EN ATTENTE' };
+    const statusColor = {
+      approved: [21, 87, 36],
+      rejected: [114, 28, 36],
+      pending: [180, 130, 0]
+    };
+    const stText = statusText[om._status] || 'EN ATTENTE';
+    const stColor = statusColor[om._status] || statusColor.pending;
     
-    // Status
-    const statusLabel = {approved:'APPROUVÉ ✅', rejected:'REJETÉ ❌', pending:'EN ATTENTE ⏳'}[om._status] || 'EN ATTENTE';
-    const linesHeight = (om.remarques && om.remarques !== '—' && lines) ? lines.length * 4 : 0;
-    const statusY = objY + (om.remarques && om.remarques !== '—' ? 34 + linesHeight : 28);
-    
-    doc.setDrawColor(221, 225, 234);
-    doc.setLineWidth(0.5);
-    doc.line(leftX, statusY, 196, statusY);
+    y += 4;
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.3);
+    doc.line(M, y, W - M, y);
+    y += 8;
     
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.setTextColor(142, 151, 168);
-    doc.text('STATUT', 105, statusY + 7, { align: 'center' });
+    doc.setTextColor(...gray);
+    doc.text('STATUT', cx, y, { align: 'center' });
+    y += 6;
     
-    doc.setFontSize(11);
-    doc.setTextColor(11, 79, 158);
-    doc.text(statusLabel, 105, statusY + 14, { align: 'center' });
-    
-    // Comment
-    let commentLines;
-    if (om._comment) {
-      doc.setFontSize(9);
-      doc.setTextColor(99, 110, 130);
-      commentLines = doc.splitTextToSize(`Message : ${om._comment}`, 170);
-      doc.text(commentLines, 105, statusY + 21, { align: 'center' });
-    }
-    
-    // Signature section
-    const commentHeight = (om._comment && commentLines) ? commentLines.length * 4 : 0;
-    const sigY = statusY + (om._comment ? 26 + commentHeight : 22);
-    doc.setDrawColor(142, 151, 168);
+    // Status pill (centered)
+    const pillW = 50;
+    doc.setFillColor(...stColor);
+    doc.roundedRect(cx - pillW / 2, y - 3, pillW, 8, 4, 4, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
+    doc.text(stText, cx, y + 2, { align: 'center' });
+    y += 12;
+
+    // ═══ SIGNATURES ═══
+    y += 8;
+    doc.setDrawColor(220, 220, 220);
     doc.setLineWidth(0.3);
+    doc.line(M, y, W - M, y);
+    y += 10;
     
     // Left signature line
-    doc.line(30, sigY + 12, 85, sigY + 12);
-    doc.setFontSize(8);
-    doc.setTextColor(142, 151, 168);
-    doc.text('Le collaborateur', 57.5, sigY + 17, { align: 'center' });
+    doc.setDrawColor(50, 50, 50);
+    doc.setLineWidth(0.4);
+    doc.line(M + 10, y + 10, M + colW - 10, y + 10);
     
     // Right signature line
-    doc.setLineWidth(0.3);
-    doc.line(110, sigY + 12, 165, sigY + 12);
-    doc.text('Le responsable', 137.5, sigY + 17, { align: 'center' });
+    doc.line(M + colW + 10, y + 10, M + colW + colW - 10, y + 10);
     
-    // Footer
-    const footerY = 285;
-    doc.setDrawColor(221, 225, 234);
+    // ═══ FOOTER ═══
+    const footerY = 280;
+    doc.setDrawColor(220, 220, 220);
     doc.setLineWidth(0.3);
-    doc.line(14, footerY, 196, footerY);
+    doc.line(M, footerY, W - M, footerY);
+    doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
-    doc.setTextColor(142, 151, 168);
-    doc.text(`Document généré par Eqnovia — Notes de Frais • ${om.numero || 'N/A'}`, 105, footerY + 5, { align: 'center' });
-    doc.text(`Date: ${om.date || '—'}`, 105, footerY + 10, { align: 'center' });
+    doc.setTextColor(...gray);
+    doc.text('\u00a9 ' + new Date().getFullYear() + ' EQNOVIA \u2014 Tous droits r\u00e9serv\u00e9s', cx, footerY + 5, { align: 'center' });
     
-    doc.save(`Ordre_Mission_${om.numero || 'sans_numero'}.pdf`);
-    toast('📄 PDF téléchargé.', 'ok');
+    doc.save('Ordre_Mission_' + (om.numero || 'sans_numero') + '.pdf');
+    toast('PDF telecharge.', 'ok');
   } catch (e) {
     console.warn('PDF export failed:', e);
-    toast('❌ Erreur lors de la création du PDF.', 'err');
+    toast('Erreur lors de la creation du PDF.', 'err');
   }
 }
 
@@ -2206,7 +2326,8 @@ generateMissionOrder = async function() {
   // Only save if generation succeeded (print button enabled = fiche generated)
   if (document.getElementById('omPrintBtn').disabled) return;
   const history = loadOMHistory();
-  const employeName = document.getElementById('omEmploye').value;
+  const employeKey = document.getElementById('omEmploye').value;
+  const employeName = USERS[employeKey]?.label || employeKey;
   history.push({
     numero: document.getElementById('omNumero').value,
     date: document.getElementById('omDate').value,
@@ -2336,7 +2457,7 @@ function viewAdminMO(docId) {
   // Generate the fiche in the mission tab
   document.getElementById('omNumero').value = mo.numero || '';
   document.getElementById('omDate').value = mo.date || '';
-  document.getElementById('omEmploye').value = mo.employe || '';
+  document.getElementById('omEmploye').value = resolveUserKey(mo.employe) || '';
   document.getElementById('omDepart').value = mo.depart || '';
   document.getElementById('omArrivee').value = mo.arrivee || '';
   document.getElementById('omDebut').value = mo.debut || '';
@@ -2479,14 +2600,10 @@ function exportAdminOMPDF(docId) {
     
     // Left signature line
     doc.line(30, sigY + 12, 85, sigY + 12);
-    doc.setFontSize(8);
-    doc.setTextColor(142, 151, 168);
-    doc.text('Le collaborateur', 57.5, sigY + 17, { align: 'center' });
     
     // Right signature line
     doc.setLineWidth(0.3);
     doc.line(110, sigY + 12, 165, sigY + 12);
-    doc.text('Le responsable', 137.5, sigY + 17, { align: 'center' });
     
     // Footer
     const footerY = 285;
@@ -2591,23 +2708,7 @@ function renderDashboardMissionOrders() {
 function viewUserMO(docId) {
   const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
   if (!mo) return toast('Ordre de mission introuvable.', 'err');
-  
-  document.getElementById('omNumero').value = mo.numero || '';
-  document.getElementById('omDate').value = mo.date || '';
-  document.getElementById('omEmploye').value = mo.employe || '';
-  document.getElementById('omDepart').value = mo.depart || '';
-  document.getElementById('omArrivee').value = mo.arrivee || '';
-  document.getElementById('omDebut').value = mo.debut || '';
-  document.getElementById('omFin').value = mo.fin || '';
-  document.getElementById('omTransport').value = mo.transport || 'Voiture';
-  document.getElementById('omObjet').value = mo.objet || '';
-  document.getElementById('omTel').value = mo.tel || '';
-  document.getElementById('omRemarques').value = mo.remarques || '';
-  
-  switchTab('mission');
-  generateMissionOrder();
-  document.getElementById('omFiche')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  toast('👁️ Fiche affichée.', 'ok');
+  showOMPopup(mo);
 }
 
 function exportUserOMPDF(docId) {
@@ -2622,149 +2723,145 @@ function exportSingleOMPDFByData(mo) {
   try {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF('p', 'mm', 'a4');
-    
-    // Logo
-    try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch(e) { /* fallback */ }
-    
-    // Title
-    doc.setFontSize(16);
+    const W = 210, M = 20;
+    const cx = W / 2;
+    const blue = [0, 85, 164];
+    const dark = [33, 37, 41];
+    const gray = [108, 117, 125];
+    let y = 20;
+
+    // LOGO (centered)
+    try { doc.addImage('logo.PNG', 'PNG', cx - 20, y, 40, 14); } catch(e) {}
+    y += 22;
+
+    // TITLE (centered)
     doc.setFont('helvetica', 'bold');
-    doc.text(`ORDRE DE MISSION N° ${mo.numero || 'N/A'}`, 105, 22, { align: 'center' });
-    
-    // Separator
-    doc.setDrawColor(11, 79, 158);
+    doc.setFontSize(20);
+    doc.setTextColor(...blue);
+    doc.text('ORDRE DE MISSION', cx, y, { align: 'center' });
+    y += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(12);
+    doc.setTextColor(...gray);
+    doc.text('N° ' + (mo.numero || 'N/A'), cx, y, { align: 'center' });
+    y += 6;
+
+    // LINE
+    doc.setDrawColor(...blue);
     doc.setLineWidth(0.8);
-    doc.line(14, 27, 196, 27);
-    
-    // Info box
-    const leftX = 18;
-    let y = 33;
-    doc.setFontSize(10);
-    
+    doc.line(M, y, W - M, y);
+    y += 12;
+
+    // INFO GRID (2 columns, centered)
+    const colW = (W - 2 * M) / 2;
     const fields = [
-      ['Date d\'émission', mo.date || '—'],
-      ['Collaborateur', mo.employe || '—'],
-      ['Lieu de départ', mo.depart || '—'],
-      ['Lieu de destination', mo.arrivee || '—'],
-      ['Date de début', mo.debut || '—'],
-      ['Date de fin', mo.fin || '—'],
-      ['Mode de transport', mo.transport || '—'],
-      ['Téléphone', mo.tel || '—'],
+      ['Date d\u00e9mission', mo.date || '\u2014'],
+      ['Collaborateur', mo.employe || '\u2014'],
+      ['Lieu de d\u00e9part', mo.depart || '\u2014'],
+      ['Lieu de destination', mo.arrivee || '\u2014'],
+      ['Date de d\u00e9but', mo.debut || '\u2014'],
+      ['Date de fin', mo.fin || '\u2014'],
+      ['Mode de transport', mo.transport || '\u2014'],
+      ['T\u00e9l\u00e9phone', mo.tel || '\u2014'],
     ];
-    
     fields.forEach(([label, value], fi) => {
-      const col = fi % 2;
-      const row = Math.floor(fi / 2);
-      const x = col === 0 ? leftX : 105;
-      const yy = y + row * 8;
-      
+      const col = fi % 2, row = Math.floor(fi / 2);
+      const x = M + col * colW;
+      const yy = y + row * 16;
+      const cellW = colW - 4;
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7);
-      doc.setTextColor(142, 151, 168);
-      doc.text(label.toUpperCase(), x, yy);
-      
-      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...gray);
+      doc.text(label.toUpperCase(), x + cellW / 2, yy, { align: 'center' });
+      doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
-      doc.setTextColor(53, 61, 79);
-      doc.text(value, x, yy + 4);
-      
-      // Underline
-      doc.setDrawColor(221, 225, 234);
+      doc.setTextColor(...dark);
+      doc.text(value, x + cellW / 2, yy + 5, { align: 'center' });
+      doc.setDrawColor(220, 220, 220);
       doc.setLineWidth(0.3);
-      doc.line(x, yy + 5.5, col === 0 ? 100 : 196, yy + 5.5);
+      doc.line(x + 4, yy + 7, x + cellW, yy + 7);
     });
-    
-    const objY = y + Math.ceil(fields.length / 2) * 8 + 6;
-    
-    // Object box
-    doc.setFillColor(235, 243, 251);
-    doc.setDrawColor(200, 223, 245);
-    doc.roundedRect(leftX - 2, objY, 176, 16, 2, 2, 'FD');
-    
+    y += Math.ceil(fields.length / 2) * 16 + 4;
+
+    // OBJET BOX
+    doc.setFillColor(240, 244, 255);
+    doc.roundedRect(M, y, W - 2 * M, 18, 2, 2, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
-    doc.setTextColor(11, 79, 158);
-    doc.text('OBJET DE LA MISSION', leftX + 2, objY + 5);
-    
+    doc.setFontSize(8);
+    doc.setTextColor(...blue);
+    doc.text('OBJET DE LA MISSION', cx, y + 6, { align: 'center' });
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(53, 61, 79);
-    doc.text(mo.objet || '—', leftX + 2, objY + 12);
-    
-    // Remarks
-    let lines;
-    if (mo.remarques && mo.remarques !== '—') {
+    doc.setFontSize(11);
+    doc.setTextColor(...dark);
+    doc.text(mo.objet || '\u2014', cx, y + 13, { align: 'center' });
+    y += 24;
+
+    // REMARQUES
+    if (mo.remarques && mo.remarques !== '\u2014') {
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7);
-      doc.setTextColor(142, 151, 168);
-      doc.text('REMARQUES / INSTRUCTIONS', leftX, objY + 23);
-      
+      doc.setFontSize(8);
+      doc.setTextColor(...gray);
+      doc.text('REMARQUES', cx, y, { align: 'center' });
+      y += 5;
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
-      doc.setTextColor(53, 61, 79);
-      lines = doc.splitTextToSize(mo.remarques, 175);
-      doc.text(lines, leftX, objY + 30);
+      doc.setTextColor(...dark);
+      const remLines = doc.splitTextToSize(mo.remarques, W - 2 * M - 10);
+      doc.text(remLines, cx, y, { align: 'center' });
+      y += remLines.length * 4 + 6;
     }
-    
-    // Status
-    const statusLabel = {approved:'APPROUVÉ ✅', rejected:'REJETÉ ❌', pending:'EN ATTENTE ⏳'}[mo.status] || 'EN ATTENTE';
-    const linesHeight = (mo.remarques && mo.remarques !== '—' && lines) ? lines.length * 4 : 0;
-    const statusY = objY + (mo.remarques && mo.remarques !== '—' ? 34 + linesHeight : 28);
-    
-    doc.setDrawColor(221, 225, 234);
-    doc.setLineWidth(0.5);
-    doc.line(leftX, statusY, 196, statusY);
-    
+
+    // STATUS
+    const stText = { approved: 'APPROUVE', rejected: 'REJETE', pending: 'EN ATTENTE' };
+    const stColor = { approved: [21, 87, 36], rejected: [114, 28, 36], pending: [180, 130, 0] };
+    const sText = stText[mo.status] || 'EN ATTENTE';
+    const sColor = stColor[mo.status] || stColor.pending;
+    y += 4;
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.3);
+    doc.line(M, y, W - M, y);
+    y += 8;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.setTextColor(142, 151, 168);
-    doc.text('STATUT', 105, statusY + 7, { align: 'center' });
-    
-    doc.setFontSize(11);
-    doc.setTextColor(11, 79, 158);
-    doc.text(statusLabel, 105, statusY + 14, { align: 'center' });
-    
-    // Comment
-    let commentLines;
-    if (mo.comment) {
-      doc.setFontSize(9);
-      doc.setTextColor(99, 110, 130);
-      commentLines = doc.splitTextToSize(`Message : ${mo.comment}`, 170);
-      doc.text(commentLines, 105, statusY + 21, { align: 'center' });
-    }
-    
-    // Signature section
-    const commentHeight = (mo.comment && commentLines) ? commentLines.length * 4 : 0;
-    const sigY = statusY + (mo.comment ? 26 + commentHeight : 22);
-    doc.setDrawColor(142, 151, 168);
+    doc.setTextColor(...gray);
+    doc.text('STATUT', cx, y, { align: 'center' });
+    y += 6;
+    const pillW = 50;
+    doc.setFillColor(...sColor);
+    doc.roundedRect(cx - pillW / 2, y - 3, pillW, 8, 4, 4, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
+    doc.text(sText, cx, y + 2, { align: 'center' });
+    y += 12;
+
+    // SIGNATURES
+    y += 8;
+    doc.setDrawColor(220, 220, 220);
     doc.setLineWidth(0.3);
-    
+    doc.line(M, y, W - M, y);
+    y += 10;
     // Left signature line
-    doc.line(30, sigY + 12, 85, sigY + 12);
-    doc.setFontSize(8);
-    doc.setTextColor(142, 151, 168);
-    doc.text('Le collaborateur', 57.5, sigY + 17, { align: 'center' });
-    
+    doc.setDrawColor(50, 50, 50);
+    doc.setLineWidth(0.4);
+    doc.line(M + 10, y + 10, M + colW - 10, y + 10);
     // Right signature line
+    doc.line(M + colW + 10, y + 10, M + colW + colW - 10, y + 10);
+
+    // FOOTER
+    const footerY = 280;
+    doc.setDrawColor(220, 220, 220);
     doc.setLineWidth(0.3);
-    doc.line(110, sigY + 12, 165, sigY + 12);
-    doc.text('Le responsable', 137.5, sigY + 17, { align: 'center' });
-    
-    // Footer
-    const footerY = 285;
-    doc.setDrawColor(221, 225, 234);
-    doc.setLineWidth(0.3);
-    doc.line(14, footerY, 196, footerY);
+    doc.line(M, footerY, W - M, footerY);
+    doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
-    doc.setTextColor(142, 151, 168);
-    doc.text(`Document généré par Eqnovia — Notes de Frais • ${mo.numero || 'N/A'}`, 105, footerY + 5, { align: 'center' });
-    doc.text(`Date: ${mo.date || '—'}`, 105, footerY + 10, { align: 'center' });
-    
-    doc.save(`Ordre_Mission_${mo.numero || 'sans_numero'}.pdf`);
-    toast('📄 PDF téléchargé.', 'ok');
+    doc.setTextColor(...gray);
+    doc.text('\u00a9 ' + new Date().getFullYear() + ' EQNOVIA \u2014 Tous droits r\u00e9serv\u00e9s', cx, footerY + 5, { align: 'center' });
+    doc.save('Ordre_Mission_' + (mo.numero || 'sans_numero') + '.pdf');
+    toast('PDF telecharge.', 'ok');
   } catch (e) {
     console.warn('PDF export failed:', e);
-    toast('❌ Erreur lors de la création du PDF.', 'err');
+    toast('Erreur lors de la creation du PDF.', 'err');
   }
 }
 
@@ -2996,14 +3093,10 @@ async function generatePDFBase64(mo) {
       
       // Left signature line
       doc.line(30, sigY + 12, 85, sigY + 12);
-      doc.setFontSize(8);
-      doc.setTextColor(142, 151, 168);
-      doc.text('Le collaborateur', 57.5, sigY + 17, { align: 'center' });
       
       // Right signature line
       doc.setLineWidth(0.3);
       doc.line(110, sigY + 12, 165, sigY + 12);
-      doc.text('Le responsable', 137.5, sigY + 17, { align: 'center' });
       
       // Footer
       const footerY = 285;
@@ -3151,13 +3244,9 @@ async function shareMOByWebShare(docId) {
     doc.setLineWidth(0.3);
     
     doc.line(30, sigY + 12, 85, sigY + 12);
-    doc.setFontSize(8);
-    doc.setTextColor(142, 151, 168);
-    doc.text('Le collaborateur', 57.5, sigY + 17, { align: 'center' });
     
     doc.setLineWidth(0.3);
     doc.line(110, sigY + 12, 165, sigY + 12);
-    doc.text('Le responsable', 137.5, sigY + 17, { align: 'center' });
     
     const footerY = 285;
     doc.setDrawColor(221, 225, 234);
@@ -3691,6 +3780,7 @@ function renderMonthly() {
   const allData = dataAll();
   const data = getUserExpenses(allData);
   const yearF  = document.getElementById('filterYearMonth').value;
+  const monthF = document.getElementById('filterMonthSelect')?.value || 'all';
   const userF  = document.getElementById('filterMonthUser')?.value || 'all';
 
   const years=[...new Set(allData.map(e=>e.date.substring(0,4)))].sort().reverse();
@@ -3709,7 +3799,15 @@ function renderMonthly() {
     if (Object.keys(USERS).includes(userVal)) userSel.value = userVal;
   }
 
-  let filtered = data.filter(e=> yearF==='all'||e.date.substring(0,4)===yearF);
+  // Save month filter value before re-render
+  const mSel = document.getElementById('filterMonthSelect');
+  const mVal = mSel?.value || 'all';
+
+  let filtered = data.filter(e=> {
+    const y = e.date.substring(0,4);
+    const m = e.date.substring(5,7);
+    return (yearF==='all'||y===yearF) && (monthF==='all'||m===monthF);
+  });
   
   if (!isAdmin) {
     filtered = filtered.filter(e => e.user === currentUser);
@@ -5038,13 +5136,19 @@ function renderTrimester() {
   const yearSel = document.getElementById('triYearFilter');
   const userSel = document.getElementById('triUserFilter');
 
+  // Save selected values before repopulating
+  const savedYear = yearSel.value;
+  const savedUser = userSel.value;
+
   // Populate year filter
   const years = [...new Set(data.map(e=>e.date?.substring(0,4)).filter(Boolean))].sort();
   yearSel.innerHTML = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
-  if (!yearSel.value && years.length) yearSel.value = years[years.length-1];
+  if (years.includes(savedYear)) yearSel.value = savedYear;
+  else if (years.length) yearSel.value = years[years.length-1];
 
   // Populate user filter using centralized sorted user list
   userSel.innerHTML = '<option value="">Tous les collaborateurs</option>' + getSortedUsers().map(([k, u]) => `<option value="${k}">${k === 'admin' ? 'Admin' : esc(u.label)}</option>`).join('');
+  if (savedUser) userSel.value = savedUser;
 
   const selectedYear = yearSel.value;
   const selectedUser = userSel.value;
@@ -5136,6 +5240,7 @@ function renderComparison() {
   function populateDates(selId) {
     const sel = document.getElementById(selId);
     if (!sel) return;
+    const savedVal = sel.value; // Preserve current selection
     const p = selId.includes('Date1') ? period1 : period2;
     const years = [...new Set(data.map(e=>e.date?.substring(0,4)).filter(Boolean))].sort();
     let options = [];
@@ -5155,7 +5260,10 @@ function renderComparison() {
       years.forEach(y => options.push({val: y, label: y}));
     }
     sel.innerHTML = options.map(o => `<option value="${o.val}">${o.label}</option>`).join('');
-    if (options.length > 0) sel.value = options[options.length-1].val;
+    // Restore selection if still available, else pick last
+    const vals = options.map(o => o.val);
+    if (vals.includes(savedVal)) sel.value = savedVal;
+    else if (options.length > 0) sel.value = options[options.length-1].val;
   }
 
   populateDates('cmpDate1');
@@ -5165,9 +5273,11 @@ function renderComparison() {
   const date1 = document.getElementById('cmpDate1').value;
   const date2 = document.getElementById('cmpDate2').value;
 
-  // Populate user filter using centralized sorted user list
+  // Populate user filter using centralized sorted user list (preserve selection)
   const uSel = document.getElementById('cmpUserFilter');
+  const savedUserFilter = uSel.value;
   uSel.innerHTML = '<option value="">Tous</option>' + getSortedUsers().map(([k, u]) => `<option value="${k}">${k === 'admin' ? 'Admin' : esc(u.label)}</option>`).join('');
+  if (savedUserFilter) uSel.value = savedUserFilter;
 
   if (!date1 || !date2) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">📈</div><h3>Sélectionnez deux périodes</h3><p>Choisissez deux périodes à comparer.</p></div>';
@@ -5310,6 +5420,131 @@ function renderComparison() {
     </div>
   `;
   }, 'renderComparison');
+}
+
+// ════════════════════════════════════════════════════
+// RECOMMANDATIONS BUSINESS ANALYST
+// ════════════════════════════════════════════════════
+function generateRecommendations() {
+  const data = dataAll();
+  if (!data.length) return '<p style="color:var(--gray-400);">Aucune donnée disponible pour générer des recommandations.</p>';
+
+  const now = new Date();
+  const currentMonth = now.toISOString().substring(0, 7);
+  const currentYear = now.getFullYear().toString();
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().substring(0, 7);
+
+  // Calculs de base
+  const total = data.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+  const count = data.length;
+  const avg = count > 0 ? total / count : 0;
+
+  const thisMonthData = data.filter(e => e.date.startsWith(currentMonth));
+  const lastMonthData = data.filter(e => e.date.startsWith(lastMonth));
+  const thisMonthTotal = thisMonthData.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+  const lastMonthTotal = lastMonthData.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+
+  const thisYearData = data.filter(e => e.date.startsWith(currentYear));
+  const thisYearTotal = thisYearData.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+  const monthlyAvg = thisYearData.length > 0 ? thisYearTotal / (now.getMonth() + 1) : 0;
+
+  // Par catégorie
+  const byCat = {};
+  data.forEach(e => {
+    const c = e.cat || 'Autre';
+    byCat[c] = (byCat[c] || 0) + (parseFloat(e.amount) || 0);
+  });
+  const topCat = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0];
+
+  // Par utilisateur
+  const byUser = {};
+  data.forEach(e => {
+    const u = e.user || 'unknown';
+    byUser[u] = (byUser[u] || 0) + (parseFloat(e.amount) || 0);
+  });
+  const topUser = Object.entries(byUser).sort((a, b) => b[1] - a[1])[0];
+
+  // Recommandations
+  let recs = [];
+
+  // 1. Tendance mois
+  if (lastMonthTotal > 0) {
+    const pctChange = ((thisMonthTotal - lastMonthTotal) / lastMonthTotal * 100).toFixed(1);
+    if (pctChange > 20) {
+      recs.push({ icon: '🔴', type: 'alert', text: `Les dépenses du mois ont augmenté de <strong>${pctChange}%</strong> par rapport au mois dernier (${fmtDH(thisMonthTotal)} vs ${fmtDH(lastMonthTotal)}). Analysez les causes de cette hausse.` });
+    } else if (pctChange < -20) {
+      recs.push({ icon: '✅', type: 'success', text: `Bonne performance ! Les dépenses ont diminué de <strong>${Math.abs(pctChange)}%</strong> ce mois-ci. Continuez cette tendance.` });
+    } else {
+      recs.push({ icon: '➡️', type: 'info', text: `Les dépenses sont stables ce mois-ci (${pctChange}% vs mois dernier).` });
+    }
+  }
+
+  // 2. Budget annuel
+  if (monthlyAvg > 0 && thisMonthTotal > monthlyAvg * 1.3) {
+    recs.push({ icon: '⚠️', type: 'alert', text: `Ce mois dépasse la moyenne mensuelle de <strong>${((thisMonthTotal / monthlyAvg - 1) * 100).toFixed(0)}%</strong>. Moyenne annuelle : ${fmtDH(monthlyAvg)}/mois.` });
+  }
+
+  // 3. Catégorie dominante
+  if (topCat) {
+    const catPct = ((topCat[1] / total) * 100).toFixed(0);
+    if (catPct > 40) {
+      recs.push({ icon: '📊', type: 'warning', text: `La catégorie <strong>"${topCat[0]}"</strong> représente ${catPct}% du total (${fmtDH(topCat[1])}). Diversifiez ou négociez des tarifs.` });
+    }
+  }
+
+  // 4. Top dépensier
+  if (topUser && isAdmin) {
+    const userPct = ((topUser[1] / total) * 100).toFixed(0);
+    if (userPct > 30) {
+      const uLabel = USERS[topUser[0]]?.label || topUser[0];
+      recs.push({ icon: '👤', type: 'warning', text: `<strong>${uLabel}</strong> concentre ${userPct}% des dépenses totales (${fmtDH(topUser[1])}). Vérifiez la conformité des justificatifs.` });
+    }
+  }
+
+  // 5. Dépenses sans justificatif
+  const noJustif = data.filter(e => e.justif === 'Non' || !e.justifFiles);
+  if (noJustif.length > count * 0.3 && count > 5) {
+    recs.push({ icon: '📎', type: 'alert', text: `<strong>${noJustif.length} dépense(s)</strong> (${((noJustif.length / count) * 100).toFixed(0)}%) sans justificatif. Rappel : justificatifs obligatoires pour toute dépense > 100 DH.` });
+  }
+
+  // 6. Projection fin de mois
+  if (thisMonthTotal > 0 && now.getDate() < 28) {
+    const dailyRate = thisMonthTotal / now.getDate();
+    const projected = dailyRate * 30;
+    if (projected > monthlyAvg * 1.2 && monthlyAvg > 0) {
+      recs.push({ icon: '📈', type: 'warning', text: `Projection fin de mois : <strong>${fmtDH(projected)}</strong> (basé sur ${fmtDH(dailyRate)}/jour). Objectif mensuel : ${fmtDH(monthlyAvg)}.` });
+    }
+  }
+
+  // 7. Catégories en forte hausse (par mois)
+  const catsByMonth = {};
+  data.forEach(e => {
+    const m = e.date.substring(0, 7);
+    const c = e.cat || 'Autre';
+    if (!catsByMonth[c]) catsByMonth[c] = {};
+    catsByMonth[c][m] = (catsByMonth[c][m] || 0) + (parseFloat(e.amount) || 0);
+  });
+  Object.entries(catsByMonth).forEach(([cat, months]) => {
+    const sorted = Object.entries(months).sort((a, b) => a[0].localeCompare(b[0]));
+    if (sorted.length >= 2) {
+      const [prevMonth, prevVal] = sorted[sorted.length - 2];
+      const [currMonth, currVal] = sorted[sorted.length - 1];
+      if (prevVal > 0 && currVal > prevVal * 1.5) {
+        recs.push({ icon: '📈', type: 'warning', text: `La catégorie <strong>"${cat}"</strong> a bondi de ${((currVal / prevVal - 1) * 100).toFixed(0)}% (${prevMonth} → ${currMonth}). Enquête recommandée.` });
+      }
+    }
+  });
+
+  if (recs.length === 0) {
+    recs.push({ icon: '✅', type: 'success', text: 'Aucune alerte particulière. Les dépenses sont dans les normes.' });
+  }
+
+  return recs.map(r => `
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;background:${r.type === 'alert' ? '#fff5f5' : r.type === 'warning' ? '#fff9e6' : r.type === 'success' ? '#f0fff4' : '#f0f7ff'};border-radius:8px;border-left:3px solid ${r.type === 'alert' ? 'var(--red)' : r.type === 'warning' ? 'var(--eq-orange)' : r.type === 'success' ? 'var(--green)' : 'var(--eq-blue)'};margin-bottom:8px;">
+      <span style="font-size:16px;flex-shrink:0;">${r.icon}</span>
+      <span style="font-size:12px;color:var(--gray-700);line-height:1.5;">${r.text}</span>
+    </div>
+  `).join('');
 }
 
 // ════════════════════════════════════════════════════

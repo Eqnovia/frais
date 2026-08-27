@@ -508,38 +508,7 @@
         </div>
       </div>
 
-      <!-- BATCH OCR -->
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><div class="panel-icon orange">📚</div> OCR — Traitement par lots</div>
-        </div>
-        <div class="panel-body">
-          <p style="font-size:12px;color:var(--gray-400);margin-bottom:10px;">
-            Sélectionnez plusieurs factures à traiter en une seule fois — les données extraites seront listées ci-dessous.
-          </p>
-          <div class="upload-zone" id="batchUploadZone"
-               onclick="document.getElementById('batchFileInput').click()"
-               ondragover="handleDragOver(event)" ondragleave="handleDragLeave()" ondrop="handleBatchDrop(event)">
-            <div class="upload-icon">📚</div>
-            <p>Cliquez ou glissez-déposez plusieurs images/PDF</p>
-            <div class="file-selected" id="batchFileName">Aucun fichier sélectionné</div>
-            <input type="file" id="batchFileInput" accept="image/*,.pdf" multiple onchange="onBatchFilesChosen(event)"/>
-          </div>
-          <div class="ocr-progress" id="batchOcrProgress"><div class="ocr-progress-bar" id="batchOcrBar"></div></div>
-          <div class="batch-status" id="batchStatus"></div>
-          <button class="btn btn-orange btn-full" style="margin-top:12px;" onclick="runBatchOCR()" id="batchOcrBtn">📚 Traiter toutes les factures</button>
-          <div id="batchResults" style="display:none;margin-top:12px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
-              <span style="font-size:11px;font-weight:700;color:var(--gray-500);">Résultats extraits (<span id="batchCount">0</span>)</span>
-              <div style="display:flex;gap:6px;">
-                <button class="btn btn-primary" onclick="addAllBatchExpenses()" id="batchAddAllBtn" style="height:30px;font-size:10px;padding:0 10px;">➕ Ajouter tout</button>
-                <button class="btn btn-ghost" onclick="clearBatchResults()" style="height:30px;font-size:10px;padding:0 10px;">🗑️ Effacer</button>
-              </div>
-            </div>
-            <div class="batch-results-container" id="batchResultsList"></div>
-          </div>
-        </div>
-      </div>
+
     </div>
 
     <!-- ══ MES ORDRES DE MISSION (DASHBOARD) ══ -->
@@ -637,6 +606,16 @@
         <div class="total-amount" id="grandTotal">💰 Total : <strong>0,00 DH</strong></div>
       </div>
     </div>
+    <!-- Recommandations Business Analyst -->
+    <div class="panel" style="margin-top:16px;">
+      <div class="panel-header">
+        <div class="panel-title"><div class="panel-icon blue">💡</div> Recommandations & Analyse</div>
+        <button class="btn btn-primary" onclick="document.getElementById('recContent').innerHTML=generateRecommendations()" style="height:30px;font-size:11px;">🔄 Actualiser</button>
+      </div>
+      <div class="panel-body" id="recContent">
+        <p style="color:var(--gray-400);font-size:12px;">Cliquez sur Actualiser pour générer les recommandations.</p>
+      </div>
+    </div>
   </div>
 
   <!-- ══ TAB: PAR MOIS ══ -->
@@ -651,6 +630,21 @@
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <select class="form-select" id="filterYearMonth" onchange="renderMonthly()" style="height:32px;width:auto;font-size:12px;">
           <option value="all">Toutes années</option>
+        </select>
+        <select class="form-select" id="filterMonthSelect" onchange="renderMonthly()" style="height:32px;width:auto;font-size:12px;">
+          <option value="all">Tous les mois</option>
+          <option value="01">Janvier</option>
+          <option value="02">Février</option>
+          <option value="03">Mars</option>
+          <option value="04">Avril</option>
+          <option value="05">Mai</option>
+          <option value="06">Juin</option>
+          <option value="07">Juillet</option>
+          <option value="08">Août</option>
+          <option value="09">Septembre</option>
+          <option value="10">Octobre</option>
+          <option value="11">Novembre</option>
+          <option value="12">Décembre</option>
         </select>
         <select class="form-select" id="filterMonthUser" style="height:32px;width:auto;font-size:12px;">
           <option value="all">👤 Tous</option>

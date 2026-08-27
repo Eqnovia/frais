@@ -257,27 +257,37 @@
     .empty-state h3{font-size:15px;font-weight:700;color:var(--gray-700);margin-bottom:4px;}
     .empty-state p{font-size:12px;color:var(--gray-400);}
     @media(max-width:480px){.empty-state{padding:24px 16px;}.empty-state .empty-icon{font-size:30px;}.empty-state h3{font-size:13px;}.empty-state p{font-size:11px;}}    /* ══ ORDRE DE MISSION FICHE ══ */
-    .om-fiche{font-size:12.5px;color:var(--gray-700);line-height:1.6;}
-    .om-fiche .om-header{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:2px solid var(--eq-blue);padding-bottom:10px;margin-bottom:14px;}
-    .om-fiche .om-brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:16px;color:var(--eq-blue);min-height:40px;}
-    .om-fiche .om-brand .om-logo{height:34px;width:auto;display:block;background:var(--white);border-radius:4px;padding:2px;}
-    @media(max-width:768px){.om-fiche .om-brand .om-logo{height:26px;}}
-    @media(max-width:480px){.om-fiche .om-brand .om-logo{height:22px;}}
-    .om-fiche .om-title{font-size:13px;font-weight:700;color:var(--gray-900);text-align:right;}
-    .om-fiche .om-title small{display:block;font-size:10px;font-weight:500;color:var(--gray-400);}
-    .om-fiche .om-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin-bottom:14px;}
-    .om-fiche .om-field{display:flex;flex-direction:column;gap:2px;}
-    .om-fiche .om-field.full{grid-column:1 / -1;}
-    .om-fiche .om-label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--gray-400);}
-    .om-fiche .om-value{font-size:13px;font-weight:600;color:var(--gray-900);border-bottom:1px solid var(--gray-200);padding-bottom:3px;min-height:20px;}
-    .om-fiche .om-objet{background:var(--eq-blue-pale);border:1px solid var(--eq-blue-mid);border-radius:var(--radius-md);padding:10px 14px;margin-bottom:14px;}
-    .om-fiche .om-objet .om-label{color:var(--eq-blue);}
-    .om-fiche .om-objet .om-value{border:none;padding:0;font-weight:700;}
-    .om-fiche .om-sign{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:24px;}
-    @media(max-width:768px){.om-fiche .om-grid{grid-template-columns:1fr;}.om-fiche .om-sign{grid-template-columns:1fr;gap:12px;}.om-fiche .om-header{flex-direction:column;align-items:flex-start;}}
+    /* ══ ORDRE DE MISSION — PROFESSIONAL STYLE ══ */
+    .om-fiche{font-family:'Segoe UI',Arial,sans-serif;font-size:12.5px;color:#1a1a1a;line-height:1.6;background:#fff;padding:32px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.06);}
+    .om-fiche .om-header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:16px;margin-bottom:20px;border-bottom:3px solid var(--eq-blue);position:relative;}
+    .om-fiche .om-header::after{content:'';position:absolute;bottom:-3px;left:0;width:60px;height:3px;background:var(--eq-orange);}
+    .om-fiche .om-brand{display:flex;align-items:center;gap:10px;min-height:44px;}
+    .om-fiche .om-brand .om-logo{height:40px;width:auto;display:block;background:var(--white);border-radius:6px;padding:3px;box-shadow:0 1px 4px rgba(0,0,0,.08);}
+    @media(max-width:768px){.om-fiche .om-brand .om-logo{height:30px;}}
+    @media(max-width:480px){.om-fiche .om-brand .om-logo{height:24px;}}
+    .om-fiche .om-title{font-size:18px;font-weight:800;color:var(--eq-blue);text-align:right;letter-spacing:1px;text-transform:uppercase;line-height:1.2;}
+    .om-fiche .om-title small{display:block;font-size:12px;font-weight:500;color:var(--gray-400);letter-spacing:0;margin-top:3px;text-transform:none;}
+    .om-fiche .om-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;padding:16px 20px;background:#f8f9fa;border-radius:10px;margin-bottom:18px;}
+    .om-fiche .om-field{display:flex;flex-direction:column;padding:10px 12px;border-bottom:1px dashed #e9ecef;}
+    .om-fiche .om-field:nth-child(odd){border-right:1px dashed #e9ecef;}
+    .om-fiche .om-field.full{grid-column:1 / -1;border-right:none;}
+    .om-fiche .om-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#888;margin-bottom:3px;}
+    .om-fiche .om-value{font-size:13px;font-weight:600;color:#1a1a1a;min-height:18px;}
+    .om-fiche .om-objet{background:#f0f4ff;border-left:4px solid var(--eq-blue);border-radius:0 8px 8px 0;padding:14px 18px;margin-bottom:18px;}
+    .om-fiche .om-objet .om-label{color:var(--eq-blue);margin-bottom:4px;}
+    .om-fiche .om-objet .om-value{border:none;padding:0;font-weight:700;font-size:14px;color:#1a1a1a;}
+    .om-fiche .om-status-section{text-align:center;margin:20px 0;padding:16px;background:#f8f9fa;border-radius:10px;}
+    .om-fiche .om-status-badge{display:inline-flex;align-items:center;gap:6px;padding:8px 20px;border-radius:24px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+    .om-fiche .om-status-badge.pending{background:#fff3cd;color:#856404;border:1.5px solid #fde68a;}
+    .om-fiche .om-status-badge.approved{background:#d4edda;color:#155724;border:1.5px solid #b3e8d3;}
+    .om-fiche .om-status-badge.rejected{background:#f8d7da;color:#721c24;border:1.5px solid #F5C6C6;}
+    .om-fiche .om-sign{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:28px;padding-top:16px;border-top:2px solid #e9ecef;}
+    @media(max-width:768px){.om-fiche .om-grid{grid-template-columns:1fr;}.om-fiche .om-field:nth-child(odd){border-right:none;}.om-fiche .om-sign{grid-template-columns:1fr;gap:20px;}.om-fiche .om-header{flex-direction:column;align-items:flex-start;}.om-fiche .om-title{text-align:left;}}
     .om-fiche .om-sign .om-sign-box{text-align:center;}
-    .om-fiche .om-sign .om-sign-line{border-top:1px solid var(--gray-400);margin-top:34px;padding-top:4px;font-size:10px;color:var(--gray-400);}
-    .om-fiche .om-footer{margin-top:20px;border-top:1px solid var(--gray-200);padding-top:8px;font-size:10px;color:var(--gray-400);text-align:center;}
+    .om-fiche .om-sign .om-sign-line{border-top:1px solid #333;margin-top:40px;padding-top:6px;font-size:11px;color:#666;font-weight:500;}
+    .om-fiche .om-footer{margin-top:28px;padding-top:14px;border-top:1px solid #eee;text-align:center;}
+    .om-fiche .om-footer-text{font-size:10px;color:#aaa;}
+    .om-fiche .om-footer-copy{font-size:9px;color:#ccc;margin-top:4px;}
 
 
     /* ══ OM HISTORY ══ */
