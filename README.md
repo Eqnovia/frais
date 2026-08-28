@@ -151,7 +151,7 @@ Ce projet est la propriété d'Eqnovia. Toute reproduction ou distribution sans 
 
 | | |
 |---|---|
-| **📧 Email** | support@eqnovia.ma |
+| **📧 Email** | fbourzgui@eqnovia.ma |
 | **📍 Adresse** | Eqnovia, Casablanca, Maroc |
 | **🔗 Version** | v3.0 · Firebase + Local |
 
