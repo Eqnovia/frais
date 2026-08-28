@@ -258,30 +258,22 @@
     </div>
   </div>
 
-  <!-- TOP BAR -->
-<header class="topbar" id="appContent" style="display:none;">
+  <!-- HEADER (lightweight) -->
+<header class="app-header" id="appContent" style="display:none;">
   <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()" aria-label="Menu" aria-expanded="false">
     ☰
   </button>
   <div class="logo-wrap"><img src="logo.PNG" alt="Eqnovia" class="app-logo"/></div>
-  <div class="topbar-sep"></div>
-  <span class="topbar-title">Notes de Frais</span>
-  <div class="topbar-right">
-  <input type="text" class="form-input" id="globalSearch" placeholder="🔍 Rechercher..." oninput="handleGlobalSearch(this.value)"/>
-  <div class="db-status db-local" id="dbStatus">
-    <span>⏳</span> <span id="dbStatusText">Connexion…</span>
-  </div>
-  <div class="db-status" id="modeStatus" style="margin-left:8px;">
-    <span>💻</span> <span id="modeStatusText">Local</span>
-  </div>
-    <!-- From Uiverse.io by ZAKARIAE48CHELLE -->
-    <button id="installBtn" class="btn-install" style="display:none;" onclick="installPWA()">
-      <svg class="svgIcon" viewBox="0 0 384 512" height="1em" xmlns="http://www.w3.org/2000/svg">
-        <path d="M169.4 470.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 370.8 224 64c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 306.7L54.6 265.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"></path>
-      </svg>
-      <span class="icon2"></span>
-      <span class="tooltip">100MB</span>
-    </button>
+  <span class="app-header-title">Notes de Frais</span>
+  <span class="app-header-subtitle" aria-hidden="true">Saisie & OCR</span>
+  <div class="app-header-right">
+    <div class="db-status db-local" id="dbStatus">
+      <span>⏳</span> <span id="dbStatusText">Connexion…</span>
+    </div>
+    <div class="db-status" id="modeStatus">
+      <span>💻</span> <span id="modeStatusText">Local</span>
+    </div>
+
     <div class="avatar" id="avatarDisplay">EQ</div>
   </div>
 </header>
@@ -392,20 +384,7 @@
     </div>
   </div>
 
-  <!-- PAGE TABS -->
-  <div class="page-tabs" role="tablist" aria-label="Onglets des sections">
-    <button class="tab-btn active" id="tab-saisie" role="tab" aria-selected="true" aria-controls="tab-content-saisie" onclick="switchTab('saisie')">✏️ <span>Saisie & OCR</span></button>
-    <button class="tab-btn"        id="tab-all"      role="tab" aria-selected="false" aria-controls="tab-content-all" onclick="switchTab('all')">📋 <span>Toutes</span></button>
-    <button class="tab-btn"        id="tab-monthly"  role="tab" aria-selected="false" aria-controls="tab-content-monthly" onclick="switchTab('monthly')">📅 <span>Par mois</span></button>
-    <button class="tab-btn"        id="tab-yearly"   role="tab" aria-selected="false" aria-controls="tab-content-yearly" onclick="switchTab('yearly')">📆 <span>Par année</span></button>
-    <button class="tab-btn"        id="tab-trimestre"  role="tab" aria-selected="false" aria-controls="tab-content-trimestre" onclick="switchTab('trimestre')">📊 <span>Par trimestre</span></button>
-    <button class="tab-btn"        id="tab-comparison" role="tab" aria-selected="false" aria-controls="tab-content-comparison" onclick="switchTab('comparison')">📈 <span>Comparaison</span></button>
-    <button class="tab-btn"        id="tab-mission"  role="tab" aria-selected="false" aria-controls="tab-content-mission" onclick="switchTab('mission')" style="display:none;">📝 <span>Ordre de mission</span></button>
-    <button class="tab-btn"        id="tab-admin-om" role="tab" aria-selected="false" aria-controls="tab-content-admin-om" onclick="switchTab('admin-om')" style="display:none;">📋 <span>OM Global</span></button>
-    <button class="tab-btn"        id="tab-user-missions" role="tab" aria-selected="false" aria-controls="tab-content-user-missions" onclick="switchTab('user-missions')" style="display:none;">📋 <span>Mes OM</span></button>
-    <button class="tab-btn"        id="tab-policy"   role="tab" aria-selected="false" aria-controls="tab-content-policy" onclick="switchTab('policy')">📜 <span>Conditions</span></button>
-    <button class="tab-btn"        id="tab-backup"   role="tab" aria-selected="false" aria-controls="tab-content-backup" onclick="switchTab('backup')">💾 <span>Backup</span></button>
-  </div>
+  <!-- PAGE TABS REMOVED: navigation is now exclusively in the right sidebar -->
 
   <!-- ══ TAB: SAISIE & OCR ══ -->
   <div id="tab-content-saisie" role="tabpanel" aria-labelledby="tab-saisie">

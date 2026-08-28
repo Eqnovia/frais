@@ -429,6 +429,8 @@ function toggleSidebar() {
     const open = sidebar.classList.toggle('open');
     overlay.classList.toggle('open');
     if (toggle) toggle.setAttribute('aria-expanded', open);
+    // Prevent body scroll when sidebar is open on mobile
+    document.body.style.overflow = open ? 'hidden' : '';
     if (open) {
       // Trap focus: move focus to sidebar when opened
       const firstNavItem = sidebar.querySelector('.nav-item');
@@ -1854,6 +1856,14 @@ function switchTab(t) {
     const header = document.querySelector(`#tab-content-${t} .mobile-section-header`);
     if (header) header.style.display = 'flex';
   });
+  // Close sidebar drawer on mobile after tab switch
+  if (window.innerWidth <= 768) {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (sidebar) sidebar.classList.remove('open');
+    if (overlay) overlay.classList.remove('open');
+    document.body.style.overflow = '';
+  }
   if (t==='all')        renderAll();
   if (t==='monthly')    renderMonthly();
   if (t==='yearly')     renderYearly();
