@@ -14,6 +14,7 @@ let useFirebase = false;
 let ocrText = '';
 let currentUser = 'admin';
 let isAdmin = true;
+let isComptable = false;
 let isAuthenticated = false;
 let loginAsAdmin = true; // Track if original login was admin (for user switching)
 
@@ -88,7 +89,8 @@ const DEFAULT_USERS = {
   user3: { password: 'fatima2026', label: 'Bourzgui Fatima Zahra', isAdmin: false, email: 'fbourzgui@eqnovia.ma', tel: '0664549777' },
   user4: { password: 'larbi2026', label: 'Larbi Ramzi', isAdmin: false, email: 'lramzi@eqnovia.ma', tel: '0707088004' },
   user5: { password: 'ibrahime2026', label: 'Ibrahime', isAdmin: false, email: '', tel: '' },
-  user6: { password: 'hamza2026', label: 'Hamza', isAdmin: false, email: '', tel: '' }
+  user6: { password: 'hamza2026', label: 'Hamza', isAdmin: false, email: '', tel: '' },
+  comptable: { password: 'comptable2026', label: 'Comptable', isAdmin: false, isComptable: true, email: '', tel: '' }
 };
 
 const USERS_STORAGE_KEY = 'eqnovia_users_v1';
@@ -108,12 +110,17 @@ function loadUsers() {
           email: '',
           tel: ''
         };
-        // Fusionner email/tel depuis DEFAULT_USERS pour les comptes existants
+        // Fusionner email/tel/isComptable depuis DEFAULT_USERS pour les comptes existants
         for (const k of Object.keys(DEFAULT_USERS)) {
           if (stored[k]) {
             if (DEFAULT_USERS[k].email) stored[k].email = DEFAULT_USERS[k].email;
             if (DEFAULT_USERS[k].tel) stored[k].tel = DEFAULT_USERS[k].tel;
             if (!stored[k].label) stored[k].label = DEFAULT_USERS[k].label;
+            if (DEFAULT_USERS[k].isComptable && !stored[k].isComptable) stored[k].isComptable = true;
+            if (DEFAULT_USERS[k].isAdmin && !stored[k].isAdmin) stored[k].isAdmin = true;
+          } else {
+            // Ajouter les utilisateurs manquants depuis DEFAULT_USERS
+            stored[k] = JSON.parse(JSON.stringify(DEFAULT_USERS[k]));
           }
         }
         return stored;
@@ -722,6 +729,7 @@ function completeLogin(user) {
   isAuthenticated = true;
   currentUser = user;
   isAdmin = USERS[user].isAdmin;
+  isComptable = USERS[user].isComptable === true;
   loginAsAdmin = USERS[user].isAdmin;
   
   document.getElementById('loginOverlay').classList.add('hidden');
@@ -782,6 +790,7 @@ function switchUser(userId) {
   }
   currentUser = userId;
   isAdmin = USERS[userId].isAdmin;
+  isComptable = USERS[userId].isComptable === true;
   updateUserUI();
   updateKPIs();
   renderAll();
@@ -798,34 +807,37 @@ function updateUserUI() {
   const userInfo = USERS[currentUser];
   
   badge.textContent = userInfo.label;
-  badge.className = 'user-badge ' + (isAdmin ? 'admin' : 'user');
+  badge.className = 'user-badge ' + (isAdmin ? 'admin' : isComptable ? 'comptable' : 'user');
   
   const first = userInfo.label.substring(0, 1);
   avatar.textContent = first;
   
+  // Comptable can see same panels as admin (readonly) but NOT admin-only management tabs
+  const showForAdmin = isAdmin; // only full admin gets management/missions/backups
   const adminOnly = document.querySelectorAll('#adminOnlyLabel, #adminUsersBtn, #adminOMBtn, #tab-admin-om, #nav-mission, #tab-mission, #bnav-mission, #nav-trimestre, #tab-trimestre, #bnav-trimestre, #nav-comparison, #tab-comparison, #bnav-comparison, #adminOnlyBackupLabel, #nav-backup, #tab-backup, #bnav-backup, #adminOnlyInfoLabel, #nav-policy, #tab-policy, #bnav-policy');
-  adminOnly.forEach(el => el.style.display = isAdmin ? '' : 'none');
+  adminOnly.forEach(el => el.style.display = showForAdmin ? '' : 'none');
   
-  // Show user missions tab for non-admin users
+  // Show user missions tab for non-admin users (but not comptable)
   const userMissionsTab = document.getElementById('tab-user-missions');
   const userMissionsNav = document.getElementById('nav-user-missions');
   const userMissionsBnav = document.getElementById('bnav-user-missions');
-  if (userMissionsTab) userMissionsTab.style.display = isAdmin ? 'none' : '';
-  if (userMissionsNav) userMissionsNav.style.display = isAdmin ? 'none' : '';
-  if (userMissionsBnav) userMissionsBnav.style.display = isAdmin ? 'none' : '';
+  if (userMissionsTab) userMissionsTab.style.display = (isAdmin || isComptable) ? 'none' : '';
+  if (userMissionsNav) userMissionsNav.style.display = (isAdmin || isComptable) ? 'none' : '';
+  if (userMissionsBnav) userMissionsBnav.style.display = (isAdmin || isComptable) ? 'none' : '';
   
   // Show/hide dashboard mission orders container
   const dashboardMOContainer = document.getElementById('dashboardMOContainer');
-  if (dashboardMOContainer) dashboardMOContainer.style.display = isAdmin ? 'none' : '';
+  if (dashboardMOContainer) dashboardMOContainer.style.display = (isAdmin || isComptable) ? 'none' : '';
   
+  // Comptable sees all users' filter (like admin)
   const filterUser = document.getElementById('filterUser');
   if (filterUser) {
-    filterUser.style.display = isAdmin ? '' : 'none';
+    filterUser.style.display = (isAdmin || isComptable) ? '' : 'none';
   }
   
   const filterMonthUser = document.getElementById('filterMonthUser');
   if (filterMonthUser) {
-    filterMonthUser.style.display = isAdmin ? '' : 'none';
+    filterMonthUser.style.display = (isAdmin || isComptable) ? '' : 'none';
   }
   
   // Hide/show user selector in sidebar — only admin can switch accounts
@@ -833,6 +845,25 @@ function updateUserUI() {
   if (userSelectorWrap) {
     userSelectorWrap.style.display = isAdmin ? '' : 'none';
   }
+
+  // ── Comptable: hide add/edit/delete UI elements ──
+  // Hide the entire Saisie & OCR tab for comptable
+  const navSaisie = document.getElementById('nav-saisie');
+  const bnavSaisie = document.getElementById('bnav-saisie');
+  const tabSaisie = document.getElementById('tab-content-saisie');
+  if (navSaisie) navSaisie.style.display = isComptable ? 'none' : '';
+  if (bnavSaisie) bnavSaisie.style.display = isComptable ? 'none' : '';
+  if (tabSaisie) tabSaisie.style.display = isComptable ? 'none' : '';
+  // If comptable is on saisie tab, switch to all
+  if (isComptable && activeTab === 'saisie') {
+    switchTab('all');
+  }
+  // Hide the delete-all button for comptable
+  const deleteAllBtns = document.querySelectorAll('[onclick*="deleteAllExpenses"], [onclick*="clearAll"]');
+  deleteAllBtns.forEach(el => { el.style.display = isComptable ? 'none' : ''; });
+  // Hide the add expense button for comptable
+  const addBtn = document.getElementById('addBtn');
+  if (addBtn) addBtn.style.display = isComptable ? 'none' : '';
 
   // Populate assignedTo dropdown for mission orders
   populateAssignedToDropdown();
@@ -1065,7 +1096,7 @@ function updateLoginUserSelect() {
 }
 
 function getUserExpenses(data) {
-  if (isAdmin) return data;
+  if (isAdmin || isComptable) return data;
   return data.filter(e => e.user === currentUser);
 }
 
@@ -3321,6 +3352,7 @@ function sendUserMOByWhatsApp(docId) {
 // ADD EXPENSE
 // ════════════════════════════════════════════
 async function addExpense() {
+  if (isComptable) return toast('Vous n\'avez pas le droit d\'ajouter des dépenses.', 'err');
   const date    = document.getElementById('dateInput').value;
   const desc    = sanitizeInput(document.getElementById('descInput').value);
   const amount  = parseFloat(document.getElementById('amountInput').value);
@@ -3448,6 +3480,7 @@ async function addExpense() {
 let editingId = null;
 
 function editRow(id) {
+  if (isComptable) return toast('Vous n\'avez pas le droit de modifier les dépenses.', 'err');
   const exp = cache.find(e => e.id === id);
   if (!exp) return toast('Dépense introuvable.', 'err');
   
@@ -3594,6 +3627,7 @@ async function saveEdit() {
 // DELETE
 // ════════════════════════════════════════════
 function deleteRow(id) {
+  if (isComptable) return toast('Vous n\'avez pas le droit de supprimer des dépenses.', 'err');
   const exp = cache.find(e => e.id === id);
   if (!exp) return toast('Dépense introuvable.', 'err');
   
@@ -3745,7 +3779,7 @@ function renderAll() {
     const createdByLabel = e.createdBy ? (USERS[e.createdBy] ? USERS[e.createdBy].label : e.createdBy) : '—';
     const modifiedByLabel = e.modifiedBy ? (USERS[e.modifiedBy] ? USERS[e.modifiedBy].label : e.modifiedBy) : '—';
     const isOwner = e.user === currentUser;
-    const canEdit = isAdmin || isOwner;
+    const canEdit = isAdmin || (isOwner && !isComptable);
     const canDelete = isAdmin;
 
     html+=`<tr>
@@ -3855,7 +3889,7 @@ function renderMonthly() {
       const createdByLabel = e.createdBy ? (USERS[e.createdBy] ? USERS[e.createdBy].label : e.createdBy) : '—';
       const modifiedByLabel = e.modifiedBy ? (USERS[e.modifiedBy] ? USERS[e.modifiedBy].label : e.modifiedBy) : '—';
       const isOwner = e.user === currentUser;
-      const canEdit = isAdmin || isOwner;
+      const canEdit = isAdmin || (isOwner && !isComptable);
       const canDelete = isAdmin;
       
       return `<tr>
