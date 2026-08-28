@@ -5061,108 +5061,164 @@ function exportPDF() {
   if (!data.length) return toast('Aucune dépense à exporter avec ces filtres.', 'err');
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const W = 297, M = 12;
+  const W = 297, H = 210, M = 14;
   const cx = W / 2;
-  const blue = [0, 85, 164];
-  const dark = [33, 37, 41];
-  const gray = [108, 117, 125];
-  const lightGray = [233, 236, 239];
-
-  // Header bar
-  doc.setFillColor(...blue);
-  doc.rect(0, 0, W, 24, 'F');
-  try { doc.addImage('logo.PNG', 'PNG', M, 4, 18, 16); } catch(e) {}
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.setTextColor(255, 255, 255);
-  doc.text('EQNOVIA', 34, 12);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(200, 223, 245);
-  doc.text('Note de Frais — Récapitulatif des dépenses', 34, 19);
+  const blue = [11, 79, 158];
+  const blueLight = [220, 235, 252];
+  const dark = [30, 36, 44];
+  const gray = [100, 110, 120];
+  const grayLight = [160, 170, 180];
+  const white = [255, 255, 255];
+  const altRow = [246, 249, 253];
   const now = new Date();
-  doc.setFontSize(8);
-  doc.text(now.toLocaleDateString('fr-FR'), W - M, 12, { align: 'right' });
-
-  // Title
-  let y = 32;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.setTextColor(...blue);
-  doc.text('Récapitulatif des dépenses professionnelles', cx, y, { align: 'center' });
-  y += 6;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(...gray);
   const userLabel = USERS[currentUser]?.label || currentUser;
   const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
   const total = sorted.reduce((s, e) => s + (e.amount || 0), 0);
-  doc.text(`Collaborateur : ${userLabel}    |    ${sorted.length} dépense(s)    |    Total TTC : ${fmtDH(total)}`, cx, y, { align: 'center' });
-  y += 6;
 
-  // Separator line
-  doc.setDrawColor(...blue);
-  doc.setLineWidth(0.5);
-  doc.line(M, y, W - M, y);
+  // ── Header background ──
+  doc.setFillColor(...blue);
+  doc.rect(0, 0, W, 28, 'F');
+  doc.setFillColor(...blueLight);
+  doc.rect(0, 28, W, 1.5, 'F');
+
+  // Logo
+  try { doc.addImage('logo.PNG', 'PNG', M, 5, 18, 18); } catch(e) {}
+
+  // Company name
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.setTextColor(...white);
+  doc.text('EQNOVIA', 36, 14);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(200, 220, 245);
+  doc.text('Notes de Frais \u2014 Gestion des dépenses', 36, 21);
+
+  // Date on the right
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(200, 220, 245);
+  doc.text(now.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }), W - M, 14, { align: 'right' });
+  doc.setFontSize(7);
+  doc.setTextColor(160, 190, 220);
+  doc.text('Généré le ' + now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }), W - M, 20, { align: 'right' });
+
+  // ── Title section ──
+  let y = 38;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(...blue);
+  doc.text('Récapitulatif des Dépenses Professionnelles', M, y);
   y += 4;
+  doc.setDrawColor(...blue);
+  doc.setLineWidth(0.6);
+  doc.line(M, y, W - M, y);
+  y += 5;
 
-  // Table
-  const head = [['#', 'Date', 'Description', 'Categorie', 'Total TTC', 'Mission', 'Commentaires', 'Utilisateur', 'Justif']];
+  // ── Info badges row ──
+  const badgeH = 10;
+  const badgeW = (W - M * 2 - 8) / 4;
+  const badges = [
+    { label: 'Collaborateur', value: userLabel },
+    { label: 'Nombre', value: sorted.length + ' dépense(s)' },
+    { label: 'Total TTC', value: fmtDH(total) },
+    { label: 'Période', value: sorted.length ? (fmtDate(sorted[0].date) + ' — ' + fmtDate(sorted[sorted.length - 1].date)) : '—' }
+  ];
+  badges.forEach((b, i) => {
+    const bx = M + i * (badgeW + 2.5);
+    doc.setFillColor(...(i === 2 ? blue : altRow));
+    doc.roundedRect(bx, y, badgeW, badgeH, 1.5, 1.5, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6);
+    doc.setTextColor(...(i === 2 ? [200, 220, 245] : grayLight));
+    doc.text(b.label.toUpperCase(), bx + 3, y + 3.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(i === 2 ? 8.5 : 7.5);
+    doc.setTextColor(...(i === 2 ? white : dark));
+    const maxValW = badgeW - 6;
+    doc.text(doc.splitTextToSize(b.value, maxValW)[0] || b.value, bx + 3, y + 8);
+  });
+  y += badgeH + 5;
+
+  // ── Table ──
+  const head = [['N°', 'Date', 'Description', 'Catégorie', 'Total TTC (DH)', 'Objet / Mission', 'Commentaires', 'Utilisateur', 'Justif.']];
   const body = sorted.map((e, i) => [
-    i + 1,
+    String(i + 1),
     fmtDate(e.date),
-    e.desc.length > 40 ? e.desc.substring(0, 37) + '...' : e.desc,
+    e.desc,
     e.cat || 'Autre',
     fmtDH(e.amount),
-    (e.mission || '—').length > 25 ? (e.mission || '—').substring(0, 22) + '...' : (e.mission || '—'),
-    (e.comment || '—').length > 22 ? (e.comment || '—').substring(0, 19) + '...' : (e.comment || '—'),
+    e.mission || '—',
+    e.comment || '—',
     USERS[e.user]?.label || e.user,
     e.justifData ? 'Oui' : 'Non'
   ]);
   doc.autoTable({
     head, body, startY: y,
     styles: {
-      font: 'helvetica', fontSize: 7.5, cellPadding: 2.5,
-      valign: 'middle', lineColor: [230, 230, 230], lineWidth: 0.2
+      font: 'helvetica', fontSize: 8, cellPadding: 3,
+      valign: 'middle', lineColor: [220, 225, 232], lineWidth: 0.3,
+      overflow: 'linebreak'
     },
     headStyles: {
-      fillColor: blue, textColor: [255, 255, 255],
-      fontStyle: 'bold', fontSize: 7.5, halign: 'center'
+      fillColor: blue, textColor: white,
+      fontStyle: 'bold', fontSize: 8, halign: 'center',
+      cellPadding: { top: 3.5, bottom: 3.5, left: 3, right: 3 }
     },
-    alternateRowStyles: { fillColor: [245, 248, 252] },
+    alternateRowStyles: { fillColor: altRow },
     columnStyles: {
-      0: { cellWidth: 8, halign: 'center', textColor: gray },
-      1: { cellWidth: 22, halign: 'center' },
-      2: { cellWidth: 48 },
-      3: { cellWidth: 26, halign: 'center' },
-      4: { cellWidth: 24, halign: 'right', fontStyle: 'bold', textColor: blue },
-      5: { cellWidth: 36 },
-      6: { cellWidth: 32 },
-      7: { cellWidth: 28, halign: 'center' },
-      8: { cellWidth: 14, halign: 'center' }
+      0: { cellWidth: 12, halign: 'center', textColor: gray, fontStyle: 'normal' },
+      1: { cellWidth: 24, halign: 'center', fontStyle: 'normal' },
+      2: { cellWidth: 58, halign: 'left' },
+      3: { cellWidth: 30, halign: 'center' },
+      4: { cellWidth: 30, halign: 'right', fontStyle: 'bold', textColor: blue },
+      5: { cellWidth: 42, halign: 'left' },
+      6: { cellWidth: 42, halign: 'left', textColor: gray },
+      7: { cellWidth: 30, halign: 'center' },
+      8: { cellWidth: 16, halign: 'center' }
     },
     foot: [['', '', '', 'TOTAL TTC', fmtDH(total), '', '', '', '']],
-    footStyles: { fillColor: lightGray, fontStyle: 'bold', textColor: blue, halign: 'right' },
+    footStyles: {
+      fillColor: blueLight, fontStyle: 'bold', textColor: blue,
+      fontSize: 8.5, cellPadding: 3.5
+    },
     margin: { left: M, right: M },
     didParseCell: function(hookData) {
-      // Right-align amount column
       if (hookData.section === 'body' && hookData.column.index === 4) {
         hookData.cell.styles.halign = 'right';
+      }
+      if (hookData.section === 'body' && hookData.column.index === 0) {
+        hookData.cell.styles.textColor = gray;
+        hookData.cell.styles.fontSize = 7;
+      }
+      if (hookData.section === 'body' && hookData.column.index === 8) {
+        hookData.cell.styles.fontStyle = hookData.cell.raw === 'Oui' ? 'bold' : 'normal';
+        hookData.cell.styles.textColor = hookData.cell.raw === 'Oui' ? [34, 139, 34] : gray;
+      }
+    },
+    didDrawPage: function(hookData) {
+      const pageCount = doc.internal.getNumberOfPages();
+      if (pageCount > 1) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(...grayLight);
+        doc.text('Page ' + hookData.pageNumber + ' / ' + pageCount, W - M, H - 6, { align: 'right' });
       }
     }
   });
 
-  // Footer
-  const fy = doc.lastAutoTable.finalY + 6;
-  doc.setDrawColor(...lightGray);
+  // ── Footer ──
+  const fy = doc.lastAutoTable.finalY + 4;
+  doc.setDrawColor(...blueLight);
   doc.setLineWidth(0.3);
   doc.line(M, fy, W - M, fy);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(...gray);
-  doc.text('\u00a9 ' + now.getFullYear() + ' EQNOVIA \u2014 Notes de Frais', cx, fy + 5, { align: 'center' });
+  doc.setFontSize(6.5);
+  doc.setTextColor(...grayLight);
+  doc.text('\u00a9 ' + now.getFullYear() + ' EQNOVIA \u2014 Notes de Frais', M, fy + 5);
+  doc.text('Document généré automatiquement', W - M, fy + 5, { align: 'right' });
   doc.save('note-de-frais_' + userLabel.replace(/ /g, '_') + '_' + today() + '.pdf');
-  toast('Export PDF telecharge.', 'ok');
+  toast('Export PDF téléchargé.', 'ok');
 }
 
 // ════════════════════════════════════════════════════
