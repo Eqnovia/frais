@@ -5095,6 +5095,8 @@ function exportPDF() {
   doc.setFontSize(9);
   doc.setTextColor(...gray);
   const userLabel = USERS[currentUser]?.label || currentUser;
+  const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+  const total = sorted.reduce((s, e) => s + (e.amount || 0), 0);
   doc.text(`Collaborateur : ${userLabel}    |    ${sorted.length} dépense(s)    |    Total TTC : ${fmtDH(total)}`, cx, y, { align: 'center' });
   y += 6;
 
@@ -5105,7 +5107,6 @@ function exportPDF() {
   y += 4;
 
   // Table
-  const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
   const head = [['#', 'Date', 'Description', 'Categorie', 'Total TTC', 'Mission', 'Commentaires', 'Utilisateur', 'Justif']];
   const body = sorted.map((e, i) => [
     i + 1,
