@@ -268,6 +268,42 @@
     .badge-justif{background:var(--eq-blue-pale);color:var(--eq-blue);cursor:pointer;}
     .badge-justif:hover{background:var(--eq-blue-mid);}
     .badge-user{background:var(--gray-100);color:var(--gray-700);}
+    /* Remboursement badges */
+    .remb-badge{cursor:pointer;transition:all .15s;}
+    .remb-badge.remb-yes{background:var(--green-pale,#e8f5e9);color:var(--green,#2e7d32);}
+    .remb-badge.remb-yes:hover{background:var(--green,#2e7d32);color:#fff;}
+    .remb-badge.remb-no{background:var(--amber-pale,#fff8e1);color:var(--amber,#b45309);}
+    .remb-badge.remb-no:hover{background:var(--amber,#b45309);color:#fff;}
+    /* Confirm reimbursement button in table */
+    .btn-remb{width:26px;height:26px;border:none;border-radius:8px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all .15s;-webkit-tap-highlight-color:transparent;}
+    .btn-remb.yes{background:var(--green-pale,#e8f5e9);color:var(--green,#2e7d32);}
+    .btn-remb.yes:hover{background:var(--green,#2e7d32);color:#fff;}
+    .btn-remb.no{background:var(--amber-pale,#fff8e1);color:var(--amber,#b45309);}
+    .btn-remb.no:hover{background:var(--amber,#b45309);color:#fff;}
+    .btn-remb.disabled{opacity:.35;cursor:not-allowed;}
+    /* ══ NOTIFICATION DOT (menu Remboursement) ══ */
+    .remb-notif-dot{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;margin-left:auto;border-radius:20px;background:var(--red,#c62828);color:#fff;font-size:9px;font-weight:800;line-height:1;animation:rembPulse 1.6s ease-in-out infinite;}
+    @keyframes rembPulse{0%,100%{transform:scale(1);opacity:1;}50%{transform:scale(1.15);opacity:.85;}}
+    .nav-item{position:relative;}
+    /* ══ ALERTE NON REMBOURSÉS ══ */
+    .remb-alert{display:flex;align-items:center;gap:12px;background:var(--amber-pale,#fff8e1);border:1.5px solid #fde68a;border-left:5px solid var(--amber,#b45309);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:14px;flex-wrap:wrap;}
+    .remb-alert-icon{font-size:22px;}
+    .remb-alert-text{display:flex;flex-direction:column;gap:2px;flex:1;min-width:180px;}
+    .remb-alert-text strong{font-size:13px;color:#8a5a00;}
+    .remb-alert-text span{font-size:11px;color:var(--gray-500);}
+    /* ══ CARTES PAR PERSONNE ══ */
+    .remb-persons{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px;}
+    .remb-person-card{display:flex;align-items:center;gap:10px;background:var(--gray-50);border:1.5px solid var(--gray-200);border-radius:var(--radius-md);padding:10px 12px;cursor:pointer;transition:all .15s;}
+    .remb-person-card:hover{border-color:var(--eq-blue-mid);background:var(--eq-blue-pale);transform:translateY(-1px);}
+    .remb-person-card.selected{border-color:var(--eq-blue);background:var(--eq-blue-pale);box-shadow:0 0 0 2px var(--eq-blue-mid);}
+    .remb-person-avatar{width:34px;height:34px;border-radius:50%;background:var(--eq-blue);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;}
+    .remb-person-info{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1;}
+    .remb-person-name{font-size:12px;font-weight:700;color:var(--gray-700);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .remb-person-amount{font-size:12px;font-weight:800;color:var(--eq-blue);font-variant-numeric:tabular-nums;}
+    .remb-person-sub{font-size:10px;color:var(--gray-400);}
+    .remb-person-sub .ok{color:var(--green,#2e7d32);font-weight:600;}
+    .remb-person-sub .ko{color:var(--amber,#b45309);font-weight:600;}
+    @media(max-width:480px){.remb-persons{grid-template-columns:1fr 1fr;gap:8px;}.remb-person-card{padding:8px;}.remb-person-avatar{width:28px;height:28px;font-size:11px;}}
 
     /* ══ TABLE FOOTER ══ */
     .table-footer{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--gray-50);border-top:2px solid var(--gray-200);flex-wrap:wrap;gap:10px;}

@@ -88,6 +88,27 @@ function isValidDate(dateStr) {
 }
 
 /**
+ * Vérifie qu'un utilisateur non-admin ne modifie pas les champs de remboursement.
+ * Seul l'admin peut confirmer (ou annuler) le remboursement d'une dépense.
+ */
+function isRembourseChangeAllowed() {
+  return isAdmin()
+    || (
+      // Clés présentes/absence identiques : on ne peut ni ajouter ni supprimer le champ
+      (('rembourse' in request.resource.data) == ('rembourse' in resource.data))
+      && (('rembourseDate' in request.resource.data) == ('rembourseDate' in resource.data))
+      && (('rembourseBy' in request.resource.data) == ('rembourseBy' in resource.data))
+      // ... et les valeurs doivent rester identiques
+      && (!('rembourse' in request.resource.data)
+        || request.resource.data.rembourse == resource.data.rembourse)
+      && (!('rembourseDate' in request.resource.data)
+        || request.resource.data.rembourseDate == resource.data.rembourseDate)
+      && (!('rembourseBy' in request.resource.data)
+        || request.resource.data.rembourseBy == resource.data.rembourseBy)
+    );
+}
+
+/**
  * Vérifie que la taille d'un document ne dépasse pas la limite (512KB)
  */
 function isDocSizeValid() {
@@ -153,7 +174,13 @@ service cloud.firestore {
         && isValidAmount(request.resource.data.amount)
         && isValidDate(request.resource.data.date)
         && (!('modifiedBy' in request.resource.data) || isValidString(request.resource.data.modifiedBy, 20))
-        && (!('modifiedAt' in request.resource.data) || request.resource.data.modifiedAt is string);
+        && (!('modifiedAt' in request.resource.data) || request.resource.data.modifiedAt is string)
+        // Champ remboursement (optionnel) : booléen + infos de traçabilité
+        && (!('rembourse' in request.resource.data) || request.resource.data.rembourse is bool)
+        && (!('rembourseDate' in request.resource.data) || request.resource.data.rembourseDate is string)
+        && (!('rembourseBy' in request.resource.data) || isValidString(request.resource.data.rembourseBy, 20))
+        // Confirmer / annuler un remboursement : admin uniquement
+        && isRembourseChangeAllowed();
 
       // Suppression : admin uniquement
       allow delete: if isAuth() && isAdmin();

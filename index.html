@@ -288,6 +288,10 @@
   <a class="nav-item active" data-tooltip="Saisie & OCR" onclick="switchTab('saisie')" id="nav-saisie">
     <span class="nav-icon">✏️</span> <span>Saisie & OCR</span>
   </a>
+  <a class="nav-item" data-tooltip="Remboursement" onclick="switchTab('remboursement')" id="nav-remboursement">
+    <span class="nav-icon">💰</span> <span>Remboursement</span>
+    <span class="remb-notif-dot" id="rembNotifDot" style="display:none;">!</span>
+  </a>
 
   <span class="nav-label"><span class="nav-label-icon">📁</span> Historique</span>
   <a class="nav-item" data-tooltip="Toutes" onclick="switchTab('all')" id="nav-all">
@@ -377,6 +381,18 @@
       <div class="stat-label">Total général</div>
       <div class="stat-value" id="kpiTotal">0,00 DH</div>
       <div class="stat-sub" id="kpiCount">0 dépense(s)</div>
+    </div>
+    <div class="stat-card" style="background:var(--green-pale,#e8f5e9);">
+      <div class="stat-icon" style="background:var(--green,#2e7d32);color:#fff;">✅</div>
+      <div class="stat-label">Frais remboursés</div>
+      <div class="stat-value" id="kpiRemb">0,00 DH</div>
+      <div class="stat-sub">0 dépense(s) remboursée(s)</div>
+    </div>
+    <div class="stat-card" style="background:var(--red-pale,#ffebee);">
+      <div class="stat-icon" style="background:var(--red,#c62828);color:#fff;">⏳</div>
+      <div class="stat-label">Non remboursés</div>
+      <div class="stat-value" id="kpiNonRemb">0,00 DH</div>
+      <div class="stat-sub">0 en attente</div>
     </div>
     <div class="stat-card orange">
       <div class="stat-icon orange">📅</div>
@@ -515,6 +531,67 @@
     </div>
   </div>
 
+  <!-- ══ TAB: REMBOURSEMENT ══ -->
+  <div id="tab-content-remboursement" role="tabpanel" aria-labelledby="nav-remboursement" style="display:none;">
+    <!-- Mobile Section Header -->
+    <div class="mobile-section-header" style="display:none;">
+      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
+      <span class="section-label">Section :</span>
+      <span class="section-name">Remboursement</span>
+    </div>
+
+    <!-- Bannière de notification non remboursés -->
+    <div class="remb-alert" id="rembAlert" style="display:none;">
+      <span class="remb-alert-icon">🔔</span>
+      <div class="remb-alert-text">
+        <strong id="rembAlertTitle">0 frais en attente de remboursement</strong>
+        <span id="rembAlertSub">—</span>
+      </div>
+      <button class="btn btn-ghost" style="height:30px;font-size:11px;padding:0 12px;" onclick="filterRembAlert()">Voir la liste</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><div class="panel-icon blue">💰</div> Suivi des remboursements</div>
+        <div class="export-group">
+          <select class="form-select" id="filterRembTab" onchange="renderRemboursement()" style="height:30px;font-size:11px;">
+            <option value="all">💰 Tous les frais</option>
+            <option value="remb">✅ Remboursés</option>
+            <option value="non">🔔 Non remboursés</option>
+          </select>
+          <select class="form-select" id="filterRembTabUser" onchange="renderRemboursement()" style="height:30px;font-size:11px;">
+            <option value="all">👤 Toutes les personnes</option>
+          </select>
+        </div>
+      </div>
+      <div class="panel-body" style="padding-top:12px;">
+        <!-- Récapitulatif par personne -->
+        <div class="remb-persons" id="rembPersons"></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Personne</th>
+              <th>Montant</th>
+              <th>Statut</th>
+              <th>Info</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="rembTbody"></tbody>
+        </table>
+      </div>
+      <div class="table-footer">
+        <span class="total-info" id="rembRowCount">0 ligne(s)</span>
+        <div class="total-amount" id="rembGrandTotal">💰 Total : <strong>0,00 DH</strong></div>
+      </div>
+    </div>
+  </div>
+
   <!-- ══ TAB: TOUTES ══ -->
   <div id="tab-content-all" role="tabpanel" aria-labelledby="tab-all" style="display:none;">
     <!-- Mobile Section Header -->
@@ -557,6 +634,11 @@
         <select class="form-select" id="filterUser">
           <option value="all">👤 Tous</option>
         </select>
+        <select class="form-select" id="filterRemb" onchange="renderAll()">
+          <option value="all">💰 Remboursement : Tous</option>
+          <option value="remb">✅ Remboursés</option>
+          <option value="non">❌ Non remboursés</option>
+        </select>
         <div class="filter-sep"></div>
         <input type="text" class="form-input" id="filterSearch" placeholder="🔍 Recherche…" oninput="renderAll()" style="min-width:100px;"/>
         <button class="btn btn-ghost" style="height:32px;font-size:11px;padding:0 10px;" onclick="resetFilters()">🔄</button>
@@ -574,6 +656,7 @@
               <th>Commentaires</th>
               <th>User</th>
               <th>Justif</th>
+              <th>Remboursé</th>
               <th>Créé par</th>
               <th>Modifié par</th>
               <th></th>
@@ -1053,6 +1136,11 @@
   <a class="bottom-nav-item" tabindex="0" onclick="switchTab('yearly')" id="bnav-yearly" role="button" aria-label="Par année">
     <span class="nav-icon" aria-hidden="true">📆</span>
     <span>Année</span>
+  </a>
+  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('remboursement')" id="bnav-remboursement" role="button" aria-label="Remboursement">
+    <span class="nav-icon" aria-hidden="true">💰</span>
+    <span>Remb.</span>
+    <span class="remb-notif-dot" id="rembNotifDotMobile" style="display:none;">!</span>
   </a>
   <a class="bottom-nav-item" tabindex="0" onclick="switchTab('trimestre')" id="bnav-trimestre" role="button" aria-label="Par trimestre">
     <span class="nav-icon" aria-hidden="true">📊</span>

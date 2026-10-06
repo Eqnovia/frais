@@ -865,6 +865,12 @@ function updateUserUI() {
   const addBtn = document.getElementById('addBtn');
   if (addBtn) addBtn.style.display = isComptable ? 'none' : '';
 
+  // Onglet Remboursement : visible pour tous (comptable inclus)
+  const navRemb = document.getElementById('nav-remboursement');
+  const bnavRemb = document.getElementById('bnav-remboursement');
+  if (navRemb) navRemb.style.display = '';
+  if (bnavRemb) bnavRemb.style.display = '';
+
   // Populate assignedTo dropdown for mission orders
   populateAssignedToDropdown();
 }
@@ -1871,7 +1877,7 @@ function viewJustificatif(id) {
 // ════════════════════════════════════════════
 // TAB SWITCHING
 // ════════════════════════════════════════════
-const TABS = ['saisie','all','monthly','yearly','trimestre','comparison','mission','admin-om','user-missions','policy','backup'];
+const TABS = ['saisie','all','monthly','yearly','trimestre','comparison','remboursement','mission','admin-om','user-missions','policy','backup'];
 function switchTab(t) {
   activeTab = t;
   TABS.forEach(id=>{
@@ -1896,6 +1902,7 @@ function switchTab(t) {
     document.body.style.overflow = '';
   }
   if (t==='all')        renderAll();
+  if (t==='remboursement') renderRemboursement();
   if (t==='monthly')    renderMonthly();
   if (t==='yearly')     renderYearly();
   if (t==='trimestre')  renderTrimester();
@@ -3684,6 +3691,291 @@ function handleGlobalSearch(query) {
 }
 
 // ════════════════════════════════════════════
+// REMBOURSEMENT (frais remboursés ou non)
+// ════════════════════════════════════════════
+function isRembourse(exp) {
+  return exp && (exp.rembourse === true || exp.rembourse === 'Oui');
+}
+
+/** Voir clairement le statut de remboursement d'une dépense */
+function viewRemboursement(id) {
+  const e = typeof id === 'string' ? cache.find(x => String(x.id) === id) : cache.find(x => x.id === id);
+  if (!e) return toast('Dépense introuvable.', 'err');
+  const remb = isRembourse(e);
+  const dateInfo = e.rembourseDate
+    ? `le <strong>${fmtDate(e.rembourseDate)}</strong>`
+    : '';
+  const byInfo = e.rembourseBy
+    ? ` par <strong>${USERS[e.rembourseBy]?.label || esc(e.rembourseBy)}</strong>`
+    : '';
+  const body = remb
+    ? `<div style="font-size:40px;margin-bottom:8px;">✅</div>
+       <p style="font-size:15px;color:var(--green);font-weight:700;margin:0 0 6px;">Cette dépense est REMBOURSÉE</p>
+       <p style="font-size:12px;color:var(--gray-500);margin:0;">Confirmé ${dateInfo}${byInfo}</p>`
+    : `<div style="font-size:40px;margin-bottom:8px;">⏳</div>
+       <p style="font-size:15px;color:var(--red);font-weight:700;margin:0 0 6px;">Cette dépense N'EST PAS remboursée</p>
+       <p style="font-size:12px;color:var(--gray-500);margin:0;">Montant en attente de remboursement : <strong>${fmtDH(e.amount)}</strong></p>`;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay open';
+  overlay.id = 'rembModal';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:380px;text-align:center;">
+      <div class="modal-header">
+        <h3>💰 Statut de remboursement</h3>
+        <button class="modal-close" onclick="closeRembModal()" aria-label="Fermer la fenêtre">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12px;color:var(--gray-500);margin:0 0 4px;">${fmtDate(e.date)} — ${esc(e.desc)}</p>
+        <p style="font-size:18px;font-weight:800;color:var(--eq-blue);margin:0 0 10px;">${fmtDH(e.amount)}</p>
+        ${body}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeRembModal()">Fermer</button>
+        ${canConfirmRemboursement(e)
+          ? `<button class="btn ${remb ? 'btn-ghost' : 'btn-primary'}" onclick="toggleRembourse(${typeof e.id === 'string' ? `'${e.id}'` : e.id})">${remb ? '↩️ Marquer non remboursé' : '✅ Confirmer le remboursement'}</button>`
+          : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', ev => { if (ev.target === overlay) closeRembModal(); });
+}
+
+function closeRembModal() {
+  document.getElementById('rembModal')?.remove();
+}
+
+/** Qui peut confirmer le remboursement : uniquement l'admin */
+function canConfirmRemboursement(exp) {
+  return isAdmin;
+}
+
+/** Confirmer / annuler le remboursement d'une dépense (toggle) */
+function toggleRembourse(id) {
+  const e = typeof id === 'string' ? cache.find(x => String(x.id) === id) : cache.find(x => x.id === id);
+  if (!e) return toast('Dépense introuvable.', 'err');
+  if (!canConfirmRemboursement(e)) {
+    return toast('Vous n\'avez pas le droit de confirmer ce remboursement.', 'err');
+  }
+  closeRembModal();
+  const becoming = !isRembourse(e);
+  const label = USERS[currentUser]?.label || currentUser;
+  if (becoming) {
+    showModal(
+      '✅ Confirmer le remboursement',
+      `Confirmer que la dépense « ${e.desc} » (${fmtDH(e.amount)}) a bien été remboursée ?`,
+      async () => {
+        await dataUpdate(id, {
+          rembourse: true,
+          rembourseDate: today(),
+          rembourseBy: currentUser
+        });
+        updateKPIs();
+        rerenderAfterRembChange();
+        toast(`Remboursement confirmé par ${label} ✔`);
+      }
+    );
+  } else {
+    showModal(
+      '↩️ Annuler le remboursement',
+      `Marquer la dépense « ${e.desc} » comme NON remboursée ?`,
+      async () => {
+        await dataUpdate(id, {
+          rembourse: false,
+          rembourseDate: null,
+          rembourseBy: null
+        });
+        updateKPIs();
+        rerenderAfterRembChange();
+        toast('Dépense marquée non remboursée.');
+      }
+    );
+  }
+}
+
+function rerenderAfterRembChange() {
+  if (activeTab === 'remboursement') renderRemboursement();
+  else if (activeTab === 'monthly') renderMonthly();
+  else if (activeTab === 'yearly') renderYearly();
+  else renderAll();
+  updateRembNotif();
+}
+
+// ════════════════════════════════════════════
+// REMBOURSEMENT — ONGLET DÉDIÉ (liste + par personne)
+// ════════════════════════════════════════════
+function renderRemboursement() {
+  safeRender(() => {
+  const allData = dataAll();
+  const data = getUserExpenses(allData);
+  const statutF = document.getElementById('filterRembTab')?.value || 'all';
+  const userSel = document.getElementById('filterRembTabUser');
+  const userF   = userSel?.value || 'all';
+
+  // (Re)remplir la liste des personnes (admin/comptable = tout le monde)
+  if (userSel && (isAdmin || isComptable)) {
+    const prev = userSel.value;
+    userSel.innerHTML = '<option value="all">👤 Toutes les personnes</option>' +
+      getSortedUsers().map(([k, u]) => `<option value="${k}">${esc(u.label)}</option>`).join('');
+    userSel.value = Object.keys(USERS).includes(prev) ? prev : 'all';
+    userSel.style.display = '';
+  } else if (userSel) {
+    userSel.style.display = 'none';
+  }
+
+  // ── Cartes récapitulatives par personne ──
+  const personsEl = document.getElementById('rembPersons');
+  if (personsEl) {
+    const perUser = {};
+    data.forEach(e => {
+      if (!perUser[e.user]) perUser[e.user] = { remb: 0, nonRemb: 0, nbRemb: 0, nbNonRemb: 0 };
+      if (isRembourse(e)) { perUser[e.user].remb += e.amount; perUser[e.user].nbRemb++; }
+      else { perUser[e.user].nonRemb += e.amount; perUser[e.user].nbNonRemb++; }
+    });
+    personsEl.innerHTML = Object.entries(perUser)
+      .sort((a, b) => b[1].nonRemb - a[1].nonRemb)
+      .map(([k, v]) => {
+        const label = USERS[k]?.label || k;
+        const initial = label.substring(0, 1).toUpperCase();
+        const selected = userF === k ? 'selected' : '';
+        return `<div class="remb-person-card ${selected}" onclick="selectRembPerson('${k}')" title="Cliquer pour filtrer sur ${esc(label)}">
+          <div class="remb-person-avatar">${esc(initial)}</div>
+          <div class="remb-person-info">
+            <span class="remb-person-name">${esc(label)}</span>
+            <span class="remb-person-amount">${fmtDH(v.remb + v.nonRemb)}</span>
+            <span class="remb-person-sub"><span class="ok">✅ ${fmtDH(v.remb)}</span> · <span class="ko">🔔 ${fmtDH(v.nonRemb)}</span></span>
+          </div>
+          ${v.nbNonRemb > 0 ? `<span class="remb-notif-dot" title="${v.nbNonRemb} frais non remboursé(s)">${v.nbNonRemb}</span>` : ''}
+        </div>`;
+      }).join('') || '<p style="font-size:12px;color:var(--gray-400);">Aucune dépense enregistrée.</p>';
+  }
+
+  // ── Filtres ──
+  let rows = data.filter(e => {
+    const statutMatch = statutF === 'all'
+      || (statutF === 'remb' && isRembourse(e))
+      || (statutF === 'non' && !isRembourse(e));
+    return statutMatch && (userF === 'all' || e.user === userF);
+  }).sort((a, b) => {
+    if (isRembourse(a) !== isRembourse(b)) return isRembourse(a) ? 1 : -1; // non remboursés en premier
+    return b.date.localeCompare(a.date);
+  });
+
+  const tbody = document.getElementById('rembTbody');
+  const total = rows.reduce((s, e) => s + e.amount, 0);
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">✅</div><h3>Aucun frais dans cette catégorie</h3><p>Tout est remboursé ou aucun frais ne correspond au filtre.</p></div></td></tr>`;
+    document.getElementById('rembGrandTotal').innerHTML = '💰 Total : <strong>0,00 DH</strong>';
+    document.getElementById('rembRowCount').textContent = '0 ligne(s)';
+  } else {
+    let html = '';
+    rows.forEach((e, i) => {
+      const remb = isRembourse(e);
+      const userLabel = USERS[e.user]?.label || e.user;
+      const rembId = typeof e.id === 'string' ? `\'${e.id}\'` : e.id;
+      const info = remb
+        ? `✅ ${e.rembourseDate ? fmtDate(e.rembourseDate) : 'Remboursé'}${e.rembourseBy ? ' — ' + esc(USERS[e.rembourseBy]?.label || e.rembourseBy) : ''}`
+        : '⏳ En attente de remboursement';
+      html += `<tr>
+        <td style="color:var(--gray-400);font-size:11px;">${i + 1}</td>
+        <td class="td-date">${fmtDate(e.date)}</td>
+        <td class="td-desc"><span title="${esc(e.desc)}">${esc(e.desc)}</span></td>
+        <td class="td-user"><span class="badge badge-user">${esc(userLabel)}</span></td>
+        <td class="td-amount">${fmtDH(e.amount)}</td>
+        <td><span class="badge remb-badge ${remb ? 'remb-yes' : 'remb-no'}" onclick="viewRemboursement(${rembId})" title="Voir le détail">${remb ? '✅ Remboursé' : '⏳ Non remboursé'}</span></td>
+        <td style="font-size:10px;color:var(--gray-400);">${info}</td>
+        <td>${canConfirmRemboursement(e)
+          ? `<button class="btn-remb ${remb ? 'yes' : 'no'}"
+            onclick="toggleRembourse(${rembId})"
+            title="${remb ? 'Marquer comme NON remboursé' : 'Confirmer le remboursement'}">${remb ? '↩' : '✅'}</button>`
+          : ''}</td>
+      </tr>`;
+    });
+    tbody.innerHTML = html;
+    document.getElementById('rembGrandTotal').innerHTML = `💰 Total : <strong>${fmtDH(total)}</strong>`;
+    document.getElementById('rembRowCount').textContent = rows.length + ' ligne(s) — Total : ' + fmtDH(total);
+  }
+
+  // ── Bannière d'alerte ──
+  updateRembAlert();
+  }, 'renderRemboursement');
+}
+
+/** Cliquer sur une carte personne = filtrer la liste sur cette personne */
+function selectRembPerson(userKey) {
+  const sel = document.getElementById('filterRembTabUser');
+  if (sel && Object.keys(USERS).includes(userKey)) {
+    sel.value = sel.value === userKey ? 'all' : userKey;
+    renderRemboursement();
+  }
+}
+
+/** Depuis la bannière d'alerte : afficher les non remboursés */
+function filterRembAlert() {
+  switchTab('remboursement');
+  const sel = document.getElementById('filterRembTab');
+  if (sel) sel.value = 'non';
+  renderRemboursement();
+}
+
+// ════════════════════════════════════════════
+// NOTIFICATIONS DE NON-REMBOURSEMENT
+// ════════════════════════════════════════════
+function getNonRembourses(data) {
+  const d = data || getUserExpenses(dataAll());
+  return d.filter(e => !isRembourse(e));
+}
+
+/** Met à jour la pastille de notification dans les menus */
+function updateRembNotif() {
+  const nonRemb = getNonRembourses();
+  const nb = nonRemb.length;
+  const montant = nonRemb.reduce((s, e) => s + e.amount, 0);
+  ['rembNotifDot', 'rembNotifDotMobile'].forEach(id => {
+    const dot = document.getElementById(id);
+    if (!dot) return;
+    if (nb > 0) {
+      dot.style.display = '';
+      dot.textContent = nb > 99 ? '99+' : nb;
+      dot.title = nb + ' frais non remboursé(s) — ' + fmtDH(montant);
+    } else {
+      dot.style.display = 'none';
+    }
+  });
+}
+
+/** Bannière d'alerte dans l'onglet Remboursement */
+function updateRembAlert() {
+  const alertEl = document.getElementById('rembAlert');
+  if (!alertEl) return;
+  const nonRemb = getNonRembourses();
+  const nb = nonRemb.length;
+  const montant = nonRemb.reduce((s, e) => s + e.amount, 0);
+  if (nb > 0) {
+    alertEl.style.display = 'flex';
+    const t = document.getElementById('rembAlertTitle');
+    const s = document.getElementById('rembAlertSub');
+    if (t) t.textContent = `🔔 ${nb} frais en attente de remboursement`;
+    if (s) s.textContent = `Montant total en attente : ${fmtDH(montant)}`;
+  } else {
+    alertEl.style.display = 'none';
+  }
+}
+
+/** Notification toast au démarrage (et après chaque chargement de données) */
+function notifyNonRembourses() {
+  const nonRemb = getNonRembourses();
+  if (!nonRemb.length) return;
+  const montant = nonRemb.reduce((s, e) => s + e.amount, 0);
+  setTimeout(() => {
+    toast(`🔔 Rappel : ${nonRemb.length} frais non remboursé(s) — ${fmtDH(montant)} en attente. Menu 💰 Remboursement`, 'info');
+  }, 1500);
+}
+
+// ════════════════════════════════════════════
 // KPIs
 // ════════════════════════════════════════════
 function updateKPIs() {
@@ -3695,11 +3987,29 @@ function updateKPIs() {
   const ym    = now.toISOString().substring(0,7);
   const mData = userData.filter(e=>e.date.startsWith(ym));
   const total = userData.reduce((s,e)=>s+e.amount,0);
+  const rembTotal = userData.filter(isRembourse).reduce((s,e)=>s+e.amount,0);
+  const nonRembTotal = total - rembTotal;
 
   document.getElementById('kpiTotal').textContent      = fmtDH(total);
   document.getElementById('kpiCount').textContent      = userData.length + ' dépense(s)';
   document.getElementById('kpiMonth').textContent      = fmtDH(mData.reduce((s,e)=>s+e.amount,0));
   document.getElementById('kpiMonthLabel').textContent = MONTHS_FR[now.getMonth()] + ' ' + now.getFullYear();
+
+  const kpiRemb = document.getElementById('kpiRemb');
+  const kpiNonRemb = document.getElementById('kpiNonRemb');
+  if (kpiRemb) {
+    kpiRemb.textContent = fmtDH(rembTotal);
+    kpiRemb.parentElement.querySelector('.stat-sub').textContent
+      = userData.filter(isRembourse).length + ' dépense(s) remboursée(s)';
+  }
+  if (kpiNonRemb) {
+    kpiNonRemb.textContent = fmtDH(nonRembTotal);
+    kpiNonRemb.parentElement.querySelector('.stat-sub').textContent
+      = userData.filter(e => !isRembourse(e)).length + ' en attente';
+  }
+
+  // Pastille de notification (menu Remboursement) toujours à jour
+  updateRembNotif();
   }, 'updateKPIs');
 }
 
@@ -3723,6 +4033,7 @@ function renderAll() {
   const monthF  = document.getElementById('filterMonth').value;
   const catF    = document.getElementById('filterCat').value;
   const userF   = document.getElementById('filterUser').value;
+  const rembF   = document.getElementById('filterRemb')?.value || 'all';
   const search  = (document.getElementById('filterSearch').value||'').toLowerCase();
 
   const years = [...new Set(allData.map(e=>e.date.substring(0,4)))].sort().reverse();
@@ -3747,10 +4058,14 @@ function renderAll() {
   let rows = data.filter(e=>{
     const y=e.date.substring(0,4), m=e.date.substring(5,7);
     const userMatch = userF==='all' || e.user === userF;
+    const rembMatch = rembF==='all'
+      || (rembF==='remb' && isRembourse(e))
+      || (rembF==='non' && !isRembourse(e));
     return (yearF==='all'||y===yearF)
         && (monthF==='all'||m===monthF)
         && (catF==='all'||(e.cat||'Autre')===catF)
         && userMatch
+        && rembMatch
         && (!search||e.desc.toLowerCase().includes(search)||(e.cat||'').toLowerCase().includes(search)||(e.mission||'').toLowerCase().includes(search));
   }).sort((a,b)=>{
     if(sortCol==='amount') return (a.amount-b.amount)*sortDir;
@@ -3760,7 +4075,7 @@ function renderAll() {
   const tbody=document.getElementById('tbody');
 
   if(!rows.length){
-    tbody.innerHTML=`<tr><td colspan="12"><div class="empty-state"><div class="empty-icon">🗂️</div><h3>Aucune dépense trouvée</h3><p>Ajustez vos filtres ou saisissez une nouvelle dépense.</p></div></td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="13"><div class="empty-state"><div class="empty-icon">🗂️</div><h3>Aucune dépense trouvée</h3><p>Ajustez vos filtres ou saisissez une nouvelle dépense.</p></div></td></tr>`;
     document.getElementById('grandTotal').innerHTML='💰 Total : <strong>0,00 DH</strong>';
     document.getElementById('rowCount').textContent='0 ligne(s)';
     return;
@@ -3782,6 +4097,21 @@ function renderAll() {
     const canEdit = isAdmin || (isOwner && !isComptable);
     const canDelete = isAdmin;
 
+    const remb = isRembourse(e);
+    const rembId = typeof e.id === 'string' ? `\'${e.id}\'` : e.id;
+    const rembTitle = remb
+      ? (e.rembourseDate ? `Remboursé le ${fmtDate(e.rembourseDate)}` : 'Remboursé')
+      : 'Non remboursé — cliquez pour voir le détail';
+    const rembBadge = remb
+      ? `<span class="badge remb-badge remb-yes" onclick="viewRemboursement(${rembId})" title="${rembTitle}">✅ Remboursé</span>`
+      : `<span class="badge remb-badge remb-no" onclick="viewRemboursement(${rembId})" title="${rembTitle}">⏳ Non remboursé</span>`;
+    const canRemb = canConfirmRemboursement(e);
+    const rembBtn = canRemb
+      ? `<button class="btn-remb ${remb ? 'yes' : 'no'}"
+        onclick="toggleRembourse(${rembId})"
+        title="${remb ? 'Marquer comme NON remboursé' : 'Confirmer le remboursement'}">${remb ? '↩' : '✅'}</button>`
+      : '';
+
     html+=`<tr>
       <td style="color:var(--gray-400);font-size:11px;">${i+1}</td>
       <td class="td-date">${fmtDate(e.date)}</td>
@@ -3792,6 +4122,7 @@ function renderAll() {
       <td class="td-desc"><span title="${esc(e.comment || '')}">${esc(e.comment || '—')}</span></td>
       <td class="td-user"><span class="badge badge-user">${esc(userLabel)}</span></td>
       <td>${justifBadge}</td>
+      <td style="white-space:nowrap;">${rembBadge} ${rembBtn}</td>
       <td class="td-user"><span class="badge badge-user">${esc(createdByLabel)}</span></td>
       <td class="td-user"><span class="badge badge-user">${esc(modifiedByLabel)}</span></td>
       <td><div class="action-btns">
@@ -3807,7 +4138,7 @@ function renderAll() {
 }
 
 function resetFilters(){
-  ['filterYear','filterMonth','filterCat','filterUser'].forEach(id=>{
+  ['filterYear','filterMonth','filterCat','filterUser','filterRemb'].forEach(id=>{
     const el = document.getElementById(id);
     if (el) el.value='all';
   });
@@ -5071,18 +5402,19 @@ function exportExcel() {
     ['Filtres actifs', 'Oui'],
     [],
   ];
-  const headers = ['N°', 'Date', 'Description', 'Type', 'Total TTC (DH)', 'Objet mission', 'Commentaires', 'Utilisateur', 'Justificatif'];
+  const headers = ['N°', 'Date', 'Description', 'Type', 'Total TTC (DH)', 'Objet mission', 'Commentaires', 'Utilisateur', 'Justificatif', 'Remboursé'];
   const sorted = [...data].sort((a, b) => b.date.localeCompare(a.date));
   const dataRows = sorted.map((e, i) => [
     i + 1, e.date, e.desc, e.cat || 'Autre', e.amount, e.mission || '', e.comment || '',
     USERS[e.user]?.label || e.user,
-    e.justifData ? 'Oui' : 'Non'
+    e.justifData ? 'Oui' : 'Non',
+    isRembourse(e) ? 'Oui' : 'Non'
   ]);
   const totalTTC = sorted.reduce((s, e) => s + e.amount, 0);
-  const footerRows = [[], ['', '', 'TOTAL', '', totalTTC, '', '', '', '']];
+  const footerRows = [[], ['', '', 'TOTAL', '', totalTTC, '', '', '', '', '']];
   const allRows = [...employeeRows, headers, ...dataRows, ...footerRows];
   const ws = XLSX.utils.aoa_to_sheet(allRows);
-  ws['!cols'] = [{ wch: 5 }, { wch: 14 }, { wch: 35 }, { wch: 18 }, { wch: 15 }, { wch: 25 }, { wch: 30 }, { wch: 15 }, { wch: 12 }];
+  ws['!cols'] = [{ wch: 5 }, { wch: 14 }, { wch: 35 }, { wch: 18 }, { wch: 15 }, { wch: 25 }, { wch: 30 }, { wch: 15 }, { wch: 12 }, { wch: 12 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Notes de Frais');
   XLSX.writeFile(wb, `note-de-frais_${USERS[currentUser].label.replace(/ /g, '_')}_${today()}.xlsx`);
@@ -5152,11 +5484,14 @@ function exportPDF() {
   // ── Info badges row ──
   const badgeH = 10;
   const badgeW = (W - M * 2 - 8) / 4;
+  const rembTotal = sorted.filter(isRembourse).reduce((s, e) => s + (e.amount || 0), 0);
   const badges = [
     { label: 'Collaborateur', value: userLabel },
     { label: 'Nombre', value: sorted.length + ' dépense(s)' },
     { label: 'Total TTC', value: fmtDH(total) },
-    { label: 'Période', value: sorted.length ? (fmtDate(sorted[0].date) + ' — ' + fmtDate(sorted[sorted.length - 1].date)) : '—' }
+    { label: 'Période', value: sorted.length ? (fmtDate(sorted[0].date) + ' — ' + fmtDate(sorted[sorted.length - 1].date)) : '—' },
+    { label: 'Remboursé', value: fmtDH(rembTotal) },
+    { label: 'Non remboursé', value: fmtDH(total - rembTotal) }
   ];
   badges.forEach((b, i) => {
     const bx = M + i * (badgeW + 2.5);
@@ -5175,7 +5510,7 @@ function exportPDF() {
   y += badgeH + 5;
 
   // ── Table ──
-  const head = [['N°', 'Date', 'Description', 'Catégorie', 'Total TTC (DH)', 'Objet / Mission', 'Commentaires', 'Utilisateur', 'Justif.']];
+  const head = [['N°', 'Date', 'Description', 'Catégorie', 'Total TTC (DH)', 'Objet / Mission', 'Commentaires', 'Utilisateur', 'Justif.', 'Remboursé']];
   const body = sorted.map((e, i) => [
     String(i + 1),
     fmtDate(e.date),
@@ -5185,7 +5520,8 @@ function exportPDF() {
     e.mission || '—',
     e.comment || '—',
     USERS[e.user]?.label || e.user,
-    e.justifData ? 'Oui' : 'Non'
+    e.justifData ? 'Oui' : 'Non',
+    isRembourse(e) ? 'Oui' : 'Non'
   ]);
   doc.autoTable({
     head, body, startY: y,
@@ -5203,15 +5539,16 @@ function exportPDF() {
     columnStyles: {
       0: { cellWidth: 12, halign: 'center', textColor: gray, fontStyle: 'normal' },
       1: { cellWidth: 24, halign: 'center', fontStyle: 'normal' },
-      2: { cellWidth: 58, halign: 'left' },
-      3: { cellWidth: 30, halign: 'center' },
-      4: { cellWidth: 30, halign: 'right', fontStyle: 'bold', textColor: blue },
-      5: { cellWidth: 42, halign: 'left' },
-      6: { cellWidth: 42, halign: 'left', textColor: gray },
-      7: { cellWidth: 30, halign: 'center' },
-      8: { cellWidth: 16, halign: 'center' }
+      2: { cellWidth: 54, halign: 'left' },
+      3: { cellWidth: 28, halign: 'center' },
+      4: { cellWidth: 28, halign: 'right', fontStyle: 'bold', textColor: blue },
+      5: { cellWidth: 38, halign: 'left' },
+      6: { cellWidth: 38, halign: 'left', textColor: gray },
+      7: { cellWidth: 28, halign: 'center' },
+      8: { cellWidth: 16, halign: 'center' },
+      9: { cellWidth: 20, halign: 'center' }
     },
-    foot: [['', '', '', 'TOTAL TTC', fmtDH(total), '', '', '', '']],
+    foot: [['', '', '', 'TOTAL TTC', fmtDH(total), '', '', '', '', '']],
     footStyles: {
       fillColor: blueLight, fontStyle: 'bold', textColor: blue,
       fontSize: 8.5, cellPadding: 3.5
@@ -5228,6 +5565,10 @@ function exportPDF() {
       if (hookData.section === 'body' && hookData.column.index === 8) {
         hookData.cell.styles.fontStyle = hookData.cell.raw === 'Oui' ? 'bold' : 'normal';
         hookData.cell.styles.textColor = hookData.cell.raw === 'Oui' ? [34, 139, 34] : gray;
+      }
+      if (hookData.section === 'body' && hookData.column.index === 9) {
+        hookData.cell.styles.fontStyle = 'bold';
+        hookData.cell.styles.textColor = hookData.cell.raw === 'Oui' ? [34, 139, 34] : [180, 83, 9];
       }
     },
     didDrawPage: function(hookData) {
@@ -6252,6 +6593,8 @@ async function init() {
     updateUserUI();
     updateKPIs();
     renderAll();
+    updateRembNotif();
+    notifyNonRembourses();
     
     // Initialize OM history (Firebase + localStorage merge)
     await dataLoadOM();  // also calls renderOMHistory() internally
