@@ -89,7 +89,7 @@ const DEFAULT_USERS = {
   user3: { password: 'fatima2026', label: 'Bourzgui Fatima Zahra', isAdmin: false, email: 'fbourzgui@eqnovia.ma', tel: '0664549777' },
   user4: { password: 'larbi2026', label: 'Larbi Ramzi', isAdmin: false, email: 'lramzi@eqnovia.ma', tel: '0707088004' },
   user5: { password: 'ibrahime2026', label: 'Ibrahime', isAdmin: false, email: '', tel: '' },
-  user6: { password: 'hamza2026', label: 'Hamza', isAdmin: false, email: '', tel: '' },
+  user7: { password: 'aguersif2026', label: 'Omar AGUERSIF', isAdmin: false, email: 'oaguersif@eqnovia.ma', tel: '' },
   comptable: { password: 'comptable2026', label: 'Comptable', isAdmin: false, isComptable: true, email: '', tel: '' }
 };
 
@@ -110,6 +110,8 @@ function loadUsers() {
           email: '',
           tel: ''
         };
+        // Migration : suppression de l'ancien compte user6 (Hamza)
+        if (stored.user6 && stored.user6.label === 'Hamza') delete stored.user6;
         // Fusionner email/tel/isComptable depuis DEFAULT_USERS pour les comptes existants
         for (const k of Object.keys(DEFAULT_USERS)) {
           if (stored[k]) {
@@ -865,11 +867,17 @@ function updateUserUI() {
   const addBtn = document.getElementById('addBtn');
   if (addBtn) addBtn.style.display = isComptable ? 'none' : '';
 
-  // Onglet Remboursement : visible pour tous (comptable inclus)
+  // Onglet Remboursement : masqué pour le profil comptable
   const navRemb = document.getElementById('nav-remboursement');
   const bnavRemb = document.getElementById('bnav-remboursement');
-  if (navRemb) navRemb.style.display = '';
-  if (bnavRemb) bnavRemb.style.display = '';
+  const tabRemb = document.getElementById('tab-content-remboursement');
+  if (navRemb) navRemb.style.display = isComptable ? 'none' : '';
+  if (bnavRemb) bnavRemb.style.display = isComptable ? 'none' : '';
+  if (tabRemb) tabRemb.style.display = isComptable ? 'none' : (activeTab === 'remboursement' ? 'block' : 'none');
+  // If comptable is on remboursement tab, switch to all
+  if (isComptable && activeTab === 'remboursement') {
+    switchTab('all');
+  }
 
   // Populate assignedTo dropdown for mission orders
   populateAssignedToDropdown();
@@ -1879,6 +1887,8 @@ function viewJustificatif(id) {
 // ════════════════════════════════════════════
 const TABS = ['saisie','all','monthly','yearly','trimestre','comparison','remboursement','mission','admin-om','user-missions','policy','backup'];
 function switchTab(t) {
+  // Profil comptable : l'onglet 💰 Remboursement n'existe pas → repli sur 'all'
+  if (isComptable && t === 'remboursement') t = 'all';
   activeTab = t;
   TABS.forEach(id=>{
     const tabContent = document.getElementById(`tab-content-${id}`);
@@ -3967,6 +3977,7 @@ function updateRembAlert() {
 
 /** Notification toast au démarrage (et après chaque chargement de données) */
 function notifyNonRembourses() {
+  if (isComptable) return; // menu 💰 Remboursement masqué pour le comptable
   const nonRemb = getNonRembourses();
   if (!nonRemb.length) return;
   const montant = nonRemb.reduce((s, e) => s + e.amount, 0);

@@ -1,12 +1,12 @@
 /**
  * Eqnovia Notes de Frais — Service Worker
  * Stratégie : Cache-First pour les assets statiques, Network-First pour les CDN
- * Version: 2.0
+ * Version: 2.1
  */
 
-const CACHE_NAME = 'eqnovia-frais-v2';
-const STATIC_CACHE = 'eqnovia-static-v2';
-const CDN_CACHE = 'eqnovia-cdn-v2';
+const CACHE_NAME = 'eqnovia-frais-v3';
+const STATIC_CACHE = 'eqnovia-static-v3';
+const CDN_CACHE = 'eqnovia-cdn-v3';
 
 const STATIC_ASSETS = [
   './',

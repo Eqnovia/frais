@@ -133,7 +133,7 @@ Digitaliser et centraliser la gestion des notes de frais des employés d'Eqnovia
 ## 👤 Cas d'usage (Use Cases)
 
 ### UC-01 : Saisie d'une dépense (Employé)
-**Acteur** : Employé (ex: Rachid, Soufiane, Ibrahime, Hamza)
+**Acteur** : Employé (ex: Rachid, Soufiane, Ibrahime, Omar)
 
 **Préconditions** :
 - L'employé est connecté
@@ -487,7 +487,7 @@ function sanitizeInput(str) {
 | user3 | fatima2026 | Employé |
 | user4 | larbi2026 | Employé |
 | user5 | ibrahime2026 | Employé |
-| user6 | hamza2026 | Employé |
+| user7 | aguersif2026 | Employé |
 
 ### Saisie d'une dépense
 
