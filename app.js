@@ -3,9 +3,9 @@
 // CONSTANTS & STATE
 // ════════════════════════════════════════════
 const STORAGE_KEY = 'eqnovia_expenses_v3';
-const MONTHS_FR   = ['Janvier','Février','Mars','Avril','Mai','Juin',
-                     'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-const MONTHS_SHORT= ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+const MONTHS_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+const MONTHS_SHORT = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
 
 let sortCol = 'date', sortDir = -1;
 let activeTab = 'saisie';
@@ -29,53 +29,53 @@ const FIREBASE_AUTH_EMULATOR = false; // Set to true for local testing with emul
 // ANTI-BOUCLE INFINIE - GLOBAL RENDER LOCK
 // ============================================
 const __RENDER = {
-    locked: false,
-    depth: 0,
-    maxDepth: 15,
-    queue: [],
-    
-    safe(fn, name = 'anonymous') {
-        if (this.depth > this.maxDepth) {
-            console.error('\u274c BOUCLE INFINIE D\u00c9TECT\u00c9E dans', name, '\u2014 arr\u00eat for\u00e9.');
-            this.depth = 0;
-            this.locked = false;
-            return;
-        }
-        if (this.locked) {
-            // Queue instead of skip to avoid lost renders
-            if (this.queue.length < 20) {
-                this.queue.push({ fn, name });
-            }
-            return;
-        }
-        this.locked = true;
-        this.depth++;
-        try {
-            fn();
-        } catch (e) {
-            console.error('\u274c Erreur dans', name, ':', e);
-        } finally {
-            this.locked = false;
-            this.depth--;
-            // Process queue
-            if (this.queue.length > 0) {
-                const next = this.queue.shift();
-                setTimeout(() => __RENDER.safe(next.fn, next.name), 0);
-            }
-        }
+  locked: false,
+  depth: 0,
+  maxDepth: 15,
+  queue: [],
+
+  safe(fn, name = 'anonymous') {
+    if (this.depth > this.maxDepth) {
+      console.error('\u274c BOUCLE INFINIE D\u00c9TECT\u00c9E dans', name, '\u2014 arr\u00eat for\u00e9.');
+      this.depth = 0;
+      this.locked = false;
+      return;
     }
+    if (this.locked) {
+      // Queue instead of skip to avoid lost renders
+      if (this.queue.length < 20) {
+        this.queue.push({ fn, name });
+      }
+      return;
+    }
+    this.locked = true;
+    this.depth++;
+    try {
+      fn();
+    } catch (e) {
+      console.error('\u274c Erreur dans', name, ':', e);
+    } finally {
+      this.locked = false;
+      this.depth--;
+      // Process queue
+      if (this.queue.length > 0) {
+        const next = this.queue.shift();
+        setTimeout(() => __RENDER.safe(next.fn, next.name), 0);
+      }
+    }
+  }
 };
 
 function safeRender(fn, name) {
-    __RENDER.safe(fn, name);
+  __RENDER.safe(fn, name);
 }
 
 // Timeout helper for Firebase operations (prevents hanging)
 function withTimeout(promise, ms, label) {
-    return Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout ' + label + ' (' + ms + 'ms)')), ms))
-    ]);
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout ' + label + ' (' + ms + 'ms)')), ms))
+  ]);
 }
 
 // ════════════════════════════════════════════
@@ -273,9 +273,9 @@ function createUserDropdown(selectId, config = {}) {
           ` : ''}
           ${filtered.length === 0 ? '<div class="ud-empty">Aucun r\u00e9sultat trouv\u00e9</div>' : ''}
           ${filtered.map(([key, user]) => {
-            // Check active state: match by key OR by label (for selects that use label as value)
-            const isActive = key === select.value || user.label === select.value;
-            return `
+      // Check active state: match by key OR by label (for selects that use label as value)
+      const isActive = key === select.value || user.label === select.value;
+      return `
               <div class="ud-item ${isActive ? 'active' : ''} ${key === 'admin' ? 'ud-item-admin' : ''}" data-value="${key}" role="option">
                 <div class="ud-item-avatar">${user.label.substring(0, 1).toUpperCase()}</div>
                 <div class="ud-item-info">
@@ -285,7 +285,7 @@ function createUserDropdown(selectId, config = {}) {
                 <div class="ud-item-check">\u2713</div>
               </div>
             `;
-          }).join('')}
+    }).join('')}
         </div>
       </div>
     `;
@@ -544,10 +544,10 @@ function getAuthUid() {
 // Get Firebase Auth UID for a local username by querying user_profiles
 async function getAuthUidForUser(localUsername) {
   if (!useFirebase || !window.__fs) return null;
-  
+
   const user = USERS[localUsername];
   if (!user || !user.email) return null;
-  
+
   try {
     const { collection, getDocs, query, where } = window.__fs;
     const q = query(collection(window.__db, 'user_profiles'), where('email', '==', user.email));
@@ -579,17 +579,17 @@ async function createFirebaseAuthUser(userId, email, password) {
     // On doit donc reconnecter l'admin après la création.
     const adminEmail = getAuthEmail('admin');
     const adminPassword = USERS.admin ? USERS.admin.password : '';
-    
+
     // Créer le nouvel utilisateur
     const credential = await window.__createAuthUser(window.__auth, email, password);
-    
+
     // Déconnecter le nouvel utilisateur et reconnecter l'admin
     await window.__signOut(window.__auth);
-    
+
     if (adminEmail && adminPassword) {
       await window.__signInWithEmail(window.__auth, adminEmail, adminPassword);
     }
-    
+
     return { success: true, uid: credential.user.uid };
   } catch (error) {
     console.error('❌ Création Firebase Auth échouée:', error.code, error.message);
@@ -608,18 +608,18 @@ async function seedFirebaseAuthUsers() {
   if (!isFirebaseAuthAvailable()) {
     return toast('Firebase Auth n\'est pas disponible. Vérifiez la configuration.', 'err');
   }
-  
+
   const adminEmail = getAuthEmail('admin');
   const adminPassword = USERS.admin ? USERS.admin.password : '';
-  
+
   if (!adminEmail || !adminPassword) {
     return toast('Email ou mot de passe administrateur manquant.', 'err');
   }
-  
+
   // S'assurer que l'admin est connecté à Firebase Auth
   if (!useFirebaseAuth || !currentAuthUser) {
     let ok = await firebaseAuthSignIn(adminEmail, adminPassword);
-    
+
     if (!ok) {
       // L'admin n'existe peut-être pas dans Firebase Auth, essayer de le créer
       console.warn('Admin Firebase Auth échec, tentative de création...');
@@ -636,26 +636,26 @@ async function seedFirebaseAuthUsers() {
         return toast('Impossible de connecter l\'admin à Firebase Auth. Vérifiez les identifiants.', 'err');
       }
     }
-    
+
     if (!ok) {
       return toast('Impossible de connecter l\'admin à Firebase Auth. Vérifiez les identifiants.', 'err');
     }
   }
-  
+
   toast('⏳ Synchronisation des utilisateurs Firebase Auth...', 'info');
-  
+
   const results = [];
   const userEntries = Object.entries(USERS).filter(([id]) => id !== 'admin');
-  
+
   for (const [userId, userData] of userEntries) {
     const email = getAuthEmail(userId);
     const password = userData.password;
-    
+
     if (!email || !password) continue;
-    
+
     const result = await createFirebaseAuthUser(userId, email, password);
     results.push({ userId, email, success: result.success, error: result.error });
-    
+
     if (result.success) {
       console.log(`✅ Utilisateur Firebase Auth créé: ${email}`);
     } else if (result.error === 'auth/email-already-in-use') {
@@ -663,64 +663,215 @@ async function seedFirebaseAuthUsers() {
       results[results.length - 1].success = true; // C'est normal
     }
   }
-  
+
   // Reconnecter l'admin si nécessaire
   if (!useFirebaseAuth || !currentAuthUser) {
     await firebaseAuthSignIn(adminEmail, adminPassword);
   }
-  
+
   const successCount = results.filter(r => r.success).length;
   const totalCount = results.length;
-  
+
   toast(`✅ Synchronisation terminée : ${successCount}/${totalCount} utilisateurs`, successCount > 0 ? 'ok' : 'err');
-  
+
   if (successCount < totalCount) {
     console.warn('Échecs de création:', results.filter(r => !r.success));
   }
-  
+
   return results;
+}
+
+// ════════════════════════════════════════════
+// AUTH SESSION PERSISTENCE (Reste connecté au rechargement)
+// ════════════════════════════════════════════
+const AUTH_SESSION_KEY = 'eqnovia_auth_session_v1';
+
+function saveAuthSession(sessionData) {
+  try {
+    localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
+      user: sessionData.user,
+      loginAsAdmin: sessionData.loginAsAdmin,
+      savedAt: Date.now()
+    }));
+  } catch (e) {
+    console.warn('Erreur sauvegarde session:', e);
+  }
+}
+
+function getAuthSession() {
+  try {
+    const raw = localStorage.getItem(AUTH_SESSION_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    if (session && session.user && USERS[session.user]) {
+      return session;
+    }
+  } catch (e) {
+    console.warn('Erreur lecture session:', e);
+  }
+  return null;
+}
+
+function clearAuthSession() {
+  try {
+    localStorage.removeItem(AUTH_SESSION_KEY);
+  } catch (e) { }
+}
+
+function restoreAuthSession() {
+  const session = getAuthSession();
+  if (!session) return false;
+
+  const user = session.user;
+  if (!USERS[user]) {
+    clearAuthSession();
+    return false;
+  }
+
+  isAuthenticated = true;
+  currentUser = user;
+  isAdmin = USERS[user].isAdmin;
+  isComptable = USERS[user].isComptable === true;
+  loginAsAdmin = (session.loginAsAdmin === true) || USERS[user].isAdmin;
+
+  document.documentElement.classList.add('is-authenticated');
+  const overlay = document.getElementById('loginOverlay');
+  if (overlay) overlay.classList.add('hidden');
+  document.querySelectorAll('#appContent').forEach(el => el.style.display = '');
+
+  const userSel = document.getElementById('userSelector');
+  if (userSel) {
+    userSel.value = user;
+    refreshUserDropdown('userSelector');
+  }
+  updateUserUI();
+
+  TABS.forEach(id => {
+    document.getElementById(`bnav-${id}`)?.classList.toggle('active', id === activeTab);
+  });
+
+  init();
+  return true;
 }
 
 // ════════════════════════════════════════════
 // LOGIN / LOGOUT
 // ════════════════════════════════════════════
 
+function togglePasswordVisibility() {
+  const pwdInput = document.getElementById('loginPassword');
+  const btn = document.getElementById('togglePasswordBtn');
+  if (!pwdInput) return;
+  if (pwdInput.type === 'password') {
+    pwdInput.type = 'text';
+    if (btn) btn.textContent = '🙈';
+  } else {
+    pwdInput.type = 'password';
+    if (btn) btn.textContent = '👁️';
+  }
+}
+
+function showPasswordResetHelp() {
+  const msg = "🔐 Mots de passe par défaut Eqnovia :\n\n" +
+    "• Administrateur : eqnovia-2026 (ou \"admin\")\n" +
+    "• Rachid Bayed : rachid2026\n" +
+    "• Soufiane Laraichi : soufiane2026\n" +
+    "• Bourzgui Fatima Zahra : fatima2026\n" +
+    "• Larbi Ramzi : larbi2026\n" +
+    "• Ibrahime : ibrahime2026\n" +
+    "• Omar AGUERSIF : aguersif2026\n" +
+    "• Comptable : comptable2026\n\n" +
+    "Voulez-vous réinitialiser tous les mots de passe locaux aux valeurs par défaut ?";
+
+  if (confirm(msg)) {
+    try {
+      localStorage.removeItem(USERS_STORAGE_KEY);
+      clearAuthSession();
+      document.documentElement.classList.remove('is-authenticated');
+      USERS = loadUsers();
+      saveUsers();
+      updateLoginUserSelect();
+      updateUserSelector();
+      if (typeof refreshUserDropdown === 'function') {
+        refreshUserDropdown('loginUser');
+        refreshUserDropdown('userSelector');
+      }
+      const pwdInput = document.getElementById('loginPassword');
+      if (pwdInput) pwdInput.value = '';
+      const errEl = document.getElementById('loginError');
+      if (errEl) errEl.style.display = 'none';
+      toast('✅ Mots de passe réinitialisés aux valeurs par défaut !', 'ok');
+    } catch (e) {
+      console.error(e);
+      toast('Erreur lors de la réinitialisation.', 'err');
+    }
+  }
+}
+
 async function login() {
   const pwd = document.getElementById('loginPassword').value.trim();
   const user = document.getElementById('loginUser').value;
-  
+  const errEl = document.getElementById('loginError');
+  if (errEl) errEl.style.display = 'none';
+
   if (!USERS[user]) {
-    document.getElementById('loginError').style.display = 'block';
+    if (errEl) {
+      errEl.textContent = '❌ Utilisateur inconnu';
+      errEl.style.display = 'block';
+    }
     document.getElementById('loginPassword').value = '';
     document.getElementById('loginPassword').focus();
     toast('❌ Utilisateur inconnu', 'err');
     return;
   }
-  
+
   // Sauvegarder l'utilisateur sélectionné en cache
-  try { localStorage.setItem('eqnovia_lastUser', user); } catch(e) {}
-  
+  try { localStorage.setItem('eqnovia_lastUser', user); } catch (e) { }
+
   // Essayer Firebase Auth si disponible
   if (isFirebaseAuthAvailable()) {
-    const email = getAuthEmail(user);
-    if (email) {
-      const fbOk = await firebaseAuthSignIn(email, pwd);
-      if (fbOk) {
-        completeLogin(user);
-        return;
+    try {
+      const email = getAuthEmail(user);
+      if (email) {
+        const fbOk = await firebaseAuthSignIn(email, pwd);
+        if (fbOk) {
+          if (errEl) errEl.style.display = 'none';
+          completeLogin(user);
+          return;
+        }
+        console.warn('Firebase Auth échoué, tentative locale...');
       }
-      console.warn('Firebase Auth échoué, tentative locale...');
+    } catch (fbErr) {
+      console.warn('Firebase Auth erreur inattendue, tentative locale...', fbErr);
     }
   }
-  
-  // Fallback : authentification locale
-  if (USERS[user].password === pwd) {
+
+  // Fallback : authentification locale (avec tolérance et support du mot de passe par défaut)
+  const storedPwd = USERS[user] && USERS[user].password;
+  const defaultPwd = DEFAULT_USERS[user] && DEFAULT_USERS[user].password;
+  const isMatch = (storedPwd && storedPwd === pwd) ||
+    (defaultPwd && defaultPwd === pwd) ||
+    (user === 'admin' && (pwd === 'admin' || pwd === 'eqnovia-2026' || pwd === 'eqnovia2026'));
+
+  if (isMatch) {
+    // Si l'utilisateur a utilisé le mot de passe de référence ou le secours admin, resynchroniser localement
+    if (DEFAULT_USERS[user] && USERS[user].password !== DEFAULT_USERS[user].password && (pwd === DEFAULT_USERS[user].password || pwd === 'admin')) {
+      USERS[user].password = DEFAULT_USERS[user].password;
+      saveUsers();
+    }
+    if (errEl) errEl.style.display = 'none';
     completeLogin(user);
     if (!isFirebaseAuthAvailable()) {
       toast('ℹ️ Firebase non disponible — Mode local activé', 'info');
     }
   } else {
-    document.getElementById('loginError').style.display = 'block';
+    if (errEl) {
+      errEl.style.display = 'block';
+      const hint = (user === 'admin')
+        ? '❌ Mot de passe incorrect'
+        : `❌ Mot de passe incorrect`;
+      errEl.textContent = hint;
+    }
     document.getElementById('loginPassword').value = '';
     document.getElementById('loginPassword').focus();
     toast('❌ Mot de passe incorrect', 'err');
@@ -733,19 +884,23 @@ function completeLogin(user) {
   isAdmin = USERS[user].isAdmin;
   isComptable = USERS[user].isComptable === true;
   loginAsAdmin = USERS[user].isAdmin;
-  
+
+  // Persister la session pour rester connecté même en cas d'actualisation de la page (F5)
+  saveAuthSession({ user: currentUser, loginAsAdmin: loginAsAdmin });
+
+  document.documentElement.classList.add('is-authenticated');
   document.getElementById('loginOverlay').classList.add('hidden');
   document.querySelectorAll('#appContent').forEach(el => el.style.display = '');
-  
+
   document.getElementById('userSelector').value = user;
   refreshUserDropdown('userSelector');
   updateUserUI();
-  
+
   // Initialize bottom nav active state
   TABS.forEach(id => {
     document.getElementById(`bnav-${id}`)?.classList.toggle('active', id === activeTab);
   });
-  
+
   const modeText = useFirebaseAuth ? '☁️ Cloud' : '💻 Local';
   toast(`✅ Connexion réussie ! Bienvenue ${USERS[user].label} (${modeText})`, 'ok');
   init();
@@ -755,12 +910,16 @@ async function logout() {
   if (confirm('Voulez-vous vraiment vous déconnecter ?')) {
     isAuthenticated = false;
     loginAsAdmin = false;
-    
+
+    // Supprimer la session persistée
+    clearAuthSession();
+    document.documentElement.classList.remove('is-authenticated');
+
     // Déconnexion Firebase Auth si actif
     if (useFirebaseAuth) {
       await firebaseAuthSignOut();
     }
-    
+
     document.querySelectorAll('#appContent').forEach(el => el.style.display = 'none');
     document.getElementById('loginOverlay').classList.remove('hidden');
     document.getElementById('loginPassword').value = '';
@@ -776,7 +935,7 @@ async function logout() {
   }
 }
 
-document.getElementById('loginPassword').addEventListener('keydown', function(e) {
+document.getElementById('loginPassword').addEventListener('keydown', function (e) {
   if (e.key === 'Enter') login();
 });
 
@@ -793,6 +952,8 @@ function switchUser(userId) {
   currentUser = userId;
   isAdmin = USERS[userId].isAdmin;
   isComptable = USERS[userId].isComptable === true;
+  // Conserver l'utilisateur sélectionné dans la session persistée
+  saveAuthSession({ user: currentUser, loginAsAdmin: true });
   updateUserUI();
   updateKPIs();
   renderAll();
@@ -807,18 +968,18 @@ function updateUserUI() {
   const badge = document.getElementById('userBadge');
   const avatar = document.getElementById('avatarDisplay');
   const userInfo = USERS[currentUser];
-  
+
   badge.textContent = userInfo.label;
   badge.className = 'user-badge ' + (isAdmin ? 'admin' : isComptable ? 'comptable' : 'user');
-  
+
   const first = userInfo.label.substring(0, 1);
   avatar.textContent = first;
-  
+
   // Comptable can see same panels as admin (readonly) but NOT admin-only management tabs
   const showForAdmin = isAdmin; // only full admin gets management/missions/backups
   const adminOnly = document.querySelectorAll('#adminOnlyLabel, #adminUsersBtn, #adminOMBtn, #tab-admin-om, #nav-mission, #tab-mission, #bnav-mission, #nav-trimestre, #tab-trimestre, #bnav-trimestre, #nav-comparison, #tab-comparison, #bnav-comparison, #adminOnlyBackupLabel, #nav-backup, #tab-backup, #bnav-backup, #adminOnlyInfoLabel, #nav-policy, #tab-policy, #bnav-policy');
   adminOnly.forEach(el => el.style.display = showForAdmin ? '' : 'none');
-  
+
   // Show user missions tab for non-admin users (but not comptable)
   const userMissionsTab = document.getElementById('tab-user-missions');
   const userMissionsNav = document.getElementById('nav-user-missions');
@@ -826,22 +987,22 @@ function updateUserUI() {
   if (userMissionsTab) userMissionsTab.style.display = (isAdmin || isComptable) ? 'none' : '';
   if (userMissionsNav) userMissionsNav.style.display = (isAdmin || isComptable) ? 'none' : '';
   if (userMissionsBnav) userMissionsBnav.style.display = (isAdmin || isComptable) ? 'none' : '';
-  
+
   // Show/hide dashboard mission orders container
   const dashboardMOContainer = document.getElementById('dashboardMOContainer');
   if (dashboardMOContainer) dashboardMOContainer.style.display = (isAdmin || isComptable) ? 'none' : '';
-  
+
   // Comptable sees all users' filter (like admin)
   const filterUser = document.getElementById('filterUser');
   if (filterUser) {
     filterUser.style.display = (isAdmin || isComptable) ? '' : 'none';
   }
-  
+
   const filterMonthUser = document.getElementById('filterMonthUser');
   if (filterMonthUser) {
     filterMonthUser.style.display = (isAdmin || isComptable) ? '' : 'none';
   }
-  
+
   // Hide/show user selector in sidebar — only admin can switch accounts
   const userSelectorWrap = document.getElementById('userSelector')?.closest('.user-selector');
   if (userSelectorWrap) {
@@ -867,6 +1028,16 @@ function updateUserUI() {
   const addBtn = document.getElementById('addBtn');
   if (addBtn) addBtn.style.display = isComptable ? 'none' : '';
 
+  // ── Comptable: masquer les cartes KPI (Total général, Frais remboursés, Non remboursés, Ce mois-ci) ──
+  const statsGrid = document.querySelector('.stats-grid');
+  if (statsGrid) statsGrid.style.display = isComptable ? 'none' : '';
+
+  // Filtre Remboursement et panneau Recommandations : masqués pour le comptable
+  const filterRemb = document.getElementById('filterRemb');
+  if (filterRemb) filterRemb.style.display = isComptable ? 'none' : '';
+  const recPanel = document.getElementById('recommendationsPanel');
+  if (recPanel) recPanel.style.display = isComptable ? 'none' : '';
+
   // Onglet Remboursement : masqué pour le profil comptable
   const navRemb = document.getElementById('nav-remboursement');
   const bnavRemb = document.getElementById('bnav-remboursement');
@@ -876,6 +1047,25 @@ function updateUserUI() {
   if (tabRemb) tabRemb.style.display = isComptable ? 'none' : (activeTab === 'remboursement' ? 'block' : 'none');
   // If comptable is on remboursement tab, switch to all
   if (isComptable && activeTab === 'remboursement') {
+    switchTab('all');
+  }
+
+  // ── Boutons et onglets Par mois et Par année : masqués pour le profil comptable ──
+  const navMonthly = document.getElementById('nav-monthly');
+  const bnavMonthly = document.getElementById('bnav-monthly');
+  const tabMonthly = document.getElementById('tab-content-monthly');
+  if (navMonthly) navMonthly.style.display = isComptable ? 'none' : '';
+  if (bnavMonthly) bnavMonthly.style.display = isComptable ? 'none' : '';
+  if (tabMonthly) tabMonthly.style.display = isComptable ? 'none' : (activeTab === 'monthly' ? 'block' : 'none');
+
+  const navYearly = document.getElementById('nav-yearly');
+  const bnavYearly = document.getElementById('bnav-yearly');
+  const tabYearly = document.getElementById('tab-content-yearly');
+  if (navYearly) navYearly.style.display = isComptable ? 'none' : '';
+  if (bnavYearly) bnavYearly.style.display = isComptable ? 'none' : '';
+  if (tabYearly) tabYearly.style.display = isComptable ? 'none' : (activeTab === 'yearly' ? 'block' : 'none');
+
+  if (isComptable && (activeTab === 'monthly' || activeTab === 'yearly')) {
     switchTab('all');
   }
 
@@ -913,7 +1103,7 @@ function updateModeStatus() {
   const modeStatus = document.getElementById('modeStatus');
   const modeStatusText = document.getElementById('modeStatusText');
   if (!modeStatus || !modeStatusText) return;
-  
+
   if (useFirebase) {
     modeStatus.className = 'db-status db-online';
     modeStatus.querySelector('span:first-child').textContent = '☁️';
@@ -964,19 +1154,19 @@ document.getElementById('userModal').addEventListener('click', e => {
 function renderUsersList() {
   const container = document.getElementById('usersList');
   const users = Object.entries(USERS).filter(([key]) => key !== 'admin');
-  
+
   if (!users.length) {
     container.innerHTML = '<p style="color:var(--gray-400);font-size:13px;text-align:center;padding:20px;">Aucun utilisateur.</p>';
     return;
   }
-  
+
   const fbAuthAvailable = isFirebaseAuthAvailable();
-  
+
   container.innerHTML = users.map(([key, u]) => `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:8px;background:var(--white);">
       <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
         <div style="width:32px;height:32px;border-radius:50%;background:${u.isAdmin ? 'var(--eq-blue-pale)' : 'var(--gray-100)'};color:${u.isAdmin ? 'var(--eq-blue)' : 'var(--gray-700)'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">
-          ${u.label.substring(0,1).toUpperCase()}
+          ${u.label.substring(0, 1).toUpperCase()}
         </div>
         <div style="min-width:0;flex:1;">
           <div style="font-size:13px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(u.label)}</div>
@@ -996,15 +1186,15 @@ function addNewUser() {
   const nameInput = document.getElementById('newUserName');
   const pwdInput = document.getElementById('newUserPassword');
   const roleInput = document.getElementById('newUserRole');
-  
+
   const name = sanitizeInput(nameInput.value);
   const pwd = pwdInput.value.trim();
   const isAdminRole = roleInput.value === 'admin';
-  
+
   if (!name) return toast('Veuillez saisir un nom.', 'err');
   if (!pwd) return toast('Veuillez saisir un mot de passe.', 'err');
   if (pwd.length < 4) return toast('Le mot de passe doit contenir au moins 4 caractères.', 'err');
-  
+
   // Generate unique key
   const existingKeys = Object.keys(USERS).filter(k => k.startsWith('user'));
   const maxNum = existingKeys.reduce((max, k) => {
@@ -1012,7 +1202,7 @@ function addNewUser() {
     return num > max ? num : max;
   }, 0);
   const newKey = 'user' + (maxNum + 1);
-  
+
   USERS[newKey] = {
     password: pwd,
     label: name,
@@ -1034,16 +1224,16 @@ function addNewUser() {
 function editUser(key) {
   const user = USERS[key];
   if (!user) return;
-  
+
   const newName = prompt('Nouveau nom pour ' + user.label + ' :', user.label);
   if (newName === null) return;
-  
+
   const sanitizedName = sanitizeInput(newName);
   if (!sanitizedName) return toast('Le nom ne peut pas être vide.', 'err');
-  
+
   const newPwd = prompt('Nouveau mot de passe (laisser vide pour conserver l\'ancien) :', '');
   if (newPwd === null) return;
-  
+
   USERS[key].label = sanitizedName;
   if (newPwd.trim()) {
     if (newPwd.trim().length < 4) return toast('Le mot de passe doit contenir au moins 4 caractères.', 'err');
@@ -1061,21 +1251,23 @@ function editUser(key) {
 function deleteUser(key) {
   const user = USERS[key];
   if (!user) return;
-  
+
   showModal('Supprimer l\'utilisateur', 'Voulez-vous vraiment supprimer l\'utilisateur "' + user.label + '" ? Cette action est irréversible.', async () => {
     delete USERS[key];
     saveUsers();
     renderUsersList();
     updateUserSelector();
     updateLoginUserSelect();
-    
+
     // If deleted user was current, switch to admin
     if (currentUser === key) {
       currentUser = 'admin';
       isAdmin = true;
+      loginAsAdmin = true;
+      saveAuthSession({ user: 'admin', loginAsAdmin: true });
       updateUserUI();
     }
-    
+
     toast('🗑️ Utilisateur supprimé.', 'info');
   });
 }
@@ -1083,13 +1275,13 @@ function deleteUser(key) {
 function updateUserSelector() {
   const sel = document.getElementById('userSelector');
   if (!sel) return;
-  
+
   const currentVal = sel.value;
   // Build options using centralized sorted user list
-  sel.innerHTML = getSortedUsers().map(([k, u]) => 
+  sel.innerHTML = getSortedUsers().map(([k, u]) =>
     `<option value="${k}">👤 ${esc(u.label)}</option>`
   ).join('');
-  
+
   if (Object.keys(USERS).includes(currentVal)) {
     sel.value = currentVal;
   }
@@ -1102,7 +1294,7 @@ function updateLoginUserSelect() {
 
   const currentVal = sel.value;
   // Build options using centralized sorted user list
-  sel.innerHTML = getSortedUsers().map(([k, u]) => 
+  sel.innerHTML = getSortedUsers().map(([k, u]) =>
     `<option value="${k}">${u.isAdmin ? 'Administrateur' : esc(u.label)}</option>`
   ).join('');
 
@@ -1129,7 +1321,7 @@ async function fbAdd(expense) {
       modifiedBy: currentUser,
       modifiedAt: serverTimestamp()
     });
-  } catch(e) { console.warn('FB add failed', e); }
+  } catch (e) { console.warn('FB add failed', e); }
 }
 
 async function fbUpdate(id, updates) {
@@ -1145,7 +1337,7 @@ async function fbUpdate(id, updates) {
         modifiedAt: serverTimestamp()
       });
     }
-  } catch(e) { console.warn('FB update failed', e); }
+  } catch (e) { console.warn('FB update failed', e); }
 }
 
 async function fbDelete(id) {
@@ -1157,7 +1349,7 @@ async function fbDelete(id) {
     for (const d of snap.docs) {
       await deleteDoc(doc(window.__db, 'expenses', d.id));
     }
-  } catch(e) { console.warn('FB delete failed', e); }
+  } catch (e) { console.warn('FB delete failed', e); }
 }
 
 async function fbLoad() {
@@ -1169,21 +1361,21 @@ async function fbLoad() {
     if (isFirebaseAuthAvailable() && useFirebaseAuth && currentAuthUser) {
       if (isAdmin) {
         // Admin voit tout
-        q = query(collection(window.__db,'expenses'), orderBy('createdAt','asc'));
+        q = query(collection(window.__db, 'expenses'), orderBy('createdAt', 'asc'));
       } else {
         // Utilisateur ne voit que ses propres documents
-        q = query(collection(window.__db,'expenses'),
+        q = query(collection(window.__db, 'expenses'),
           where('_authUid', '==', currentAuthUser.uid),
-          orderBy('createdAt','asc'));
+          orderBy('createdAt', 'asc'));
       }
     } else {
-      q = query(collection(window.__db,'expenses'), orderBy('createdAt','asc'));
+      q = query(collection(window.__db, 'expenses'), orderBy('createdAt', 'asc'));
     }
     const snap = await getDocs(q);
-    const arr  = [];
+    const arr = [];
     snap.forEach(d => arr.push({ ...d.data() }));
     return arr;
-  } catch(e) { console.warn('FB load failed', e); return null; }
+  } catch (e) { console.warn('FB load failed', e); return null; }
 }
 
 // ════════════════════════════════════════════
@@ -1198,7 +1390,7 @@ async function fbAddOM(om) {
       _authUid: getAuthUid(),
       _savedAt: serverTimestamp()
     });
-  } catch(e) { console.warn('FB OM add failed', e); }
+  } catch (e) { console.warn('FB OM add failed', e); }
 }
 
 async function fbDeleteOM(localId) {
@@ -1210,7 +1402,7 @@ async function fbDeleteOM(localId) {
     for (const d of snap.docs) {
       await deleteDoc(doc(window.__db, 'om_history', d.id));
     }
-  } catch(e) { console.warn('FB OM delete failed', e); }
+  } catch (e) { console.warn('FB OM delete failed', e); }
 }
 
 async function fbLoadOM() {
@@ -1220,7 +1412,7 @@ async function fbLoadOM() {
     const q = query(collection(window.__db, 'om_history'), orderBy('_savedAt', 'asc'));
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ _firebaseId: d.id, ...d.data() }));
-  } catch(e) { console.warn('FB OM load failed', e); return null; }
+  } catch (e) { console.warn('FB OM load failed', e); return null; }
 }
 
 // ════════════════════════════════════════════
@@ -1237,7 +1429,7 @@ async function fbAddMissionOrder(mo) {
       modifiedAt: serverTimestamp()
     });
     return docRef.id;
-  } catch(e) { console.warn('FB mission_order add failed', e); return null; }
+  } catch (e) { console.warn('FB mission_order add failed', e); return null; }
 }
 
 async function fbUpdateMissionOrder(docId, updates) {
@@ -1249,7 +1441,7 @@ async function fbUpdateMissionOrder(docId, updates) {
       modifiedBy: currentUser,
       modifiedAt: serverTimestamp()
     });
-  } catch(e) { console.warn('FB mission_order update failed', e); }
+  } catch (e) { console.warn('FB mission_order update failed', e); }
 }
 
 async function fbDeleteMissionOrder(docId) {
@@ -1257,7 +1449,7 @@ async function fbDeleteMissionOrder(docId) {
   try {
     const { deleteDoc, doc } = window.__fs;
     await deleteDoc(doc(window.__db, 'mission_orders', docId));
-  } catch(e) { console.warn('FB mission_order delete failed', e); }
+  } catch (e) { console.warn('FB mission_order delete failed', e); }
 }
 
 async function fbLoadMissionOrders() {
@@ -1280,7 +1472,7 @@ async function fbLoadMissionOrders() {
     }
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ _firebaseId: d.id, ...d.data() }));
-  } catch(e) { console.warn('FB mission_orders load failed', e); return null; }
+  } catch (e) { console.warn('FB mission_orders load failed', e); return null; }
 }
 
 async function fbLoadMissionOrdersForUser(userId) {
@@ -1305,7 +1497,7 @@ async function fbLoadMissionOrdersForUser(userId) {
       }
     }
     return [];
-  } catch(e) { console.warn('FB mission_orders load for user failed', e); return null; }
+  } catch (e) { console.warn('FB mission_orders load for user failed', e); return null; }
 }
 
 // Find user profile by Firebase Auth UID
@@ -1318,7 +1510,7 @@ async function findUserProfileByAuthUid(authUid) {
     if (snap.exists()) {
       return snap.data();
     }
-  } catch(e) {
+  } catch (e) {
     console.warn('Failed to find user profile:', e);
   }
   return null;
@@ -1327,20 +1519,20 @@ async function findUserProfileByAuthUid(authUid) {
 // ════════════════════════════════════════════
 // LOCAL STORAGE
 // ════════════════════════════════════════════
-function lsLoad() { 
-  try { 
+function lsLoad() {
+  try {
     const data = localStorage.getItem(STORAGE_KEY);
     return data ? JSON.parse(data) : [];
-  } catch(e) { 
+  } catch (e) {
     console.warn('localStorage read failed:', e);
-    return []; 
+    return [];
   }
 }
 
-function lsSave(d) { 
-  try { 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); 
-  } catch(e) { 
+function lsSave(d) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+  } catch (e) {
     console.warn('localStorage save failed:', e);
   }
 }
@@ -1353,7 +1545,7 @@ async function dataLoad() {
     const fb = await fbLoad();
     if (fb !== null) {
       cache = fb;
-      try { lsSave(cache); } catch(e) {}
+      try { lsSave(cache); } catch (e) { }
       return;
     }
   }
@@ -1366,7 +1558,7 @@ async function dataAdd(exp) {
   exp.modifiedBy = currentUser;
   exp.modifiedAt = new Date().toISOString();
   cache.push(exp);
-  try { lsSave(cache); } catch(e) {}
+  try { lsSave(cache); } catch (e) { }
   await fbAdd(exp);
 }
 
@@ -1374,7 +1566,7 @@ async function dataUpdate(id, updates) {
   const idx = cache.findIndex(e => e.id === id);
   if (idx === -1) return;
   cache[idx] = { ...cache[idx], ...updates, modifiedBy: currentUser, modifiedAt: new Date().toISOString() };
-  try { lsSave(cache); } catch(e) {}
+  try { lsSave(cache); } catch (e) { }
   await fbUpdate(id, updates);
 }
 
@@ -1385,7 +1577,7 @@ async function dataDelete(id) {
     exp.deletedAt = new Date().toISOString();
   }
   cache = cache.filter(e => e.id !== id);
-  try { lsSave(cache); } catch(e) {}
+  try { lsSave(cache); } catch (e) { }
   await fbDelete(id);
 }
 
@@ -1415,7 +1607,7 @@ async function dataLoadMissionOrders() {
       }
       missionOrdersCache = merged;
       if (changed) {
-        try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+        try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch (e) { }
       }
       return;
     }
@@ -1424,7 +1616,7 @@ async function dataLoadMissionOrders() {
   try {
     const stored = localStorage.getItem('eqnovia_mission_orders');
     missionOrdersCache = stored ? JSON.parse(stored) : [];
-  } catch(e) {
+  } catch (e) {
     missionOrdersCache = [];
   }
 }
@@ -1450,7 +1642,7 @@ async function dataLoadUserMissionOrders() {
         if (changed) {
           // Update missionOrdersCache with merged data
           missionOrdersCache = [...merged];
-          try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+          try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch (e) { }
         }
         return;
       }
@@ -1466,13 +1658,13 @@ async function dataAddMissionOrder(mo) {
   mo.modifiedBy = currentUser;
   mo.modifiedAt = new Date().toISOString();
   missionOrdersCache.push(mo);
-  try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
-  
+  try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch (e) { }
+
   const fbId = await fbAddMissionOrder(mo);
   if (fbId) {
     mo._firebaseId = fbId;
     // Update local storage with firebase ID
-    try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+    try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch (e) { }
   }
 }
 
@@ -1480,7 +1672,7 @@ async function dataUpdateMissionOrder(docId, updates) {
   const idx = missionOrdersCache.findIndex(mo => mo._firebaseId === docId || mo._localId === docId);
   if (idx === -1) return;
   missionOrdersCache[idx] = { ...missionOrdersCache[idx], ...updates, modifiedBy: currentUser, modifiedAt: new Date().toISOString() };
-  try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+  try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch (e) { }
   await fbUpdateMissionOrder(docId, updates);
 }
 
@@ -1491,7 +1683,7 @@ async function dataDeleteMissionOrder(docId) {
     missionOrdersCache[idx].deletedAt = new Date().toISOString();
   }
   missionOrdersCache = missionOrdersCache.filter(mo => mo._firebaseId !== docId && mo._localId !== docId);
-  try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+  try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch (e) { }
   await fbDeleteMissionOrder(docId);
 }
 
@@ -1513,15 +1705,15 @@ function dataUserMissionOrders() {
 // HELPERS
 // ════════════════════════════════════════════
 function fmtDH(n) {
-  return n.toLocaleString('fr-MA', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' DH';
+  return n.toLocaleString('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' DH';
 }
 function fmtDate(iso) {
   if (!iso) return '—';
-  const [y,m,d] = iso.split('-');
-  return `${d} ${MONTHS_FR[parseInt(m,10)-1].substring(0,3)}. ${y}`;
+  const [y, m, d] = iso.split('-');
+  return `${d} ${MONTHS_FR[parseInt(m, 10) - 1].substring(0, 3)}. ${y}`;
 }
 function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 function today() { return new Date().toISOString().split('T')[0]; }
 function sanitizeInput(str) {
@@ -1543,18 +1735,18 @@ function validateDate(dateStr) {
 // ════════════════════════════════════════════
 // TOAST
 // ════════════════════════════════════════════
-function toast(msg, type='ok') {
-  const t=document.getElementById('toast'),
-        icon=document.getElementById('toastIcon'),
-        msgEl=document.getElementById('toastMsg'),
-        bar=document.getElementById('toastBar');
-  icon.textContent={'ok':'✓','err':'✕','info':'ℹ'}[type]||'✓';
-  icon.className=`toast-icon ${type}`;
-  msgEl.textContent=msg;
-  t.className='toast show'+(type==='err'?' err':'');
-  bar.style.animation='none'; void bar.offsetWidth; bar.style.animation='';
+function toast(msg, type = 'ok') {
+  const t = document.getElementById('toast'),
+    icon = document.getElementById('toastIcon'),
+    msgEl = document.getElementById('toastMsg'),
+    bar = document.getElementById('toastBar');
+  icon.textContent = { 'ok': '✓', 'err': '✕', 'info': 'ℹ' }[type] || '✓';
+  icon.className = `toast-icon ${type}`;
+  msgEl.textContent = msg;
+  t.className = 'toast show' + (type === 'err' ? ' err' : '');
+  bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = '';
   clearTimeout(t._tid);
-  t._tid=setTimeout(()=>t.classList.remove('show'),3400);
+  t._tid = setTimeout(() => t.classList.remove('show'), 3400);
 }
 
 // ════════════════════════════════════════════
@@ -1567,7 +1759,7 @@ const EMAILJS_CONFIG = {
 };
 
 // Initialiser EmailJS au chargement
-try { emailjs.init(EMAILJS_CONFIG.publicKey); } catch(e) { /* EmailJS non disponible */ }
+try { emailjs.init(EMAILJS_CONFIG.publicKey); } catch (e) { /* EmailJS non disponible */ }
 
 function cleanPhone(p) {
   return (p || '').replace(/[\s\.\-\/\\()]/g, '');
@@ -1596,10 +1788,10 @@ function findUserEmail(employeName) {
 function notifyOMByWhatsApp(om, status, comment) {
   const phone = cleanPhone(om.tel || '');
   if (!phone || phone === '—' || phone.length < 6) return null;
-  
-  const statusLabel = {approved:'✅ Approuvé', rejected:'❌ Rejeté', pending:'⏳ En attente'}[status] || status;
+
+  const statusLabel = { approved: '✅ Approuvé', rejected: '❌ Rejeté', pending: '⏳ En attente' }[status] || status;
   const message = `Eqnovia - Ordre de mission ${om.numero || 'N/A'}\n\nBonjour ${om.employe || 'Collaborateur'},\n\nVotre ordre de mission N° ${om.numero} a été ${statusLabel}.${comment ? `\n\nMessage : ${comment}` : ''}\n\nDocument : ${om.date || ''} | ${om.objet || ''}\nÉquipe Eqnovia`;
-  
+
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
@@ -1608,9 +1800,9 @@ function notifyOMByEmail(om, status, comment) {
     console.warn('EmailJS non configuré — modifiez EMAILJS_CONFIG avec vos IDs');
     return;
   }
-  
-  const statusLabel = {approved:'Approuvé ✅', rejected:'Rejeté ❌', pending:'En attente ⏳'}[status] || status;
-  
+
+  const statusLabel = { approved: 'Approuvé ✅', rejected: 'Rejeté ❌', pending: 'En attente ⏳' }[status] || status;
+
   const recipient = om.email || findUserEmail(om.employe) || '';
   if (!recipient) {
     console.warn('📧 Aucun email trouvé pour', om.employe);
@@ -1630,14 +1822,14 @@ function notifyOMByEmail(om, status, comment) {
     transport: om.transport || '—',
     to_email: recipient
   })
-  .then(() => {
-    console.log('📧 Email envoyé avec succès à', recipient);
-    toast('📧 Email envoyé à ' + (om.employe || 'collaborateur'), 'ok');
-  })
-  .catch(err => {
-    console.warn('📧 Échec envoi email:', err);
-    toast('❌ Échec envoi email à ' + (om.employe || 'collaborateur'), 'err');
-  });
+    .then(() => {
+      console.log('📧 Email envoyé avec succès à', recipient);
+      toast('📧 Email envoyé à ' + (om.employe || 'collaborateur'), 'ok');
+    })
+    .catch(err => {
+      console.warn('📧 Échec envoi email:', err);
+      toast('❌ Échec envoi email à ' + (om.employe || 'collaborateur'), 'err');
+    });
 }
 
 // ════════════════════════════════════════════
@@ -1778,16 +1970,16 @@ function clearEditJustificatif() {
 // ════════════════════════════════════════════
 // MODAL
 // ════════════════════════════════════════════
-function showModal(title,msg,cb){
-  document.getElementById('modalTitle').textContent=title;
-  document.getElementById('modalMsg').textContent=msg;
-  document.getElementById('modalOk').onclick=()=>{closeModal();cb&&cb();};
+function showModal(title, msg, cb) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalMsg').textContent = msg;
+  document.getElementById('modalOk').onclick = () => { closeModal(); cb && cb(); };
   document.getElementById('modal').classList.add('open');
 }
-document.getElementById('modal').addEventListener('click',e=>{
-  if(e.target===document.getElementById('modal')) closeModal();
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal')) closeModal();
 });
-document.addEventListener('keydown', function(e) {
+document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') {
     // Close sidebar overlay if open
     const sidebar = document.querySelector('.sidebar');
@@ -1796,7 +1988,7 @@ document.addEventListener('keydown', function(e) {
       toggleSidebar();
     }
     // Close any open modal
-    ['modal','editModal','justifModal','userModal'].forEach(id => {
+    ['modal', 'editModal', 'justifModal', 'userModal'].forEach(id => {
       const el = document.getElementById(id);
       if (el && el.classList.contains('open')) {
         if (id === 'modal') closeModal();
@@ -1855,21 +2047,21 @@ document.getElementById('justifModal').addEventListener('click', e => {
 function viewJustificatif(id) {
   const exp = cache.find(e => e.id === id);
   if (!exp) return toast('Dépense introuvable.', 'err');
-  
+
   const body = document.getElementById('justifBody');
   const files = getJustifFiles(exp);
-  
+
   if (files.length > 0) {
     let html = '<div class="justif-gallery" style="display:flex;flex-direction:column;gap:12px;align-items:center;">';
     files.forEach((f, idx) => {
       const url = f.storageUrl || f.data;
       if (!url) return;
       html += `<div class="justif-gallery-item" style="width:100%;text-align:center;">
-        <img src="${url}" alt="Justificatif ${idx+1}" style="max-width:100%;border-radius:8px;border:1px solid var(--gray-200);max-height:400px;object-fit:contain;cursor:pointer;" onclick="window.open('${url}','_blank')" title="Cliquer pour agrandir"/>
+        <img src="${url}" alt="Justificatif ${idx + 1}" style="max-width:100%;border-radius:8px;border:1px solid var(--gray-200);max-height:400px;object-fit:contain;cursor:pointer;" onclick="window.open('${url}','_blank')" title="Cliquer pour agrandir"/>
         <p style="margin-top:6px;font-size:11px;color:var(--gray-400);">
-          📎 ${esc(f.name || 'Justificatif ' + (idx+1))}
+          📎 ${esc(f.name || 'Justificatif ' + (idx + 1))}
           ${f.storageUrl ? ' <span style="color:var(--eq-blue);">☁️</span>' : ''}
-          ${files.length > 1 ? '<span style="color:var(--gray-300);"> — ' + (idx+1) + '/' + files.length + '</span>' : ''}
+          ${files.length > 1 ? '<span style="color:var(--gray-300);"> — ' + (idx + 1) + '/' + files.length + '</span>' : ''}
         </p>
       </div>`;
     });
@@ -1878,26 +2070,26 @@ function viewJustificatif(id) {
   } else {
     body.innerHTML = `<p style="color:var(--gray-400);font-size:14px;">📭 Aucun justificatif pour cette dépense.</p>`;
   }
-  
+
   document.getElementById('justifModal').classList.add('open');
 }
 
 // ════════════════════════════════════════════
 // TAB SWITCHING
 // ════════════════════════════════════════════
-const TABS = ['saisie','all','monthly','yearly','trimestre','comparison','remboursement','mission','admin-om','user-missions','policy','backup'];
+const TABS = ['saisie', 'all', 'monthly', 'yearly', 'trimestre', 'comparison', 'remboursement', 'mission', 'admin-om', 'user-missions', 'policy', 'backup'];
 function switchTab(t) {
-  // Profil comptable : l'onglet 💰 Remboursement n'existe pas → repli sur 'all'
-  if (isComptable && t === 'remboursement') t = 'all';
+  // Profil comptable : les onglets Remboursement, Par mois, Par année et Saisie n'existent pas → repli sur 'all'
+  if (isComptable && (t === 'remboursement' || t === 'monthly' || t === 'yearly' || t === 'saisie')) t = 'all';
   activeTab = t;
-  TABS.forEach(id=>{
+  TABS.forEach(id => {
     const tabContent = document.getElementById(`tab-content-${id}`);
-    if (tabContent) tabContent.style.display = id===t?'block':'none';
+    if (tabContent) tabContent.style.display = id === t ? 'block' : 'none';
     const tabBtn = document.getElementById(`tab-${id}`);
-    tabBtn?.classList.toggle('active', id===t);
-    if (tabBtn) tabBtn.setAttribute('aria-selected', id===t ? 'true' : 'false');
-    document.getElementById(`nav-${id}`)?.classList.toggle('active', id===t);
-    document.getElementById(`bnav-${id}`)?.classList.toggle('active', id===t);
+    tabBtn?.classList.toggle('active', id === t);
+    if (tabBtn) tabBtn.setAttribute('aria-selected', id === t ? 'true' : 'false');
+    document.getElementById(`nav-${id}`)?.classList.toggle('active', id === t);
+    document.getElementById(`bnav-${id}`)?.classList.toggle('active', id === t);
     // Show/hide mobile section headers
     document.querySelectorAll(`.mobile-section-header`).forEach(el => el.style.display = 'none');
     const header = document.querySelector(`#tab-content-${t} .mobile-section-header`);
@@ -1911,16 +2103,16 @@ function switchTab(t) {
     if (overlay) overlay.classList.remove('open');
     document.body.style.overflow = '';
   }
-  if (t==='all')        renderAll();
-  if (t==='remboursement') renderRemboursement();
-  if (t==='monthly')    renderMonthly();
-  if (t==='yearly')     renderYearly();
-  if (t==='trimestre')  renderTrimester();
-  if (t==='comparison') renderComparison();
-  if (t==='admin-om')   loadAdminOM();
-  if (t==='user-missions') renderUserMissionOrders();
-  if (t==='saisie')     renderDashboardMissionOrders();
-  if (t==='backup')     renderBackupStatus();
+  if (t === 'all') renderAll();
+  if (t === 'remboursement') renderRemboursement();
+  if (t === 'monthly') renderMonthly();
+  if (t === 'yearly') renderYearly();
+  if (t === 'trimestre') renderTrimester();
+  if (t === 'comparison') renderComparison();
+  if (t === 'admin-om') loadAdminOM();
+  if (t === 'user-missions') renderUserMissionOrders();
+  if (t === 'saisie') renderDashboardMissionOrders();
+  if (t === 'backup') renderBackupStatus();
 }
 
 // ════════════════════════════════════════════
@@ -1931,21 +2123,21 @@ function getOMValue(id) {
 }
 
 function generateMissionOrder() {
-  const numero  = getOMValue('omNumero');
-  const date    = document.getElementById('omDate').value;
+  const numero = getOMValue('omNumero');
+  const date = document.getElementById('omDate').value;
   const employeKey = getOMValue('omEmploye');
   const employe = USERS[employeKey]?.label || employeKey;
-  const objet   = getOMValue('omObjet');
+  const objet = getOMValue('omObjet');
 
   if (!numero || !date || !employe || !objet) {
     toast('⚠️ Veuillez remplir les champs obligatoires (N°, date, collaborateur, objet).', 'error');
     return;
   }
 
-  const depart    = getOMValue('omDepart') || '—';
-  const arrivee   = getOMValue('omArrivee') || '—';
-  const debut     = document.getElementById('omDebut').value || '—';
-  const fin       = document.getElementById('omFin').value || '—';
+  const depart = getOMValue('omDepart') || '—';
+  const arrivee = getOMValue('omArrivee') || '—';
+  const debut = document.getElementById('omDebut').value || '—';
+  const fin = document.getElementById('omFin').value || '—';
   const transport = document.getElementById('omTransport').value;
   const remarques = getOMValue('omRemarques') || '—';
   const telephone = getOMValue('omTel') || '—';
@@ -2008,13 +2200,13 @@ function generateMissionOrder() {
   const saved = history.find(h => h.numero === numero && h.employe === employe);
   const status = (saved && saved._status) || 'pending';
   const comment = (saved && saved._comment) || '';
-  
+
   const statusHtml = {
     approved: '<span class="om-status-badge approved">✅ Approuvé</span>',
     rejected: '<span class="om-status-badge rejected">❌ Rejeté</span>',
     pending: '<span class="om-status-badge pending">⏳ En attente de validation</span>'
   }[status] || '<span class="om-status-badge pending">⏳ En attente de validation</span>';
-  
+
   // Insert status section before signatures
   const signSection = fiche.querySelector('.om-sign');
   const statusSection = document.createElement('div');
@@ -2041,7 +2233,7 @@ function generateMissionOrder() {
 }
 
 function resetMissionForm() {
-  ['omNumero','omDate','omEmploye','omDepart','omArrivee','omDebut','omFin','omObjet','omTel','omRemarques'].forEach(id => {
+  ['omNumero', 'omDate', 'omEmploye', 'omDepart', 'omArrivee', 'omDebut', 'omFin', 'omObjet', 'omTel', 'omRemarques'].forEach(id => {
     document.getElementById(id).value = '';
   });
   document.getElementById('omTransport').value = 'Voiture';
@@ -2061,7 +2253,7 @@ function printMissionOrder() {
 const OM_STORAGE_KEY = 'eqnovia_om_history';
 
 function loadOMHistory() {
-  try { return JSON.parse(localStorage.getItem(OM_STORAGE_KEY)) || []; } catch(e) { return []; }
+  try { return JSON.parse(localStorage.getItem(OM_STORAGE_KEY)) || []; } catch (e) { return []; }
 }
 function saveOMHistory(history) {
   // Mark + sync last new item to Firebase BEFORE saving to localStorage
@@ -2085,8 +2277,8 @@ function renderOMHistory() {
   container.innerHTML = history.slice().reverse().map((om, i) => {
     const idx = history.length - 1 - i;
     const s = om._status || 'pending';
-    const statusIcon = {approved:'✅', rejected:'❌', pending:'⏳'}[s] || '⏳';
-    const statusCls = {approved:'approved', rejected:'rejected', pending:'pending'}[s] || 'pending';
+    const statusIcon = { approved: '✅', rejected: '❌', pending: '⏳' }[s] || '⏳';
+    const statusCls = { approved: 'approved', rejected: 'rejected', pending: 'pending' }[s] || 'pending';
     return `
     <div class="om-history-item">
       <div>
@@ -2111,7 +2303,7 @@ function editOM(index) {
   const history = loadOMHistory();
   const om = history[index];
   if (!om) return toast('Ordre de mission introuvable.', 'err');
-  
+
   // Load data into the form fields
   document.getElementById('omNumero').value = om.numero || '';
   document.getElementById('omDate').value = om.date || '';
@@ -2124,7 +2316,7 @@ function editOM(index) {
   document.getElementById('omObjet').value = om.objet || '';
   document.getElementById('omTel').value = om.tel || '';
   document.getElementById('omRemarques').value = om.remarques || '';
-  
+
   // Switch to the mission tab
   switchTab('mission');
   // Scroll to the top of the OM panel
@@ -2154,7 +2346,7 @@ function showOMPopup(om) {
     <div style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;margin-bottom:4px;">Commentaire admin</div>
     <div style="font-size:12px;color:var(--gray-700);">${esc(om._comment)}</div>
   </div>` : '';
-  
+
   const body = `
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
       <div style="width:44px;height:44px;border-radius:50%;background:var(--eq-blue-pale);color:var(--eq-blue);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;">📝</div>
@@ -2184,7 +2376,7 @@ function showOMPopup(om) {
     </div>` : ''}
     ${comment}
   `;
-  
+
   // Inject into modal
   document.getElementById('modalTitle').textContent = '📋 Ordre de Mission';
   document.getElementById('modalMsg').innerHTML = body;
@@ -2196,7 +2388,7 @@ function exportSingleOMPDF(index) {
   const history = loadOMHistory();
   const om = history[index];
   if (!om) return toast('Ordre de mission introuvable.', 'err');
-  
+
   try {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF('p', 'mm', 'a4');
@@ -2210,7 +2402,7 @@ function exportSingleOMPDF(index) {
     // ═══ LOGO (centered) ═══
     try {
       doc.addImage('logo.PNG', 'PNG', cx - 20, y, 40, 14);
-    } catch(e) { /* no logo */ }
+    } catch (e) { /* no logo */ }
     y += 22;
 
     // ═══ TITLE (centered) ═══
@@ -2243,32 +2435,32 @@ function exportSingleOMPDF(index) {
       ['Mode de transport', om.transport || '—'],
       ['Téléphone', om.tel || '—'],
     ];
-    
+
     fields.forEach(([label, value], fi) => {
       const col = fi % 2;
       const row = Math.floor(fi / 2);
       const x = M + col * colW;
       const yy = y + row * 16;
       const cellW = colW - 4;
-      
+
       // Label (small, gray, centered)
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7);
       doc.setTextColor(...gray);
       doc.text(label.toUpperCase(), x + cellW / 2, yy, { align: 'center' });
-      
+
       // Value (larger, dark, centered)
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(...dark);
       doc.text(value, x + cellW / 2, yy + 5, { align: 'center' });
-      
+
       // Underline
       doc.setDrawColor(220, 220, 220);
       doc.setLineWidth(0.3);
       doc.line(x + 4, yy + 7, x + cellW, yy + 7);
     });
-    
+
     y += Math.ceil(fields.length / 2) * 16 + 4;
 
     // ═══ OBJET BOX ═══
@@ -2308,19 +2500,19 @@ function exportSingleOMPDF(index) {
     };
     const stText = statusText[om._status] || 'EN ATTENTE';
     const stColor = statusColor[om._status] || statusColor.pending;
-    
+
     y += 4;
     doc.setDrawColor(220, 220, 220);
     doc.setLineWidth(0.3);
     doc.line(M, y, W - M, y);
     y += 8;
-    
+
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(...gray);
     doc.text('STATUT', cx, y, { align: 'center' });
     y += 6;
-    
+
     // Status pill (centered)
     const pillW = 50;
     doc.setFillColor(...stColor);
@@ -2337,15 +2529,15 @@ function exportSingleOMPDF(index) {
     doc.setLineWidth(0.3);
     doc.line(M, y, W - M, y);
     y += 10;
-    
+
     // Left signature line
     doc.setDrawColor(50, 50, 50);
     doc.setLineWidth(0.4);
     doc.line(M + 10, y + 10, M + colW - 10, y + 10);
-    
+
     // Right signature line
     doc.line(M + colW + 10, y + 10, M + colW + colW - 10, y + 10);
-    
+
     // ═══ FOOTER ═══
     const footerY = 280;
     doc.setDrawColor(220, 220, 220);
@@ -2355,7 +2547,7 @@ function exportSingleOMPDF(index) {
     doc.setFontSize(7);
     doc.setTextColor(...gray);
     doc.text('\u00a9 ' + new Date().getFullYear() + ' EQNOVIA \u2014 Tous droits r\u00e9serv\u00e9s', cx, footerY + 5, { align: 'center' });
-    
+
     doc.save('Ordre_Mission_' + (om.numero || 'sans_numero') + '.pdf');
     toast('PDF telecharge.', 'ok');
   } catch (e) {
@@ -2379,7 +2571,7 @@ function deleteOM(index) {
 
 // Override generateMissionOrder to save history
 const _origGenerate = generateMissionOrder;
-generateMissionOrder = async function() {
+generateMissionOrder = async function () {
   _origGenerate();
   // Only save if generation succeeded (print button enabled = fiche generated)
   if (document.getElementById('omPrintBtn').disabled) return;
@@ -2441,14 +2633,14 @@ generateMissionOrder = async function() {
   }
 
   missionOrdersCache.push(mo);
-  try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+  try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch (e) { }
 
   // Sync to Firebase
   if (useFirebase) {
     const fbId = await fbAddMissionOrder(mo);
     if (fbId) {
       mo._firebaseId = fbId;
-      try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch(e) {}
+      try { localStorage.setItem('eqnovia_mission_orders', JSON.stringify(missionOrdersCache)); } catch (e) { }
     }
   }
 
@@ -2467,43 +2659,43 @@ function exportUserMissionsPDF() {
     toast('Aucun ordre de mission à exporter.', 'err');
     return;
   }
-  
+
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF('l','mm','a4');
-  
+  const doc = new jsPDF('l', 'mm', 'a4');
+
   // Header with Eqnovia logo
-  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch(e) { /* fallback */ }
-  doc.setFontSize(8); doc.setTextColor(247,147,30); doc.setFont(undefined,'normal');
+  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch (e) { /* fallback */ }
+  doc.setFontSize(8); doc.setTextColor(247, 147, 30); doc.setFont(undefined, 'normal');
   doc.text('Notes de Frais', 38, 22);
-  doc.setFontSize(14); doc.setTextColor(53,61,79); doc.setFont(undefined,'bold');
-  doc.text('Mes ordres de mission', 148, 20, {align:'center'});
-  doc.setFontSize(8); doc.setTextColor(142,151,168);
-  doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${data.length} OM`, 148, 26, {align:'center'});
-  doc.setDrawColor(11,79,158); doc.line(20, 30, 290, 30);
+  doc.setFontSize(14); doc.setTextColor(53, 61, 79); doc.setFont(undefined, 'bold');
+  doc.text('Mes ordres de mission', 148, 20, { align: 'center' });
+  doc.setFontSize(8); doc.setTextColor(142, 151, 168);
+  doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${data.length} OM`, 148, 26, { align: 'center' });
+  doc.setDrawColor(11, 79, 158); doc.line(20, 30, 290, 30);
 
   // Build table
   const rows = data.slice().reverse().map(mo => [
     mo.numero || '—',
     mo.employe || '—',
     mo.date || '—',
-    (mo.depart||'') + ' → ' + (mo.arrivee||''),
-    (mo.objet||'').substring(0,30),
+    (mo.depart || '') + ' → ' + (mo.arrivee || ''),
+    (mo.objet || '').substring(0, 30),
     mo.transport || '—',
-    {approved:'✅ Approuvé', rejected:'❌ Rejeté', pending:'⏳ En attente'}[mo.status] || 'En attente'
+    { approved: '✅ Approuvé', rejected: '❌ Rejeté', pending: '⏳ En attente' }[mo.status] || 'En attente'
   ]);
 
   doc.autoTable({
-    startY: 35, head: [['N° OM','Collaborateur','Date','Trajet','Objet','Transport','Statut']],
-    body: rows, margin: {left:15, right:15},
-    theme: 'grid', headStyles: {fillColor: [11,79,158], fontSize:7},
-    bodyStyles: {fontSize:6}, styles: {cellPadding:2},
+    startY: 35, head: [['N° OM', 'Collaborateur', 'Date', 'Trajet', 'Objet', 'Transport', 'Statut']],
+    body: rows, margin: { left: 15, right: 15 },
+    theme: 'grid', headStyles: { fillColor: [11, 79, 158], fontSize: 7 },
+    bodyStyles: { fontSize: 6 }, styles: { cellPadding: 2 },
     didDrawPage: (d) => { /* footer handled below */ }
   });
 
   const fy = doc.lastAutoTable.finalY + 6;
   doc.setDrawColor(200); doc.line(15, fy, 280, fy);
-  doc.setFontSize(7); doc.setTextColor(142,151,168);
-  doc.text('eqnovia · Notes de Frais · Mes ordres de mission', 148, fy + 4, {align:'center'});
+  doc.setFontSize(7); doc.setTextColor(142, 151, 168);
+  doc.text('eqnovia · Notes de Frais · Mes ordres de mission', 148, fy + 4, { align: 'center' });
   doc.save(`mes_om_${new Date().toISOString().split('T')[0]}.pdf`);
   toast('📄 Export PDF de mes OM téléchargé !');
 }
@@ -2511,7 +2703,7 @@ function exportUserMissionsPDF() {
 function viewAdminMO(docId) {
   const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
   if (!mo) return toast('Ordre de mission introuvable.', 'err');
-  
+
   // Generate the fiche in the mission tab
   document.getElementById('omNumero').value = mo.numero || '';
   document.getElementById('omDate').value = mo.date || '';
@@ -2524,7 +2716,7 @@ function viewAdminMO(docId) {
   document.getElementById('omObjet').value = mo.objet || '';
   document.getElementById('omTel').value = mo.tel || '';
   document.getElementById('omRemarques').value = mo.remarques || '';
-  
+
   switchTab('mission');
   generateMissionOrder();
   document.getElementById('omFiche')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2534,29 +2726,29 @@ function viewAdminMO(docId) {
 function exportAdminOMPDF(docId) {
   const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
   if (!mo) return toast('Ordre de mission introuvable.', 'err');
-  
+
   try {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF('p', 'mm', 'a4');
-    
+
     // Logo
-    try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch(e) { /* fallback */ }
-    
+    try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch (e) { /* fallback */ }
+
     // Title
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text(`ORDRE DE MISSION N° ${mo.numero || 'N/A'}`, 105, 22, { align: 'center' });
-    
+
     // Separator
     doc.setDrawColor(11, 79, 158);
     doc.setLineWidth(0.8);
     doc.line(14, 27, 196, 27);
-    
+
     // Info box
     const leftX = 18;
     let y = 33;
     doc.setFontSize(10);
-    
+
     const fields = [
       ['Date d\'émission', mo.date || '—'],
       ['Collaborateur', mo.employe || '—'],
@@ -2568,46 +2760,46 @@ function exportAdminOMPDF(docId) {
       ['Mode de transport', mo.transport || '—'],
       ['Téléphone', mo.tel || '—'],
     ];
-    
+
     fields.forEach(([label, value], fi) => {
       const col = fi % 2;
       const row = Math.floor(fi / 2);
       const x = col === 0 ? leftX : 105;
       const yy = y + row * 8;
-      
+
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7);
       doc.setTextColor(142, 151, 168);
       doc.text(label.toUpperCase(), x, yy);
-      
+
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       doc.setTextColor(53, 61, 79);
       doc.text(value, x, yy + 4);
-      
+
       // Underline
       doc.setDrawColor(221, 225, 234);
       doc.setLineWidth(0.3);
       doc.line(x, yy + 5.5, col === 0 ? 100 : 196, yy + 5.5);
     });
-    
+
     const objY = y + Math.ceil(fields.length / 2) * 8 + 6;
-    
+
     // Object box
     doc.setFillColor(235, 243, 251);
     doc.setDrawColor(200, 223, 245);
     doc.roundedRect(leftX - 2, objY, 176, 16, 2, 2, 'FD');
-    
+
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.setTextColor(11, 79, 158);
     doc.text('OBJET DE LA MISSION', leftX + 2, objY + 5);
-    
+
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
     doc.setTextColor(53, 61, 79);
     doc.text(mo.objet || '—', leftX + 2, objY + 12);
-    
+
     // Remarks
     let lines;
     if (mo.remarques && mo.remarques !== '—') {
@@ -2615,32 +2807,32 @@ function exportAdminOMPDF(docId) {
       doc.setFontSize(7);
       doc.setTextColor(142, 151, 168);
       doc.text('REMARQUES / INSTRUCTIONS', leftX, objY + 23);
-      
+
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(53, 61, 79);
       lines = doc.splitTextToSize(mo.remarques, 175);
       doc.text(lines, leftX, objY + 30);
     }
-    
+
     // Status
-    const statusLabel = {approved:'APPROUVÉ ✅', rejected:'REJETÉ ❌', pending:'EN ATTENTE ⏳'}[mo.status] || 'EN ATTENTE';
+    const statusLabel = { approved: 'APPROUVÉ ✅', rejected: 'REJETÉ ❌', pending: 'EN ATTENTE ⏳' }[mo.status] || 'EN ATTENTE';
     const linesHeight = (mo.remarques && mo.remarques !== '—' && lines) ? lines.length * 4 : 0;
     const statusY = objY + (mo.remarques && mo.remarques !== '—' ? 34 + linesHeight : 28);
-    
+
     doc.setDrawColor(221, 225, 234);
     doc.setLineWidth(0.5);
     doc.line(leftX, statusY, 196, statusY);
-    
+
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(142, 151, 168);
     doc.text('STATUT', 105, statusY + 7, { align: 'center' });
-    
+
     doc.setFontSize(11);
     doc.setTextColor(11, 79, 158);
     doc.text(statusLabel, 105, statusY + 14, { align: 'center' });
-    
+
     // Comment
     let commentLines;
     if (mo.comment) {
@@ -2649,20 +2841,20 @@ function exportAdminOMPDF(docId) {
       commentLines = doc.splitTextToSize(`Message : ${mo.comment}`, 170);
       doc.text(commentLines, 105, statusY + 21, { align: 'center' });
     }
-    
+
     // Signature section
     const commentHeight = (mo.comment && commentLines) ? commentLines.length * 4 : 0;
     const sigY = statusY + (mo.comment ? 26 + commentHeight : 22);
     doc.setDrawColor(142, 151, 168);
     doc.setLineWidth(0.3);
-    
+
     // Left signature line
     doc.line(30, sigY + 12, 85, sigY + 12);
-    
+
     // Right signature line
     doc.setLineWidth(0.3);
     doc.line(110, sigY + 12, 165, sigY + 12);
-    
+
     // Footer
     const footerY = 285;
     doc.setDrawColor(221, 225, 234);
@@ -2672,7 +2864,7 @@ function exportAdminOMPDF(docId) {
     doc.setTextColor(142, 151, 168);
     doc.text(`Document généré par Eqnovia — Notes de Frais • ${mo.numero || 'N/A'}`, 105, footerY + 5, { align: 'center' });
     doc.text(`Date: ${mo.date || '—'}`, 105, footerY + 10, { align: 'center' });
-    
+
     doc.save(`Ordre_Mission_${mo.numero || 'sans_numero'}.pdf`);
     toast('📄 PDF téléchargé.', 'ok');
   } catch (e) {
@@ -2695,10 +2887,10 @@ function renderUserMissionOrders() {
   }
 
   container.innerHTML = data.slice().reverse().map(mo => {
-    const statusClass = {approved: 'approved', rejected: 'rejected', pending: 'pending'}[mo.status] || 'pending';
-    const statusIcon = {approved: '✅', rejected: '❌', pending: '⏳'}[mo.status] || '⏳';
-    const statusLabel = {approved: 'Approuvé', rejected: 'Rejeté', pending: 'En attente'}[mo.status] || 'En attente';
-    
+    const statusClass = { approved: 'approved', rejected: 'rejected', pending: 'pending' }[mo.status] || 'pending';
+    const statusIcon = { approved: '✅', rejected: '❌', pending: '⏳' }[mo.status] || '⏳';
+    const statusLabel = { approved: 'Approuvé', rejected: 'Rejeté', pending: 'En attente' }[mo.status] || 'En attente';
+
     return `
     <div class="om-history-item">
       <div style="flex:1;min-width:0;">
@@ -2726,7 +2918,7 @@ function renderUserMissionOrders() {
 // ════════════════════════════════════════════
 function renderDashboardMissionOrders() {
   if (isAdmin) return; // Admin doesn't see this in dashboard
-  
+
   const data = dataUserMissionOrders();
   const container = document.getElementById('dashboardMOList');
   if (!container) return;
@@ -2737,10 +2929,10 @@ function renderDashboardMissionOrders() {
   }
 
   container.innerHTML = data.slice().reverse().map(mo => {
-    const statusClass = {approved: 'approved', rejected: 'rejected', pending: 'pending'}[mo.status] || 'pending';
-    const statusIcon = {approved: '✅', rejected: '❌', pending: '⏳'}[mo.status] || '⏳';
-    const statusLabel = {approved: 'Approuvé', rejected: 'Rejeté', pending: 'En attente'}[mo.status] || 'En attente';
-    
+    const statusClass = { approved: 'approved', rejected: 'rejected', pending: 'pending' }[mo.status] || 'pending';
+    const statusIcon = { approved: '✅', rejected: '❌', pending: '⏳' }[mo.status] || '⏳';
+    const statusLabel = { approved: 'Approuvé', rejected: 'Rejeté', pending: 'En attente' }[mo.status] || 'En attente';
+
     return `
     <div class="om-history-item">
       <div style="flex:1;min-width:0;">
@@ -2772,7 +2964,7 @@ function viewUserMO(docId) {
 function exportUserOMPDF(docId) {
   const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
   if (!mo) return toast('Ordre de mission introuvable.', 'err');
-  
+
   // Reuse the same PDF export function
   exportSingleOMPDFByData(mo);
 }
@@ -2789,7 +2981,7 @@ function exportSingleOMPDFByData(mo) {
     let y = 20;
 
     // LOGO (centered)
-    try { doc.addImage('logo.PNG', 'PNG', cx - 20, y, 40, 14); } catch(e) {}
+    try { doc.addImage('logo.PNG', 'PNG', cx - 20, y, 40, 14); } catch (e) { }
     y += 22;
 
     // TITLE (centered)
@@ -2929,20 +3121,20 @@ function exportSingleOMPDFByData(mo) {
 async function sendMOByEmail(docId) {
   const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
   if (!mo) return toast('Ordre de mission introuvable.', 'err');
-  
+
   const assignedUser = USERS[mo.assignedTo];
   const recipientEmail = assignedUser ? assignedUser.email : '';
-  
+
   if (!recipientEmail) {
     return toast('Aucune adresse email trouvée pour ce collaborateur.', 'err');
   }
-  
+
   // Try to send PDF via EmailJS if available
   if (window.emailjs && EMAILJS_CONFIG.serviceID && !EMAILJS_CONFIG.serviceID.includes('xxxxxxx')) {
     try {
       // Generate PDF as base64
       const pdfBase64 = await generatePDFBase64(mo);
-      
+
       await emailjs.send(EMAILJS_CONFIG.serviceID, EMAILJS_CONFIG.templateID, {
         to_email: recipientEmail,
         to_name: mo.employe || 'Collaborateur',
@@ -2967,11 +3159,11 @@ async function sendMOByEmail(docId) {
       console.warn('EmailJS PDF send failed, falling back to mailto:', e);
     }
   }
-  
+
   // Fallback: open email client with text
   const subject = `Ordre de mission N° ${mo.numero} — Eqnovia`;
   const body = `Bonjour ${mo.employe},\n\nVeuillez trouver ci-joint votre ordre de mission N° ${mo.numero}.\n\nDétails :\n- Date d'émission : ${mo.date}\n- Lieu de départ : ${mo.depart}\n- Lieu de destination : ${mo.arrivee}\n- Date de début : ${mo.debut}\n- Date de fin : ${mo.fin}\n- Objet : ${mo.objet}\n- Mode de transport : ${mo.transport}\n\n${mo.remarques && mo.remarques !== '—' ? 'Remarques : ' + mo.remarques : ''}\n\nCordialement,\nL'administration Eqnovia`;
-  
+
   window.location.href = `mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   toast('📧 Ouverture du client email...', 'ok');
 }
@@ -2979,20 +3171,20 @@ async function sendMOByEmail(docId) {
 async function sendUserMOByEmail(docId) {
   const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
   if (!mo) return toast('Ordre de mission introuvable.', 'err');
-  
+
   const assignedUser = USERS[mo.assignedTo];
   const recipientEmail = assignedUser ? assignedUser.email : '';
-  
+
   if (!recipientEmail) {
     return toast('Aucune adresse email trouvée pour ce collaborateur.', 'err');
   }
-  
+
   // Try to send PDF via EmailJS if available
   if (window.emailjs && EMAILJS_CONFIG.serviceID && !EMAILJS_CONFIG.serviceID.includes('xxxxxxx')) {
     try {
       // Generate PDF as base64
       const pdfBase64 = await generatePDFBase64(mo);
-      
+
       await emailjs.send(EMAILJS_CONFIG.serviceID, EMAILJS_CONFIG.templateID, {
         to_email: recipientEmail,
         to_name: mo.employe || 'Collaborateur',
@@ -3017,11 +3209,11 @@ async function sendUserMOByEmail(docId) {
       console.warn('EmailJS PDF send failed, falling back to mailto:', e);
     }
   }
-  
+
   // Fallback: open email client with text
   const subject = `Mon ordre de mission N° ${mo.numero} — Eqnovia`;
   const body = `Bonjour ${mo.employe},\n\nVeuillez trouver ci-joint votre ordre de mission N° ${mo.numero}.\n\nDétails :\n- Date d'émission : ${mo.date}\n- Lieu de départ : ${mo.depart}\n- Lieu de destination : ${mo.arrivee}\n- Date de début : ${mo.debut}\n- Date de fin : ${mo.fin}\n- Objet : ${mo.objet}\n- Mode de transport : ${mo.transport}\n\n${mo.remarques && mo.remarques !== '—' ? 'Remarques : ' + mo.remarques : ''}\n\nCordialement,\nL'administration Eqnovia`;
-  
+
   window.location.href = `mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   toast('📧 Ouverture du client email...', 'ok');
 }
@@ -3032,25 +3224,25 @@ async function generatePDFBase64(mo) {
     try {
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF('p', 'mm', 'a4');
-      
+
       // Logo
-      try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch(e) { /* fallback */ }
-      
+      try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch (e) { /* fallback */ }
+
       // Title
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
       doc.text(`ORDRE DE MISSION N° ${mo.numero || 'N/A'}`, 105, 22, { align: 'center' });
-      
+
       // Separator
       doc.setDrawColor(11, 79, 158);
       doc.setLineWidth(0.8);
       doc.line(14, 27, 196, 27);
-      
+
       // Info box
       const leftX = 18;
       let y = 33;
       doc.setFontSize(10);
-      
+
       const fields = [
         ['Date d\'émission', mo.date || '—'],
         ['Collaborateur', mo.employe || '—'],
@@ -3061,46 +3253,46 @@ async function generatePDFBase64(mo) {
         ['Mode de transport', mo.transport || '—'],
         ['Téléphone', mo.tel || '—'],
       ];
-      
+
       fields.forEach(([label, value], fi) => {
         const col = fi % 2;
         const row = Math.floor(fi / 2);
         const x = col === 0 ? leftX : 105;
         const yy = y + row * 8;
-        
+
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(7);
         doc.setTextColor(142, 151, 168);
         doc.text(label.toUpperCase(), x, yy);
-        
+
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
         doc.setTextColor(53, 61, 79);
         doc.text(value, x, yy + 4);
-        
+
         // Underline
         doc.setDrawColor(221, 225, 234);
         doc.setLineWidth(0.3);
         doc.line(x, yy + 5.5, col === 0 ? 100 : 196, yy + 5.5);
       });
-      
+
       const objY = y + Math.ceil(fields.length / 2) * 8 + 6;
-      
+
       // Object box
       doc.setFillColor(235, 243, 251);
       doc.setDrawColor(200, 223, 245);
       doc.roundedRect(leftX - 2, objY, 176, 16, 2, 2, 'FD');
-      
+
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7);
       doc.setTextColor(11, 79, 158);
       doc.text('OBJET DE LA MISSION', leftX + 2, objY + 5);
-      
+
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(53, 61, 79);
       doc.text(mo.objet || '—', leftX + 2, objY + 12);
-      
+
       // Remarks
       let lines;
       if (mo.remarques && mo.remarques !== '—') {
@@ -3108,32 +3300,32 @@ async function generatePDFBase64(mo) {
         doc.setFontSize(7);
         doc.setTextColor(142, 151, 168);
         doc.text('REMARQUES / INSTRUCTIONS', leftX, objY + 23);
-        
+
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9);
         doc.setTextColor(53, 61, 79);
         lines = doc.splitTextToSize(mo.remarques, 175);
         doc.text(lines, leftX, objY + 30);
       }
-      
+
       // Status
-      const statusLabel = {approved:'APPROUVÉ ✅', rejected:'REJETÉ ❌', pending:'EN ATTENTE ⏳'}[mo.status] || 'EN ATTENTE';
+      const statusLabel = { approved: 'APPROUVÉ ✅', rejected: 'REJETÉ ❌', pending: 'EN ATTENTE ⏳' }[mo.status] || 'EN ATTENTE';
       const linesHeight = (mo.remarques && mo.remarques !== '—' && lines) ? lines.length * 4 : 0;
       const statusY = objY + (mo.remarques && mo.remarques !== '—' ? 34 + linesHeight : 28);
-      
+
       doc.setDrawColor(221, 225, 234);
       doc.setLineWidth(0.5);
       doc.line(leftX, statusY, 196, statusY);
-      
+
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(142, 151, 168);
       doc.text('STATUT', 105, statusY + 7, { align: 'center' });
-      
+
       doc.setFontSize(11);
       doc.setTextColor(11, 79, 158);
       doc.text(statusLabel, 105, statusY + 14, { align: 'center' });
-      
+
       // Comment
       let commentLines;
       if (mo.comment) {
@@ -3142,20 +3334,20 @@ async function generatePDFBase64(mo) {
         commentLines = doc.splitTextToSize(`Message : ${mo.comment}`, 170);
         doc.text(commentLines, 105, statusY + 21, { align: 'center' });
       }
-      
+
       // Signature section
       const commentHeight = (mo.comment && commentLines) ? commentLines.length * 4 : 0;
       const sigY = statusY + (mo.comment ? 26 + commentHeight : 22);
       doc.setDrawColor(142, 151, 168);
       doc.setLineWidth(0.3);
-      
+
       // Left signature line
       doc.line(30, sigY + 12, 85, sigY + 12);
-      
+
       // Right signature line
       doc.setLineWidth(0.3);
       doc.line(110, sigY + 12, 165, sigY + 12);
-      
+
       // Footer
       const footerY = 285;
       doc.setDrawColor(221, 225, 234);
@@ -3165,7 +3357,7 @@ async function generatePDFBase64(mo) {
       doc.setTextColor(142, 151, 168);
       doc.text(`Document généré par Eqnovia — Notes de Frais • ${mo.numero || 'N/A'}`, 105, footerY + 5, { align: 'center' });
       doc.text(`Date: ${mo.date || '—'}`, 105, footerY + 10, { align: 'center' });
-      
+
       // Convert to base64
       const pdfOutput = doc.output('arraybuffer');
       const base64 = btoa(String.fromCharCode(...new Uint8Array(pdfOutput)));
@@ -3181,34 +3373,34 @@ async function generatePDFBase64(mo) {
 async function shareMOByWebShare(docId) {
   const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
   if (!mo) return toast('Ordre de mission introuvable.', 'err');
-  
+
   if (!navigator.share) {
     return toast('Le partage n\'est pas supporté sur ce navigateur. Utilisez le bouton PDF pour télécharger.', 'err');
   }
-  
+
   try {
     // Generate PDF blob
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF('p', 'mm', 'a4');
-    
+
     // Logo
-    try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch(e) { /* fallback */ }
-    
+    try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch (e) { /* fallback */ }
+
     // Title
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text(`ORDRE DE MISSION N° ${mo.numero || 'N/A'}`, 105, 22, { align: 'center' });
-    
+
     // Separator
     doc.setDrawColor(11, 79, 158);
     doc.setLineWidth(0.8);
     doc.line(14, 27, 196, 27);
-    
+
     // Info box
     const leftX = 18;
     let y = 33;
     doc.setFontSize(10);
-    
+
     const fields = [
       ['Date d\'émission', mo.date || '—'],
       ['Collaborateur', mo.employe || '—'],
@@ -3219,75 +3411,75 @@ async function shareMOByWebShare(docId) {
       ['Mode de transport', mo.transport || '—'],
       ['Téléphone', mo.tel || '—'],
     ];
-    
+
     fields.forEach(([label, value], fi) => {
       const col = fi % 2;
       const row = Math.floor(fi / 2);
       const x = col === 0 ? leftX : 105;
       const yy = y + row * 8;
-      
+
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7);
       doc.setTextColor(142, 151, 168);
       doc.text(label.toUpperCase(), x, yy);
-      
+
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       doc.setTextColor(53, 61, 79);
       doc.text(value, x, yy + 4);
-      
+
       doc.setDrawColor(221, 225, 234);
       doc.setLineWidth(0.3);
       doc.line(x, yy + 5.5, col === 0 ? 100 : 196, yy + 5.5);
     });
-    
+
     const objY = y + Math.ceil(fields.length / 2) * 8 + 6;
-    
+
     doc.setFillColor(235, 243, 251);
     doc.setDrawColor(200, 223, 245);
     doc.roundedRect(leftX - 2, objY, 176, 16, 2, 2, 'FD');
-    
+
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.setTextColor(11, 79, 158);
     doc.text('OBJET DE LA MISSION', leftX + 2, objY + 5);
-    
+
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
     doc.setTextColor(53, 61, 79);
     doc.text(mo.objet || '—', leftX + 2, objY + 12);
-    
+
     let lines;
     if (mo.remarques && mo.remarques !== '—') {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7);
       doc.setTextColor(142, 151, 168);
       doc.text('REMARQUES / INSTRUCTIONS', leftX, objY + 23);
-      
+
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(53, 61, 79);
       lines = doc.splitTextToSize(mo.remarques, 175);
       doc.text(lines, leftX, objY + 30);
     }
-    
-    const statusLabel = {approved:'APPROUVÉ ✅', rejected:'REJETÉ ❌', pending:'EN ATTENTE ⏳'}[mo.status] || 'EN ATTENTE';
+
+    const statusLabel = { approved: 'APPROUVÉ ✅', rejected: 'REJETÉ ❌', pending: 'EN ATTENTE ⏳' }[mo.status] || 'EN ATTENTE';
     const linesHeight = (mo.remarques && mo.remarques !== '—' && lines) ? lines.length * 4 : 0;
     const statusY = objY + (mo.remarques && mo.remarques !== '—' ? 34 + linesHeight : 28);
-    
+
     doc.setDrawColor(221, 225, 234);
     doc.setLineWidth(0.5);
     doc.line(leftX, statusY, 196, statusY);
-    
+
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(142, 151, 168);
     doc.text('STATUT', 105, statusY + 7, { align: 'center' });
-    
+
     doc.setFontSize(11);
     doc.setTextColor(11, 79, 158);
     doc.text(statusLabel, 105, statusY + 14, { align: 'center' });
-    
+
     let commentLines;
     if (mo.comment) {
       doc.setFontSize(9);
@@ -3295,17 +3487,17 @@ async function shareMOByWebShare(docId) {
       commentLines = doc.splitTextToSize(`Message : ${mo.comment}`, 170);
       doc.text(commentLines, 105, statusY + 21, { align: 'center' });
     }
-    
+
     const commentHeight = (mo.comment && commentLines) ? commentLines.length * 4 : 0;
     const sigY = statusY + (mo.comment ? 26 + commentHeight : 22);
     doc.setDrawColor(142, 151, 168);
     doc.setLineWidth(0.3);
-    
+
     doc.line(30, sigY + 12, 85, sigY + 12);
-    
+
     doc.setLineWidth(0.3);
     doc.line(110, sigY + 12, 165, sigY + 12);
-    
+
     const footerY = 285;
     doc.setDrawColor(221, 225, 234);
     doc.setLineWidth(0.3);
@@ -3314,18 +3506,18 @@ async function shareMOByWebShare(docId) {
     doc.setTextColor(142, 151, 168);
     doc.text(`Document généré par Eqnovia — Notes de Frais • ${mo.numero || 'N/A'}`, 105, footerY + 5, { align: 'center' });
     doc.text(`Date: ${mo.date || '—'}`, 105, footerY + 10, { align: 'center' });
-    
+
     // Get PDF blob
     const pdfBlob = doc.output('blob');
     const pdfFile = new File([pdfBlob], `Ordre_Mission_${mo.numero || 'sans_numero'}.pdf`, { type: 'application/pdf' });
-    
+
     // Use Web Share API
     await navigator.share({
       title: `Ordre de mission N° ${mo.numero}`,
       text: `Ordre de mission N° ${mo.numero} — ${mo.employe}\nDu ${mo.debut} au ${mo.fin}\n${mo.depart} → ${mo.arrivee}`,
       files: [pdfFile]
     });
-    
+
     toast('📤 Ordre de mission partagé avec succès !', 'ok');
   } catch (e) {
     if (e.name !== 'AbortError') {
@@ -3338,13 +3530,13 @@ async function shareMOByWebShare(docId) {
 function sendMOByWhatsApp(docId) {
   const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
   if (!mo) return toast('Ordre de mission introuvable.', 'err');
-  
+
   if (!mo.tel || mo.tel === '—' || mo.tel.length < 5) {
     return toast('Numéro de téléphone non renseigné pour cet ordre de mission.', 'err');
   }
-  
+
   const message = `Eqnovia - Ordre de mission N° ${mo.numero}\n\nCollaborateur : ${mo.employe}\nDate : ${mo.date}\nTrajet : ${mo.depart} → ${mo.arrivee}\nObjet : ${mo.objet}\nTransport : ${mo.transport}\n${mo.remarques !== '—' ? 'Remarques : ' + mo.remarques : ''}`;
-  
+
   const waUrl = `https://wa.me/${cleanPhone(mo.tel)}?text=${encodeURIComponent(message)}`;
   window.open(waUrl, '_blank');
   toast('💬 Ouverture de WhatsApp...', 'ok');
@@ -3353,13 +3545,13 @@ function sendMOByWhatsApp(docId) {
 function sendUserMOByWhatsApp(docId) {
   const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
   if (!mo) return toast('Ordre de mission introuvable.', 'err');
-  
+
   if (!mo.tel || mo.tel === '—' || mo.tel.length < 5) {
     return toast('Numéro de téléphone non renseigné pour cet ordre de mission.', 'err');
   }
-  
+
   const message = `Eqnovia - Ordre de mission N° ${mo.numero}\n\nCollaborateur : ${mo.employe}\nDate : ${mo.date}\nTrajet : ${mo.depart} → ${mo.arrivee}\nObjet : ${mo.objet}\nTransport : ${mo.transport}\n${mo.remarques !== '—' ? 'Remarques : ' + mo.remarques : ''}`;
-  
+
   const waUrl = `https://wa.me/${cleanPhone(mo.tel)}?text=${encodeURIComponent(message)}`;
   window.open(waUrl, '_blank');
   toast('💬 Ouverture de WhatsApp...', 'ok');
@@ -3370,103 +3562,103 @@ function sendUserMOByWhatsApp(docId) {
 // ════════════════════════════════════════════
 async function addExpense() {
   if (isComptable) return toast('Vous n\'avez pas le droit d\'ajouter des dépenses.', 'err');
-  const date    = document.getElementById('dateInput').value;
-  const desc    = sanitizeInput(document.getElementById('descInput').value);
-  const amount  = parseFloat(document.getElementById('amountInput').value);
-  const cat     = document.getElementById('catInput').value;
+  const date = document.getElementById('dateInput').value;
+  const desc = sanitizeInput(document.getElementById('descInput').value);
+  const amount = parseFloat(document.getElementById('amountInput').value);
+  const cat = document.getElementById('catInput').value;
   const mission = sanitizeInput(document.getElementById('missionInput').value);
   const comment = sanitizeInput(document.getElementById('commentInput').value);
 
-  if (!date)                    return toast('Veuillez saisir une date.','err');
-  if (!desc)                    return toast('Veuillez saisir une description.','err');
-  if (!validateDate(date))      return toast('Date invalide (doit être dans le passé et <= 10 ans).','err');
-  if (!validateAmount(amount))  return toast('Montant TTC invalide (0 < montant <= 10 000 000).','err');
+  if (!date) return toast('Veuillez saisir une date.', 'err');
+  if (!desc) return toast('Veuillez saisir une description.', 'err');
+  if (!validateDate(date)) return toast('Date invalide (doit être dans le passé et <= 10 ans).', 'err');
+  if (!validateAmount(amount)) return toast('Montant TTC invalide (0 < montant <= 10 000 000).', 'err');
 
   const btn = document.getElementById('addBtn');
-  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Enregistrement…';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Enregistrement…';
   const _expenseStartTime = Date.now();
 
   try {
-  // Process justificatif files from global state
-  let justifFiles = [];
-  let justifData = null;
-  let justifName = '';
-  let justifStorageUrl = null;
-  let justifStoragePath = null;
+    // Process justificatif files from global state
+    let justifFiles = [];
+    let justifData = null;
+    let justifName = '';
+    let justifStorageUrl = null;
+    let justifStoragePath = null;
 
-  if (selectedJustifFiles && selectedJustifFiles.length > 0) {
-    const MAX_FILE_SIZE = 5 * 1024 * 1024;
-    for (let fi = 0; fi < selectedJustifFiles.length; fi++) {
-      const file = selectedJustifFiles[fi];
-      if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
-        toast('Fichier non supporté: ' + file.name, 'err');
-        continue;
-      }
-      if (file.size > MAX_FILE_SIZE) {
-        toast('Fichier trop volumineux: ' + file.name + ' (max 5 Mo)', 'err');
-        continue;
-      }
-      try {
-        const reader = new FileReader();
-        const data = await new Promise((resolve, reject) => {
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-        
-        const fileEntry = {
-          data: data,
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          storageUrl: null,
-          storagePath: null
-        };
-        
-        if (window.__storage && window.__fbReady) {
-          try {
-            const ext = file.name.split('.').pop() || 'jpg';
-            const fileName = `frais/${Date.now()}_${currentUser}_${file.name.replace(/[^a-z0-9]/gi, '_')}.${ext}`;
-            const storageRef = window.__storageRef(window.__storage, fileName);
-            await withTimeout(window.__uploadBytes(storageRef, file), 30000, 'Firebase Storage upload');
-            fileEntry.storageUrl = await withTimeout(window.__getDownloadURL(storageRef), 15000, 'Firebase getDownloadURL');
-            fileEntry.storagePath = fileName;
-          } catch (e) {
-            console.warn('Firebase Storage upload failed for ' + file.name + ':', e);
-          }
+    if (selectedJustifFiles && selectedJustifFiles.length > 0) {
+      const MAX_FILE_SIZE = 5 * 1024 * 1024;
+      for (let fi = 0; fi < selectedJustifFiles.length; fi++) {
+        const file = selectedJustifFiles[fi];
+        if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+          toast('Fichier non supporté: ' + file.name, 'err');
+          continue;
         }
-        
-        justifFiles.push(fileEntry);
-      } catch (e) {
-        console.warn('Error reading justificatif ' + file.name + ':', e);
+        if (file.size > MAX_FILE_SIZE) {
+          toast('Fichier trop volumineux: ' + file.name + ' (max 5 Mo)', 'err');
+          continue;
+        }
+        try {
+          const reader = new FileReader();
+          const data = await new Promise((resolve, reject) => {
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+
+          const fileEntry = {
+            data: data,
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            storageUrl: null,
+            storagePath: null
+          };
+
+          if (window.__storage && window.__fbReady) {
+            try {
+              const ext = file.name.split('.').pop() || 'jpg';
+              const fileName = `frais/${Date.now()}_${currentUser}_${file.name.replace(/[^a-z0-9]/gi, '_')}.${ext}`;
+              const storageRef = window.__storageRef(window.__storage, fileName);
+              await withTimeout(window.__uploadBytes(storageRef, file), 30000, 'Firebase Storage upload');
+              fileEntry.storageUrl = await withTimeout(window.__getDownloadURL(storageRef), 15000, 'Firebase getDownloadURL');
+              fileEntry.storagePath = fileName;
+            } catch (e) {
+              console.warn('Firebase Storage upload failed for ' + file.name + ':', e);
+            }
+          }
+
+          justifFiles.push(fileEntry);
+        } catch (e) {
+          console.warn('Error reading justificatif ' + file.name + ':', e);
+        }
+      }
+
+      if (justifFiles.length > 0) {
+        justifData = justifFiles[0].data;
+        justifName = justifFiles[0].name;
+        justifStorageUrl = justifFiles[0].storageUrl;
+        justifStoragePath = justifFiles[0].storagePath;
       }
     }
-    
-    if (justifFiles.length > 0) {
-      justifData = justifFiles[0].data;
-      justifName = justifFiles[0].name;
-      justifStorageUrl = justifFiles[0].storageUrl;
-      justifStoragePath = justifFiles[0].storagePath;
-    }
-  }
 
-  const exp = { 
-    id: Date.now(), 
-    date, 
-    desc, 
-    amount, 
-    cat, 
-    mission: mission || '',
-    comment, 
-    user: currentUser,
-    justif: justifFiles.length > 0 ? 'Oui' : 'Non',
-    justifData: justifData || null,
-    justifName: justifName || null,
-    justifStorageUrl: justifStorageUrl,
-    justifStoragePath: justifStoragePath,
-    justifFiles: justifFiles.length > 0 ? justifFiles : null
-  };
-  await withTimeout(dataAdd(exp), 30000, 'dataAdd');
+    const exp = {
+      id: Date.now(),
+      date,
+      desc,
+      amount,
+      cat,
+      mission: mission || '',
+      comment,
+      user: currentUser,
+      justif: justifFiles.length > 0 ? 'Oui' : 'Non',
+      justifData: justifData || null,
+      justifName: justifName || null,
+      justifStorageUrl: justifStorageUrl,
+      justifStoragePath: justifStoragePath,
+      justifFiles: justifFiles.length > 0 ? justifFiles : null
+    };
+    await withTimeout(dataAdd(exp), 30000, 'dataAdd');
 
   } catch (e) {
     console.error('Erreur enregistrement dépense:', e);
@@ -3477,17 +3669,17 @@ async function addExpense() {
     if (remaining > 0) {
       await new Promise(r => setTimeout(r, remaining));
     }
-    btn.disabled=false; btn.innerHTML='➕ Ajouter la dépense';
+    btn.disabled = false; btn.innerHTML = '➕ Ajouter la dépense';
   }
-  
-  document.getElementById('descInput').value='';
-  document.getElementById('amountInput').value='';
-  document.getElementById('missionInput').value='';
-  document.getElementById('commentInput').value='';
+
+  document.getElementById('descInput').value = '';
+  document.getElementById('amountInput').value = '';
+  document.getElementById('missionInput').value = '';
+  document.getElementById('commentInput').value = '';
   clearJustificatif();
-  
+
   updateKPIs();
-  if (activeTab!=='saisie') switchTab(activeTab); else renderAll();
+  if (activeTab !== 'saisie') switchTab(activeTab); else renderAll();
   toast('Dépense enregistrée dans la base de données ✔');
 }
 
@@ -3500,19 +3692,19 @@ function editRow(id) {
   if (isComptable) return toast('Vous n\'avez pas le droit de modifier les dépenses.', 'err');
   const exp = cache.find(e => e.id === id);
   if (!exp) return toast('Dépense introuvable.', 'err');
-  
+
   if (!isAdmin && exp.user !== currentUser) {
     return toast('Vous ne pouvez modifier que vos propres dépenses.', 'err');
   }
-  
+
   editingId = id;
-  document.getElementById('editDate').value    = exp.date;
-  document.getElementById('editAmount').value  = exp.amount;
-  document.getElementById('editDesc').value    = exp.desc;
-  document.getElementById('editCat').value     = exp.cat || 'Autre';
+  document.getElementById('editDate').value = exp.date;
+  document.getElementById('editAmount').value = exp.amount;
+  document.getElementById('editDesc').value = exp.desc;
+  document.getElementById('editCat').value = exp.cat || 'Autre';
   document.getElementById('editMission').value = exp.mission || '';
   document.getElementById('editComment').value = exp.comment || '';
-  
+
   // Show current justificatif info (multi-file support)
   const justifCurrent = document.getElementById('editJustifCurrent');
   const files = getJustifFiles(exp);
@@ -3521,10 +3713,10 @@ function editRow(id) {
   } else {
     justifCurrent.innerHTML = '📭 Aucun justificatif — Vous pouvez en ajouter ci-dessous.';
   }
-  
+
   // Clear justificatif file input and preview
   clearEditJustificatif();
-  
+
   document.getElementById('editModal').classList.add('open');
 }
 
@@ -3540,25 +3732,25 @@ document.getElementById('editModal').addEventListener('click', e => {
 
 async function saveEdit() {
   if (editingId === null) return;
-  
+
   const idx = cache.findIndex(e => e.id === editingId);
   if (idx === -1) return toast('Dépense introuvable.', 'err');
-  
+
   if (!isAdmin && cache[idx].user !== currentUser) {
     return toast('Vous ne pouvez modifier que vos propres dépenses.', 'err');
   }
-  
-  const date    = document.getElementById('editDate').value;
-  const desc    = sanitizeInput(document.getElementById('editDesc').value);
-  const amount  = parseFloat(document.getElementById('editAmount').value);
-  const cat     = document.getElementById('editCat').value;
+
+  const date = document.getElementById('editDate').value;
+  const desc = sanitizeInput(document.getElementById('editDesc').value);
+  const amount = parseFloat(document.getElementById('editAmount').value);
+  const cat = document.getElementById('editCat').value;
   const mission = sanitizeInput(document.getElementById('editMission').value);
   const comment = sanitizeInput(document.getElementById('editComment').value);
 
-  if (!date)                    return toast('Veuillez saisir une date.', 'err');
-  if (!desc)                    return toast('Veuillez saisir une description.', 'err');
-  if (!validateDate(date))      return toast('Date invalide (doit être dans le passé et <= 10 ans).', 'err');
-  if (!validateAmount(amount))  return toast('Montant TTC invalide (0 < montant <= 10 000 000).', 'err');
+  if (!date) return toast('Veuillez saisir une date.', 'err');
+  if (!desc) return toast('Veuillez saisir une description.', 'err');
+  if (!validateDate(date)) return toast('Date invalide (doit être dans le passé et <= 10 ans).', 'err');
+  if (!validateAmount(amount)) return toast('Montant TTC invalide (0 < montant <= 10 000 000).', 'err');
 
   const btn = document.getElementById('editSaveBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Enregistrement…';
@@ -3566,11 +3758,11 @@ async function saveEdit() {
   // Handle multi-justificatif upload
   const editJustifFile = document.getElementById('editJustifInput');
   let justifUpdates = {};
-  
+
   if (editJustifFile.files && editJustifFile.files.length > 0) {
     let newFiles = [];
     let hasNonImage = false;
-    
+
     for (let fi = 0; fi < editJustifFile.files.length; fi++) {
       const file = editJustifFile.files[fi];
       if (!file.type.startsWith('image/')) { hasNonImage = true; continue; }
@@ -3581,14 +3773,14 @@ async function saveEdit() {
           reader.onerror = reject;
           reader.readAsDataURL(file);
         });
-        
+
         const fileEntry = {
           data: data,
           name: file.name,
           storageUrl: null,
           storagePath: null
         };
-        
+
         // Upload to Firebase Storage if available
         if (window.__storage && window.__fbReady) {
           try {
@@ -3602,23 +3794,23 @@ async function saveEdit() {
             console.warn('Firebase Storage upload failed for ' + file.name + ':', e);
           }
         }
-        
+
         newFiles.push(fileEntry);
       } catch (e) {
         console.warn('Error reading justificatif ' + file.name + ' in edit:', e);
       }
     }
-    
+
     if (hasNonImage) {
       toast('Certains fichiers non-images ont été ignorés.', 'info');
     }
-    
+
     if (newFiles.length > 0) {
       // Merge with existing files (new ones first)
       const exp = cache.find(e => e.id === editingId);
       const existingFiles = exp ? getJustifFiles(exp) : [];
       const mergedFiles = [...newFiles, ...existingFiles];
-      
+
       justifUpdates.justifFiles = mergedFiles;
       justifUpdates.justif = 'Oui';
       justifUpdates.justifData = mergedFiles[0].data;
@@ -3647,16 +3839,16 @@ function deleteRow(id) {
   if (isComptable) return toast('Vous n\'avez pas le droit de supprimer des dépenses.', 'err');
   const exp = cache.find(e => e.id === id);
   if (!exp) return toast('Dépense introuvable.', 'err');
-  
+
   if (!isAdmin) {
     return toast('Seul l\'administrateur peut supprimer des dépenses.', 'err');
   }
-  
-  showModal('Supprimer la dépense','Cette action est irréversible. Continuer ?', async()=>{
+
+  showModal('Supprimer la dépense', 'Cette action est irréversible. Continuer ?', async () => {
     await dataDelete(id);
     updateKPIs();
-    if (activeTab==='monthly') renderMonthly();
-    else if (activeTab==='yearly') renderYearly();
+    if (activeTab === 'monthly') renderMonthly();
+    else if (activeTab === 'yearly') renderYearly();
     else renderAll();
     toast('Dépense supprimée.');
   });
@@ -3665,20 +3857,20 @@ function deleteRow(id) {
 // ════════════════════════════════════════════
 // CLEAR ALL
 // ════════════════════════════════════════════
-function confirmClear(){
+function confirmClear() {
   if (!isAdmin) {
     return toast('Seul l\'administrateur peut effacer toutes les données.', 'err');
   }
-  showModal('⚠️ Supprimer tout','Toutes les dépenses seront effacées de la base de données. Continuer ?', async()=>{
+  showModal('⚠️ Supprimer tout', 'Toutes les dépenses seront effacées de la base de données. Continuer ?', async () => {
     if (useFirebase) {
       try {
         const { collection, getDocs, deleteDoc, doc } = window.__fs;
-        const snap = await getDocs(collection(window.__db,'expenses'));
-        await Promise.all(snap.docs.map(d => deleteDoc(doc(window.__db,'expenses',d.id))));
-      } catch(e){ console.warn(e); }
+        const snap = await getDocs(collection(window.__db, 'expenses'));
+        await Promise.all(snap.docs.map(d => deleteDoc(doc(window.__db, 'expenses', d.id))));
+      } catch (e) { console.warn(e); }
     }
-    cache=[];
-    try { lsSave([]); } catch(e) {}
+    cache = [];
+    try { lsSave([]); } catch (e) { }
     updateKPIs();
     renderAll(); renderMonthly(); renderYearly();
     toast('Toutes les dépenses ont été supprimées.');
@@ -3745,8 +3937,8 @@ function viewRemboursement(id) {
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeRembModal()">Fermer</button>
         ${canConfirmRemboursement(e)
-          ? `<button class="btn ${remb ? 'btn-ghost' : 'btn-primary'}" onclick="toggleRembourse(${typeof e.id === 'string' ? `'${e.id}'` : e.id})">${remb ? '↩️ Marquer non remboursé' : '✅ Confirmer le remboursement'}</button>`
-          : ''}
+      ? `<button class="btn ${remb ? 'btn-ghost' : 'btn-primary'}" onclick="toggleRembourse(${typeof e.id === 'string' ? `'${e.id}'` : e.id})">${remb ? '↩️ Marquer non remboursé' : '✅ Confirmer le remboursement'}</button>`
+      : ''}
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -3818,39 +4010,39 @@ function rerenderAfterRembChange() {
 // ════════════════════════════════════════════
 function renderRemboursement() {
   safeRender(() => {
-  const allData = dataAll();
-  const data = getUserExpenses(allData);
-  const statutF = document.getElementById('filterRembTab')?.value || 'all';
-  const userSel = document.getElementById('filterRembTabUser');
-  const userF   = userSel?.value || 'all';
+    const allData = dataAll();
+    const data = getUserExpenses(allData);
+    const statutF = document.getElementById('filterRembTab')?.value || 'all';
+    const userSel = document.getElementById('filterRembTabUser');
+    const userF = userSel?.value || 'all';
 
-  // (Re)remplir la liste des personnes (admin/comptable = tout le monde)
-  if (userSel && (isAdmin || isComptable)) {
-    const prev = userSel.value;
-    userSel.innerHTML = '<option value="all">👤 Toutes les personnes</option>' +
-      getSortedUsers().map(([k, u]) => `<option value="${k}">${esc(u.label)}</option>`).join('');
-    userSel.value = Object.keys(USERS).includes(prev) ? prev : 'all';
-    userSel.style.display = '';
-  } else if (userSel) {
-    userSel.style.display = 'none';
-  }
+    // (Re)remplir la liste des personnes (admin/comptable = tout le monde)
+    if (userSel && (isAdmin || isComptable)) {
+      const prev = userSel.value;
+      userSel.innerHTML = '<option value="all">👤 Toutes les personnes</option>' +
+        getSortedUsers().map(([k, u]) => `<option value="${k}">${esc(u.label)}</option>`).join('');
+      userSel.value = Object.keys(USERS).includes(prev) ? prev : 'all';
+      userSel.style.display = '';
+    } else if (userSel) {
+      userSel.style.display = 'none';
+    }
 
-  // ── Cartes récapitulatives par personne ──
-  const personsEl = document.getElementById('rembPersons');
-  if (personsEl) {
-    const perUser = {};
-    data.forEach(e => {
-      if (!perUser[e.user]) perUser[e.user] = { remb: 0, nonRemb: 0, nbRemb: 0, nbNonRemb: 0 };
-      if (isRembourse(e)) { perUser[e.user].remb += e.amount; perUser[e.user].nbRemb++; }
-      else { perUser[e.user].nonRemb += e.amount; perUser[e.user].nbNonRemb++; }
-    });
-    personsEl.innerHTML = Object.entries(perUser)
-      .sort((a, b) => b[1].nonRemb - a[1].nonRemb)
-      .map(([k, v]) => {
-        const label = USERS[k]?.label || k;
-        const initial = label.substring(0, 1).toUpperCase();
-        const selected = userF === k ? 'selected' : '';
-        return `<div class="remb-person-card ${selected}" onclick="selectRembPerson('${k}')" title="Cliquer pour filtrer sur ${esc(label)}">
+    // ── Cartes récapitulatives par personne ──
+    const personsEl = document.getElementById('rembPersons');
+    if (personsEl) {
+      const perUser = {};
+      data.forEach(e => {
+        if (!perUser[e.user]) perUser[e.user] = { remb: 0, nonRemb: 0, nbRemb: 0, nbNonRemb: 0 };
+        if (isRembourse(e)) { perUser[e.user].remb += e.amount; perUser[e.user].nbRemb++; }
+        else { perUser[e.user].nonRemb += e.amount; perUser[e.user].nbNonRemb++; }
+      });
+      personsEl.innerHTML = Object.entries(perUser)
+        .sort((a, b) => b[1].nonRemb - a[1].nonRemb)
+        .map(([k, v]) => {
+          const label = USERS[k]?.label || k;
+          const initial = label.substring(0, 1).toUpperCase();
+          const selected = userF === k ? 'selected' : '';
+          return `<div class="remb-person-card ${selected}" onclick="selectRembPerson('${k}')" title="Cliquer pour filtrer sur ${esc(label)}">
           <div class="remb-person-avatar">${esc(initial)}</div>
           <div class="remb-person-info">
             <span class="remb-person-name">${esc(label)}</span>
@@ -3859,37 +4051,37 @@ function renderRemboursement() {
           </div>
           ${v.nbNonRemb > 0 ? `<span class="remb-notif-dot" title="${v.nbNonRemb} frais non remboursé(s)">${v.nbNonRemb}</span>` : ''}
         </div>`;
-      }).join('') || '<p style="font-size:12px;color:var(--gray-400);">Aucune dépense enregistrée.</p>';
-  }
+        }).join('') || '<p style="font-size:12px;color:var(--gray-400);">Aucune dépense enregistrée.</p>';
+    }
 
-  // ── Filtres ──
-  let rows = data.filter(e => {
-    const statutMatch = statutF === 'all'
-      || (statutF === 'remb' && isRembourse(e))
-      || (statutF === 'non' && !isRembourse(e));
-    return statutMatch && (userF === 'all' || e.user === userF);
-  }).sort((a, b) => {
-    if (isRembourse(a) !== isRembourse(b)) return isRembourse(a) ? 1 : -1; // non remboursés en premier
-    return b.date.localeCompare(a.date);
-  });
+    // ── Filtres ──
+    let rows = data.filter(e => {
+      const statutMatch = statutF === 'all'
+        || (statutF === 'remb' && isRembourse(e))
+        || (statutF === 'non' && !isRembourse(e));
+      return statutMatch && (userF === 'all' || e.user === userF);
+    }).sort((a, b) => {
+      if (isRembourse(a) !== isRembourse(b)) return isRembourse(a) ? 1 : -1; // non remboursés en premier
+      return b.date.localeCompare(a.date);
+    });
 
-  const tbody = document.getElementById('rembTbody');
-  const total = rows.reduce((s, e) => s + e.amount, 0);
+    const tbody = document.getElementById('rembTbody');
+    const total = rows.reduce((s, e) => s + e.amount, 0);
 
-  if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">✅</div><h3>Aucun frais dans cette catégorie</h3><p>Tout est remboursé ou aucun frais ne correspond au filtre.</p></div></td></tr>`;
-    document.getElementById('rembGrandTotal').innerHTML = '💰 Total : <strong>0,00 DH</strong>';
-    document.getElementById('rembRowCount').textContent = '0 ligne(s)';
-  } else {
-    let html = '';
-    rows.forEach((e, i) => {
-      const remb = isRembourse(e);
-      const userLabel = USERS[e.user]?.label || e.user;
-      const rembId = typeof e.id === 'string' ? `\'${e.id}\'` : e.id;
-      const info = remb
-        ? `✅ ${e.rembourseDate ? fmtDate(e.rembourseDate) : 'Remboursé'}${e.rembourseBy ? ' — ' + esc(USERS[e.rembourseBy]?.label || e.rembourseBy) : ''}`
-        : '⏳ En attente de remboursement';
-      html += `<tr>
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">✅</div><h3>Aucun frais dans cette catégorie</h3><p>Tout est remboursé ou aucun frais ne correspond au filtre.</p></div></td></tr>`;
+      document.getElementById('rembGrandTotal').innerHTML = '💰 Total : <strong>0,00 DH</strong>';
+      document.getElementById('rembRowCount').textContent = '0 ligne(s)';
+    } else {
+      let html = '';
+      rows.forEach((e, i) => {
+        const remb = isRembourse(e);
+        const userLabel = USERS[e.user]?.label || e.user;
+        const rembId = typeof e.id === 'string' ? `\'${e.id}\'` : e.id;
+        const info = remb
+          ? `✅ ${e.rembourseDate ? fmtDate(e.rembourseDate) : 'Remboursé'}${e.rembourseBy ? ' — ' + esc(USERS[e.rembourseBy]?.label || e.rembourseBy) : ''}`
+          : '⏳ En attente de remboursement';
+        html += `<tr>
         <td style="color:var(--gray-400);font-size:11px;">${i + 1}</td>
         <td class="td-date">${fmtDate(e.date)}</td>
         <td class="td-desc"><span title="${esc(e.desc)}">${esc(e.desc)}</span></td>
@@ -3898,19 +4090,19 @@ function renderRemboursement() {
         <td><span class="badge remb-badge ${remb ? 'remb-yes' : 'remb-no'}" onclick="viewRemboursement(${rembId})" title="Voir le détail">${remb ? '✅ Remboursé' : '⏳ Non remboursé'}</span></td>
         <td style="font-size:10px;color:var(--gray-400);">${info}</td>
         <td>${canConfirmRemboursement(e)
-          ? `<button class="btn-remb ${remb ? 'yes' : 'no'}"
+            ? `<button class="btn-remb ${remb ? 'yes' : 'no'}"
             onclick="toggleRembourse(${rembId})"
             title="${remb ? 'Marquer comme NON remboursé' : 'Confirmer le remboursement'}">${remb ? '↩' : '✅'}</button>`
-          : ''}</td>
+            : ''}</td>
       </tr>`;
-    });
-    tbody.innerHTML = html;
-    document.getElementById('rembGrandTotal').innerHTML = `💰 Total : <strong>${fmtDH(total)}</strong>`;
-    document.getElementById('rembRowCount').textContent = rows.length + ' ligne(s) — Total : ' + fmtDH(total);
-  }
+      });
+      tbody.innerHTML = html;
+      document.getElementById('rembGrandTotal').innerHTML = `💰 Total : <strong>${fmtDH(total)}</strong>`;
+      document.getElementById('rembRowCount').textContent = rows.length + ' ligne(s) — Total : ' + fmtDH(total);
+    }
 
-  // ── Bannière d'alerte ──
-  updateRembAlert();
+    // ── Bannière d'alerte ──
+    updateRembAlert();
   }, 'renderRemboursement');
 }
 
@@ -3991,44 +4183,44 @@ function notifyNonRembourses() {
 // ════════════════════════════════════════════
 function updateKPIs() {
   safeRender(() => {
-  console.log('\ud83d\udd35 updateKPIs appelé, depth:', __RENDER.depth);
-  const all   = dataAll();
-  const userData = getUserExpenses(all);
-  const now   = new Date();
-  const ym    = now.toISOString().substring(0,7);
-  const mData = userData.filter(e=>e.date.startsWith(ym));
-  const total = userData.reduce((s,e)=>s+e.amount,0);
-  const rembTotal = userData.filter(isRembourse).reduce((s,e)=>s+e.amount,0);
-  const nonRembTotal = total - rembTotal;
+    console.log('\ud83d\udd35 updateKPIs appelé, depth:', __RENDER.depth);
+    const all = dataAll();
+    const userData = getUserExpenses(all);
+    const now = new Date();
+    const ym = now.toISOString().substring(0, 7);
+    const mData = userData.filter(e => e.date.startsWith(ym));
+    const total = userData.reduce((s, e) => s + e.amount, 0);
+    const rembTotal = userData.filter(isRembourse).reduce((s, e) => s + e.amount, 0);
+    const nonRembTotal = total - rembTotal;
 
-  document.getElementById('kpiTotal').textContent      = fmtDH(total);
-  document.getElementById('kpiCount').textContent      = userData.length + ' dépense(s)';
-  document.getElementById('kpiMonth').textContent      = fmtDH(mData.reduce((s,e)=>s+e.amount,0));
-  document.getElementById('kpiMonthLabel').textContent = MONTHS_FR[now.getMonth()] + ' ' + now.getFullYear();
+    document.getElementById('kpiTotal').textContent = fmtDH(total);
+    document.getElementById('kpiCount').textContent = userData.length + ' dépense(s)';
+    document.getElementById('kpiMonth').textContent = fmtDH(mData.reduce((s, e) => s + e.amount, 0));
+    document.getElementById('kpiMonthLabel').textContent = MONTHS_FR[now.getMonth()] + ' ' + now.getFullYear();
 
-  const kpiRemb = document.getElementById('kpiRemb');
-  const kpiNonRemb = document.getElementById('kpiNonRemb');
-  if (kpiRemb) {
-    kpiRemb.textContent = fmtDH(rembTotal);
-    kpiRemb.parentElement.querySelector('.stat-sub').textContent
-      = userData.filter(isRembourse).length + ' dépense(s) remboursée(s)';
-  }
-  if (kpiNonRemb) {
-    kpiNonRemb.textContent = fmtDH(nonRembTotal);
-    kpiNonRemb.parentElement.querySelector('.stat-sub').textContent
-      = userData.filter(e => !isRembourse(e)).length + ' en attente';
-  }
+    const kpiRemb = document.getElementById('kpiRemb');
+    const kpiNonRemb = document.getElementById('kpiNonRemb');
+    if (kpiRemb) {
+      kpiRemb.textContent = fmtDH(rembTotal);
+      kpiRemb.parentElement.querySelector('.stat-sub').textContent
+        = userData.filter(isRembourse).length + ' dépense(s) remboursée(s)';
+    }
+    if (kpiNonRemb) {
+      kpiNonRemb.textContent = fmtDH(nonRembTotal);
+      kpiNonRemb.parentElement.querySelector('.stat-sub').textContent
+        = userData.filter(e => !isRembourse(e)).length + ' en attente';
+    }
 
-  // Pastille de notification (menu Remboursement) toujours à jour
-  updateRembNotif();
+    // Pastille de notification (menu Remboursement) toujours à jour
+    updateRembNotif();
   }, 'updateKPIs');
 }
 
 // ════════════════════════════════════════════
 // SORT
 // ════════════════════════════════════════════
-function sortBy(col){
-  if(sortCol===col) sortDir*=-1; else{sortCol=col;sortDir=-1;}
+function sortBy(col) {
+  if (sortCol === col) sortDir *= -1; else { sortCol = col; sortDir = -1; }
   renderAll();
 }
 
@@ -4037,123 +4229,161 @@ function sortBy(col){
 // ════════════════════════════════════════════
 function renderAll() {
   safeRender(() => {
-  console.log('\ud83d\udd35 renderAll appelé, depth:', __RENDER.depth);
-  const allData = dataAll();
-  const data = getUserExpenses(allData);
-  const yearF   = document.getElementById('filterYear').value;
-  const monthF  = document.getElementById('filterMonth').value;
-  const catF    = document.getElementById('filterCat').value;
-  const userF   = document.getElementById('filterUser').value;
-  const rembF   = document.getElementById('filterRemb')?.value || 'all';
-  const search  = (document.getElementById('filterSearch').value||'').toLowerCase();
+    console.log('\ud83d\udd35 renderAll appelé, depth:', __RENDER.depth);
+    const allData = dataAll();
+    const data = getUserExpenses(allData);
+    const yearF = document.getElementById('filterYear').value;
+    const monthF = document.getElementById('filterMonth').value;
+    const catF = document.getElementById('filterCat').value;
+    const userF = document.getElementById('filterUser').value;
+    const rembF = document.getElementById('filterRemb')?.value || 'all';
+    const search = (document.getElementById('filterSearch').value || '').toLowerCase();
 
-  const years = [...new Set(allData.map(e=>e.date.substring(0,4)))].sort().reverse();
-  const ySel  = document.getElementById('filterYear');
-  const yVal  = ySel.value;
-  ySel.innerHTML='<option value="all">📅 Toutes années</option>';
-  years.forEach(y=>{const o=document.createElement('option');o.value=y;o.textContent=y;ySel.appendChild(o);});
-  if(years.includes(yVal)) ySel.value=yVal;
+    const years = [...new Set(allData.map(e => e.date.substring(0, 4)))].sort().reverse();
+    const ySel = document.getElementById('filterYear');
+    const yVal = ySel.value;
+    ySel.innerHTML = '<option value="all">📅 Toutes années</option>';
+    years.forEach(y => { const o = document.createElement('option'); o.value = y; o.textContent = y; ySel.appendChild(o); });
+    if (years.includes(yVal)) ySel.value = yVal;
 
-  const userSel = document.getElementById('filterUser');
-  const userVal = userSel.value;
-  // Use centralized sorted user list for filter dropdown
-  userSel.innerHTML='<option value="all">👤 Tous</option>';
-  getSortedUsers().forEach(([k, u])=>{
-    const o=document.createElement('option');
-    o.value=k;
-    o.textContent=u.label;
-    userSel.appendChild(o);
-  });
-  if(Object.keys(USERS).includes(userVal)) userSel.value=userVal; else userSel.value='all';
+    const userSel = document.getElementById('filterUser');
+    const userVal = userSel.value;
+    // Use centralized sorted user list for filter dropdown
+    userSel.innerHTML = '<option value="all">👤 Tous</option>';
+    getSortedUsers().forEach(([k, u]) => {
+      const o = document.createElement('option');
+      o.value = k;
+      o.textContent = u.label;
+      userSel.appendChild(o);
+    });
+    if (Object.keys(USERS).includes(userVal)) userSel.value = userVal; else userSel.value = 'all';
 
-  let rows = data.filter(e=>{
-    const y=e.date.substring(0,4), m=e.date.substring(5,7);
-    const userMatch = userF==='all' || e.user === userF;
-    const rembMatch = rembF==='all'
-      || (rembF==='remb' && isRembourse(e))
-      || (rembF==='non' && !isRembourse(e));
-    return (yearF==='all'||y===yearF)
-        && (monthF==='all'||m===monthF)
-        && (catF==='all'||(e.cat||'Autre')===catF)
+    let rows = data.filter(e => {
+      const y = e.date.substring(0, 4), m = e.date.substring(5, 7);
+      const userMatch = userF === 'all' || e.user === userF;
+      const rembMatch = rembF === 'all'
+        || (rembF === 'remb' && isRembourse(e))
+        || (rembF === 'non' && !isRembourse(e));
+      return (yearF === 'all' || y === yearF)
+        && (monthF === 'all' || m === monthF)
+        && (catF === 'all' || (e.cat || 'Autre') === catF)
         && userMatch
         && rembMatch
-        && (!search||e.desc.toLowerCase().includes(search)||(e.cat||'').toLowerCase().includes(search)||(e.mission||'').toLowerCase().includes(search));
-  }).sort((a,b)=>{
-    if(sortCol==='amount') return (a.amount-b.amount)*sortDir;
-    return a.date.localeCompare(b.date)*sortDir;
-  });
+        && (!search || e.desc.toLowerCase().includes(search) || (e.cat || '').toLowerCase().includes(search) || (e.mission || '').toLowerCase().includes(search));
+    }).sort((a, b) => {
+      if (sortCol === 'amount') return (a.amount - b.amount) * sortDir;
+      return a.date.localeCompare(b.date) * sortDir;
+    });
 
-  const tbody=document.getElementById('tbody');
+    const tbody = document.getElementById('tbody');
 
-  if(!rows.length){
-    tbody.innerHTML=`<tr><td colspan="13"><div class="empty-state"><div class="empty-icon">🗂️</div><h3>Aucune dépense trouvée</h3><p>Ajustez vos filtres ou saisissez une nouvelle dépense.</p></div></td></tr>`;
-    document.getElementById('grandTotal').innerHTML='💰 Total : <strong>0,00 DH</strong>';
-    document.getElementById('rowCount').textContent='0 ligne(s)';
-    return;
-  }
+    // ── Comptable: afficher uniquement #, Description, Catégorie, Mission, Montant TTC ──
+    const thead = tbody.closest('table')?.querySelector('thead tr');
+    if (thead) {
+      if (isComptable) {
+        thead.innerHTML = '<th>#</th><th>Description</th><th>Catégorie</th><th>Mission</th><th class="sortable" onclick="sortBy(\'amount\')">Montant TTC ⇅</th>';
+      } else {
+        thead.innerHTML = `<th>#</th>
+          <th class="sortable" onclick="sortBy('date')">Date ⇅</th>
+          <th>Description</th>
+          <th>Catégorie</th>
+          <th class="sortable" onclick="sortBy('amount')">Total ⇅</th>
+          <th>Mission</th>
+          <th>Commentaires</th>
+          <th>User</th>
+          <th>Justif</th>
+          <th>Remboursé</th>
+          <th>Créé par</th>
+          <th>Modifié par</th>
+          <th></th>`;
+      }
+    }
 
-  let total=0, html='';
-  rows.forEach((e,i)=>{
-    total+=e.amount;
+    const colCount = isComptable ? 5 : 13;
 
-    const jCount = countJustif(e);
-    const justifBadge = jCount > 0 
-      ? `<span class="badge badge-justif" onclick="viewJustificatif(${e.id})" title="Voir les justificatifs">📎 ${jCount}</span>`
-      : `<span class="badge badge-no">❌ Non</span>`;
-    
-    const userLabel = USERS[e.user] ? USERS[e.user].label : e.user;
-    const createdByLabel = e.createdBy ? (USERS[e.createdBy] ? USERS[e.createdBy].label : e.createdBy) : '—';
-    const modifiedByLabel = e.modifiedBy ? (USERS[e.modifiedBy] ? USERS[e.modifiedBy].label : e.modifiedBy) : '—';
-    const isOwner = e.user === currentUser;
-    const canEdit = isAdmin || (isOwner && !isComptable);
-    const canDelete = isAdmin;
+    const grandTotalEl = document.getElementById('grandTotal');
+    if (grandTotalEl) grandTotalEl.style.display = '';
 
-    const remb = isRembourse(e);
-    const rembId = typeof e.id === 'string' ? `\'${e.id}\'` : e.id;
-    const rembTitle = remb
-      ? (e.rembourseDate ? `Remboursé le ${fmtDate(e.rembourseDate)}` : 'Remboursé')
-      : 'Non remboursé — cliquez pour voir le détail';
-    const rembBadge = remb
-      ? `<span class="badge remb-badge remb-yes" onclick="viewRemboursement(${rembId})" title="${rembTitle}">✅ Remboursé</span>`
-      : `<span class="badge remb-badge remb-no" onclick="viewRemboursement(${rembId})" title="${rembTitle}">⏳ Non remboursé</span>`;
-    const canRemb = canConfirmRemboursement(e);
-    const rembBtn = canRemb
-      ? `<button class="btn-remb ${remb ? 'yes' : 'no'}"
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="${colCount}"><div class="empty-state"><div class="empty-icon">🗂️</div><h3>Aucune dépense trouvée</h3><p>Ajustez vos filtres ou saisissez une nouvelle dépense.</p></div></td></tr>`;
+      if (grandTotalEl) grandTotalEl.innerHTML = '💰 Total : <strong>0,00 DH</strong>';
+      document.getElementById('rowCount').textContent = '0 ligne(s)';
+      return;
+    }
+
+    let total = 0, html = '';
+    rows.forEach((e, i) => {
+      total += e.amount;
+
+      const jCount = countJustif(e);
+      const justifBadge = jCount > 0
+        ? `<span class="badge badge-justif" onclick="viewJustificatif(${e.id})" title="Voir les justificatifs">📎 ${jCount}</span>`
+        : `<span class="badge badge-no">❌ Non</span>`;
+
+      const userLabel = USERS[e.user] ? USERS[e.user].label : e.user;
+      const createdByLabel = e.createdBy ? (USERS[e.createdBy] ? USERS[e.createdBy].label : e.createdBy) : '—';
+      const modifiedByLabel = e.modifiedBy ? (USERS[e.modifiedBy] ? USERS[e.modifiedBy].label : e.modifiedBy) : '—';
+      const isOwner = e.user === currentUser;
+      const canEdit = isAdmin || (isOwner && !isComptable);
+      const canDelete = isAdmin;
+
+      const remb = isRembourse(e);
+      const rembId = typeof e.id === 'string' ? `\'${e.id}\'` : e.id;
+      const rembTitle = remb
+        ? (e.rembourseDate ? `Remboursé le ${fmtDate(e.rembourseDate)}` : 'Remboursé')
+        : 'Non remboursé — cliquez pour voir le détail';
+      const rembBadge = remb
+        ? `<span class="badge remb-badge remb-yes" onclick="viewRemboursement(${rembId})" title="${rembTitle}">✅ Remboursé</span>`
+        : `<span class="badge remb-badge remb-no" onclick="viewRemboursement(${rembId})" title="${rembTitle}">⏳ Non remboursé</span>`;
+      const canRemb = canConfirmRemboursement(e);
+      const rembBtn = canRemb
+        ? `<button class="btn-remb ${remb ? 'yes' : 'no'}"
         onclick="toggleRembourse(${rembId})"
         title="${remb ? 'Marquer comme NON remboursé' : 'Confirmer le remboursement'}">${remb ? '↩' : '✅'}</button>`
-      : '';
+        : '';
 
-    html+=`<tr>
-      <td style="color:var(--gray-400);font-size:11px;">${i+1}</td>
-      <td class="td-date">${fmtDate(e.date)}</td>
-      <td class="td-desc"><span title="${esc(e.desc)}">${esc(e.desc)}</span></td>
-      <td><span class="badge badge-cat">${esc(e.cat||'Autre')}</span></td>
-      <td class="td-amount">${fmtDH(e.amount)}</td>
-      <td class="td-desc"><span title="${esc(e.mission || '')}">${esc(e.mission || '—')}</span></td>
-      <td class="td-desc"><span title="${esc(e.comment || '')}">${esc(e.comment || '—')}</span></td>
-      <td class="td-user"><span class="badge badge-user">${esc(userLabel)}</span></td>
-      <td>${justifBadge}</td>
-      <td style="white-space:nowrap;">${rembBadge} ${rembBtn}</td>
-      <td class="td-user"><span class="badge badge-user">${esc(createdByLabel)}</span></td>
-      <td class="td-user"><span class="badge badge-user">${esc(modifiedByLabel)}</span></td>
-      <td><div class="action-btns">
-        <button class="btn-icon edit ${!canEdit ? 'disabled' : ''}" onclick="${canEdit ? 'editRow('+e.id+')' : ''}" title="${canEdit ? 'Modifier' : 'Non autorisé'}">✏️</button>
-        <button class="btn-icon ${!canDelete ? 'disabled' : ''}" onclick="${canDelete ? 'deleteRow('+e.id+')' : ''}" title="${canDelete ? 'Supprimer' : 'Non autorisé'}">✕</button>
-      </div></td>
-    </tr>`;
-  });
-  tbody.innerHTML=html;
-  document.getElementById('grandTotal').innerHTML=`💰 Total TTC : <strong>${fmtDH(total)}</strong>`;
-  document.getElementById('rowCount').textContent=rows.length+' ligne(s) — Total TTC : '+fmtDH(total);
+      if (isComptable) {
+        // Comptable: seulement #, Description, Catégorie, Mission, Montant TTC
+        html += `<tr>
+          <td style="color:var(--gray-400);font-size:11px;">${i + 1}</td>
+          <td class="td-desc"><span title="${esc(e.desc)}">${esc(e.desc)}</span></td>
+          <td><span class="badge badge-cat">${esc(e.cat || 'Autre')}</span></td>
+          <td class="td-desc"><span title="${esc(e.mission || '')}">${esc(e.mission || '—')}</span></td>
+          <td class="td-amount">${fmtDH(e.amount)}</td>
+        </tr>`;
+      } else {
+        html += `<tr>
+        <td style="color:var(--gray-400);font-size:11px;">${i + 1}</td>
+        <td class="td-date">${fmtDate(e.date)}</td>
+        <td class="td-desc"><span title="${esc(e.desc)}">${esc(e.desc)}</span></td>
+        <td><span class="badge badge-cat">${esc(e.cat || 'Autre')}</span></td>
+        <td class="td-amount">${fmtDH(e.amount)}</td>
+        <td class="td-desc"><span title="${esc(e.mission || '')}">${esc(e.mission || '—')}</span></td>
+        <td class="td-desc"><span title="${esc(e.comment || '')}">${esc(e.comment || '—')}</span></td>
+        <td class="td-user"><span class="badge badge-user">${esc(userLabel)}</span></td>
+        <td>${justifBadge}</td>
+        <td style="white-space:nowrap;">${rembBadge} ${rembBtn}</td>
+        <td class="td-user"><span class="badge badge-user">${esc(createdByLabel)}</span></td>
+        <td class="td-user"><span class="badge badge-user">${esc(modifiedByLabel)}</span></td>
+        <td><div class="action-btns">
+          <button class="btn-icon edit ${!canEdit ? 'disabled' : ''}" onclick="${canEdit ? 'editRow(' + e.id + ')' : ''}" title="${canEdit ? 'Modifier' : 'Non autorisé'}">✏️</button>
+          <button class="btn-icon ${!canDelete ? 'disabled' : ''}" onclick="${canDelete ? 'deleteRow(' + e.id + ')' : ''}" title="${canDelete ? 'Supprimer' : 'Non autorisé'}">✕</button>
+        </div></td>
+      </tr>`;
+      }
+    });
+    tbody.innerHTML = html;
+    document.getElementById('grandTotal').innerHTML = `💰 Total TTC : <strong>${fmtDH(total)}</strong>`;
+    document.getElementById('rowCount').textContent = rows.length + ' ligne(s) — Total TTC : ' + fmtDH(total);
   }, 'renderAll');
 }
 
-function resetFilters(){
-  ['filterYear','filterMonth','filterCat','filterUser','filterRemb'].forEach(id=>{
+function resetFilters() {
+  ['filterYear', 'filterMonth', 'filterCat', 'filterUser', 'filterRemb'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.value='all';
+    if (el) el.value = 'all';
   });
-  document.getElementById('filterSearch').value='';
+  document.getElementById('filterSearch').value = '';
   renderAll();
 }
 
@@ -4162,83 +4392,83 @@ function resetFilters(){
 // ════════════════════════════════════════════
 function renderMonthly() {
   safeRender(() => {
-  console.log('\ud83d\udd35 renderMonthly appelé, depth:', __RENDER.depth);
-  const allData = dataAll();
-  const data = getUserExpenses(allData);
-  const yearF  = document.getElementById('filterYearMonth').value;
-  const monthF = document.getElementById('filterMonthSelect')?.value || 'all';
-  const userF  = document.getElementById('filterMonthUser')?.value || 'all';
+    console.log('\ud83d\udd35 renderMonthly appelé, depth:', __RENDER.depth);
+    const allData = dataAll();
+    const data = getUserExpenses(allData);
+    const yearF = document.getElementById('filterYearMonth').value;
+    const monthF = document.getElementById('filterMonthSelect')?.value || 'all';
+    const userF = document.getElementById('filterMonthUser')?.value || 'all';
 
-  const years=[...new Set(allData.map(e=>e.date.substring(0,4)))].sort().reverse();
-  const ySel=document.getElementById('filterYearMonth');
-  const yVal=ySel.value;
-  ySel.innerHTML='<option value="all">Toutes années</option>';
-  years.forEach(y=>{const o=document.createElement('option');o.value=y;o.textContent=y;ySel.appendChild(o);});
-  if(years.includes(yVal)) ySel.value=yVal;
+    const years = [...new Set(allData.map(e => e.date.substring(0, 4)))].sort().reverse();
+    const ySel = document.getElementById('filterYearMonth');
+    const yVal = ySel.value;
+    ySel.innerHTML = '<option value="all">Toutes années</option>';
+    years.forEach(y => { const o = document.createElement('option'); o.value = y; o.textContent = y; ySel.appendChild(o); });
+    if (years.includes(yVal)) ySel.value = yVal;
 
-  // Populate user filter dynamically using centralized sorted user list
-  const userSel = document.getElementById('filterMonthUser');
-  const userVal = userSel?.value || 'all';
-  if (userSel && isAdmin) {
-    userSel.innerHTML = '<option value="all">👤 Tous</option>' +
-      getSortedUsers().map(([k, u]) => `<option value="${k}">${k === 'admin' ? 'Admin' : esc(u.label)}</option>`).join('');
-    if (Object.keys(USERS).includes(userVal)) userSel.value = userVal;
-  }
+    // Populate user filter dynamically using centralized sorted user list
+    const userSel = document.getElementById('filterMonthUser');
+    const userVal = userSel?.value || 'all';
+    if (userSel && isAdmin) {
+      userSel.innerHTML = '<option value="all">👤 Tous</option>' +
+        getSortedUsers().map(([k, u]) => `<option value="${k}">${k === 'admin' ? 'Admin' : esc(u.label)}</option>`).join('');
+      if (Object.keys(USERS).includes(userVal)) userSel.value = userVal;
+    }
 
-  // Save month filter value before re-render
-  const mSel = document.getElementById('filterMonthSelect');
-  const mVal = mSel?.value || 'all';
+    // Save month filter value before re-render
+    const mSel = document.getElementById('filterMonthSelect');
+    const mVal = mSel?.value || 'all';
 
-  let filtered = data.filter(e=> {
-    const y = e.date.substring(0,4);
-    const m = e.date.substring(5,7);
-    return (yearF==='all'||y===yearF) && (monthF==='all'||m===monthF);
-  });
-  
-  if (!isAdmin) {
-    filtered = filtered.filter(e => e.user === currentUser);
-  } else if (userF !== 'all') {
-    filtered = filtered.filter(e => e.user === userF);
-  }
+    let filtered = data.filter(e => {
+      const y = e.date.substring(0, 4);
+      const m = e.date.substring(5, 7);
+      return (yearF === 'all' || y === yearF) && (monthF === 'all' || m === monthF);
+    });
 
-  const groups={};
-  filtered.forEach(e=>{
-    const key=e.date.substring(0,7);
-    if(!groups[key]) groups[key]=[];
-    groups[key].push(e);
-  });
+    if (!isAdmin) {
+      filtered = filtered.filter(e => e.user === currentUser);
+    } else if (userF !== 'all') {
+      filtered = filtered.filter(e => e.user === userF);
+    }
 
-  const keys=Object.keys(groups).sort().reverse();
-  const container=document.getElementById('monthlyGroups');
+    const groups = {};
+    filtered.forEach(e => {
+      const key = e.date.substring(0, 7);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(e);
+    });
 
-  if(!keys.length){
-    container.innerHTML=`<div class="panel"><div class="empty-state"><div class="empty-icon">📭</div><h3>Aucune dépense</h3><p>Aucune dépense enregistrée pour cette période.</p></div></div>`;
-    return;
-  }
+    const keys = Object.keys(groups).sort().reverse();
+    const container = document.getElementById('monthlyGroups');
 
-  container.innerHTML = keys.map(key=>{
-    const [y,m]=key.split('-');
-    const label=`${MONTHS_FR[parseInt(m,10)-1]} ${y}`;
-    const items=groups[key].sort((a,b)=>b.date.localeCompare(a.date));
-    const total=items.reduce((s,e)=>s+e.amount,0);
-    
-    const rows=items.map((e,i)=>{
-      const jCount = countJustif(e);
-      const justifBadge = jCount > 0 
-        ? `<span class="badge badge-justif" onclick="viewJustificatif(${e.id})" title="Voir les justificatifs">📎 ${jCount}</span>`
-        : `<span class="badge badge-no">❌ Non</span>`;
-      const userLabel = USERS[e.user] ? USERS[e.user].label : e.user;
-      const createdByLabel = e.createdBy ? (USERS[e.createdBy] ? USERS[e.createdBy].label : e.createdBy) : '—';
-      const modifiedByLabel = e.modifiedBy ? (USERS[e.modifiedBy] ? USERS[e.modifiedBy].label : e.modifiedBy) : '—';
-      const isOwner = e.user === currentUser;
-      const canEdit = isAdmin || (isOwner && !isComptable);
-      const canDelete = isAdmin;
-      
-      return `<tr>
-        <td style="color:var(--gray-400);font-size:11px;padding:8px 12px;">${i+1}</td>
+    if (!keys.length) {
+      container.innerHTML = `<div class="panel"><div class="empty-state"><div class="empty-icon">📭</div><h3>Aucune dépense</h3><p>Aucune dépense enregistrée pour cette période.</p></div></div>`;
+      return;
+    }
+
+    container.innerHTML = keys.map(key => {
+      const [y, m] = key.split('-');
+      const label = `${MONTHS_FR[parseInt(m, 10) - 1]} ${y}`;
+      const items = groups[key].sort((a, b) => b.date.localeCompare(a.date));
+      const total = items.reduce((s, e) => s + e.amount, 0);
+
+      const rows = items.map((e, i) => {
+        const jCount = countJustif(e);
+        const justifBadge = jCount > 0
+          ? `<span class="badge badge-justif" onclick="viewJustificatif(${e.id})" title="Voir les justificatifs">📎 ${jCount}</span>`
+          : `<span class="badge badge-no">❌ Non</span>`;
+        const userLabel = USERS[e.user] ? USERS[e.user].label : e.user;
+        const createdByLabel = e.createdBy ? (USERS[e.createdBy] ? USERS[e.createdBy].label : e.createdBy) : '—';
+        const modifiedByLabel = e.modifiedBy ? (USERS[e.modifiedBy] ? USERS[e.modifiedBy].label : e.modifiedBy) : '—';
+        const isOwner = e.user === currentUser;
+        const canEdit = isAdmin || (isOwner && !isComptable);
+        const canDelete = isAdmin;
+
+        return `<tr>
+        <td style="color:var(--gray-400);font-size:11px;padding:8px 12px;">${i + 1}</td>
         <td class="td-date" style="padding:8px 12px;">${fmtDate(e.date)}</td>
         <td class="td-desc" style="padding:8px 12px;"><span title="${esc(e.desc)}">${esc(e.desc)}</span></td>
-        <td style="padding:8px 12px;"><span class="badge badge-cat">${esc(e.cat||'Autre')}</span></td>
+        <td style="padding:8px 12px;"><span class="badge badge-cat">${esc(e.cat || 'Autre')}</span></td>
         <td class="td-amount" style="padding:8px 12px;">${fmtDH(e.amount)}</td>
         <td class="td-desc" style="padding:8px 12px;"><span title="${esc(e.mission || '')}">${esc(e.mission || '—')}</span></td>
         <td class="td-desc" style="padding:8px 12px;"><span title="${esc(e.comment || '')}">${esc(e.comment || '—')}</span></td>
@@ -4247,13 +4477,13 @@ function renderMonthly() {
         <td class="td-user" style="padding:8px 12px;"><span class="badge badge-user">${esc(createdByLabel)}</span></td>
         <td class="td-user" style="padding:8px 12px;"><span class="badge badge-user">${esc(modifiedByLabel)}</span></td>
         <td style="padding:8px 12px;"><div class="action-btns">
-          <button class="btn-icon edit ${!canEdit ? 'disabled' : ''}" onclick="${canEdit ? 'editRow('+e.id+')' : ''}" title="${canEdit ? 'Modifier' : 'Non autorisé'}">✏️</button>
-          <button class="btn-icon ${!canDelete ? 'disabled' : ''}" onclick="${canDelete ? 'deleteRow('+e.id+')' : ''}" title="${canDelete ? 'Supprimer' : 'Non autorisé'}">✕</button>
+          <button class="btn-icon edit ${!canEdit ? 'disabled' : ''}" onclick="${canEdit ? 'editRow(' + e.id + ')' : ''}" title="${canEdit ? 'Modifier' : 'Non autorisé'}">✏️</button>
+          <button class="btn-icon ${!canDelete ? 'disabled' : ''}" onclick="${canDelete ? 'deleteRow(' + e.id + ')' : ''}" title="${canDelete ? 'Supprimer' : 'Non autorisé'}">✕</button>
         </div></td>
       </tr>`;
-    }).join('');
+      }).join('');
 
-    return `<div class="history-group">
+      return `<div class="history-group">
       <div class="history-group-header" onclick="toggleGroup('${key}')">
         <div class="history-group-title">
           <span style="font-size:18px;">📅</span>
@@ -4280,13 +4510,13 @@ function renderMonthly() {
         </div>
       </div>
     </div>`;
-  }).join('');
+    }).join('');
   }, 'renderMonthly');
 }
 
-function toggleGroup(key){
-  const body=document.getElementById(`body-${key}`);
-  const tog=document.getElementById(`toggle-${key}`);
+function toggleGroup(key) {
+  const body = document.getElementById(`body-${key}`);
+  const tog = document.getElementById(`toggle-${key}`);
   body.classList.toggle('open');
   tog.classList.toggle('open');
 }
@@ -4296,52 +4526,52 @@ function toggleGroup(key){
 // ════════════════════════════════════════════
 function renderYearly() {
   safeRender(() => {
-  console.log('\ud83d\udd35 renderYearly appelé, depth:', __RENDER.depth);
-  const allData = dataAll();
-  const data = getUserExpenses(allData);
-  const groups={};
-  data.forEach(e=>{
-    const y=e.date.substring(0,4);
-    if(!groups[y]) groups[y]={total:0, count:0, byMonth:{}, byCat:{}, users:new Set()};
-    groups[y].total+=e.amount;
-    groups[y].count++;
-    groups[y].users.add(e.user);
-    const m=parseInt(e.date.substring(5,7),10)-1;
-    groups[y].byMonth[m]=(groups[y].byMonth[m]||0)+e.amount;
-    const c=e.cat||'Autre';
-    groups[y].byCat[c]=(groups[y].byCat[c]||0)+e.amount;
-  });
+    console.log('\ud83d\udd35 renderYearly appelé, depth:', __RENDER.depth);
+    const allData = dataAll();
+    const data = getUserExpenses(allData);
+    const groups = {};
+    data.forEach(e => {
+      const y = e.date.substring(0, 4);
+      if (!groups[y]) groups[y] = { total: 0, count: 0, byMonth: {}, byCat: {}, users: new Set() };
+      groups[y].total += e.amount;
+      groups[y].count++;
+      groups[y].users.add(e.user);
+      const m = parseInt(e.date.substring(5, 7), 10) - 1;
+      groups[y].byMonth[m] = (groups[y].byMonth[m] || 0) + e.amount;
+      const c = e.cat || 'Autre';
+      groups[y].byCat[c] = (groups[y].byCat[c] || 0) + e.amount;
+    });
 
-  const years=Object.keys(groups).sort().reverse();
-  const container=document.getElementById('yearlyGroups');
+    const years = Object.keys(groups).sort().reverse();
+    const container = document.getElementById('yearlyGroups');
 
-  if(!years.length){
-    container.innerHTML=`<div class="panel"><div class="empty-state"><div class="empty-icon">📭</div><h3>Aucune dépense</h3><p>Aucune dépense enregistrée.</p></div></div>`;
-    return;
-  }
+    if (!years.length) {
+      container.innerHTML = `<div class="panel"><div class="empty-state"><div class="empty-icon">📭</div><h3>Aucune dépense</h3><p>Aucune dépense enregistrée.</p></div></div>`;
+      return;
+    }
 
-  container.innerHTML=years.map(y=>{
-    const g=groups[y];
-    const vals=Object.values(g.byMonth);
-    const maxVal=Math.max(...vals,1);
-    const bars=Array.from({length:12},(_,i)=>{
-      const v=g.byMonth[i]||0;
-      const h=Math.max(Math.round((v/maxVal)*60),v>0?3:0);
-      return `<div class="bar-wrap">
-        <div class="bar-value">${v>0?Math.round(v/1000)+'k':''}</div>
-        <div class="bar-fill" style="height:${h}px;opacity:${v>0?1:.2};"></div>
+    container.innerHTML = years.map(y => {
+      const g = groups[y];
+      const vals = Object.values(g.byMonth);
+      const maxVal = Math.max(...vals, 1);
+      const bars = Array.from({ length: 12 }, (_, i) => {
+        const v = g.byMonth[i] || 0;
+        const h = Math.max(Math.round((v / maxVal) * 60), v > 0 ? 3 : 0);
+        return `<div class="bar-wrap">
+        <div class="bar-value">${v > 0 ? Math.round(v / 1000) + 'k' : ''}</div>
+        <div class="bar-fill" style="height:${h}px;opacity:${v > 0 ? 1 : .2};"></div>
         <div class="bar-label">${MONTHS_SHORT[i]}</div>
       </div>`;
-    }).join('');
+      }).join('');
 
-    const userList = Array.from(g.users).map(u => USERS[u]?.label || u).join(', ');
-    const catRows=Object.entries(g.byCat).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
+      const userList = Array.from(g.users).map(u => USERS[u]?.label || u).join(', ');
+      const catRows = Object.entries(g.byCat).sort((a, b) => b[1] - a[1]).map(([cat, amt]) => `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--gray-100);">
         <span class="badge badge-cat">${esc(cat)}</span>
         <span style="font-weight:700;color:var(--eq-blue);font-size:12px;">${fmtDH(amt)}</span>
       </div>`).join('');
 
-    return `<div class="history-group">
+      return `<div class="history-group">
       <div class="history-group-header" onclick="toggleGroup('y${y}')">
         <div class="history-group-title">
           <span style="font-size:20px;">📆</span>
@@ -4355,7 +4585,7 @@ function renderYearly() {
       </div>
       <div class="history-group-body open" id="body-y${y}">
         <div class="year-chart">
-          <h4>Répartition mensuelle (DH) ${isAdmin ? '— ' + userList : ''}</h4>
+          <h4>Répartition mensuelle (DH) </h4>
           <div class="bar-chart">${bars}</div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
@@ -4366,7 +4596,7 @@ function renderYearly() {
           <div style="padding:14px 18px;">
             <h4 style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Résumé ${y}</h4>
             <div style="font-size:24px;font-weight:800;color:var(--eq-blue);margin-bottom:3px;">${fmtDH(g.total)}</div>
-            <div style="font-size:12px;color:var(--gray-400);">${g.count} dépenses · Moy. ${fmtDH(g.total/g.count)}</div>
+            <div style="font-size:12px;color:var(--gray-400);">${g.count} dépenses · Moy. ${fmtDH(g.total / g.count)}</div>
             <div style="margin-top:12px;">
               <button class="btn btn-primary" style="height:32px;font-size:11px;" onclick="switchTab('monthly');document.getElementById('filterYearMonth').value='${y}';renderMonthly();">
                 📅 Voir mois par mois
@@ -4376,7 +4606,7 @@ function renderYearly() {
         </div>
       </div>
     </div>`;
-  }).join('');
+    }).join('');
   }, 'renderYearly');
 }
 
@@ -4388,7 +4618,7 @@ function preprocessImage(img) {
   return new Promise((resolve) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    
+
     // Resize: max dimension 2000px for performance
     let w = img.naturalWidth || img.width;
     let h = img.naturalHeight || img.height;
@@ -4400,14 +4630,14 @@ function preprocessImage(img) {
     }
     canvas.width = w;
     canvas.height = h;
-    
+
     // Draw resized
     ctx.drawImage(img, 0, 0, w, h);
-    
+
     // Get image data for processing
     const imageData = ctx.getImageData(0, 0, w, h);
     const data = imageData.data;
-    
+
     // 1. Convert to grayscale + auto-contrast (histogram stretch)
     let min = 255, max = 0;
     const gray = new Uint8Array(w * h);
@@ -4418,37 +4648,37 @@ function preprocessImage(img) {
       if (g < min) min = g;
       if (g > max) max = g;
     }
-    
+
     // 2. Apply contrast stretch and adaptive threshold (if image is too light/dark)
     const range = max - min;
     const useThreshold = range < 150; // Low contrast → apply binarization
-    
+
     for (let i = 0; i < gray.length; i++) {
       let g = gray[i];
-      
+
       // Contrast stretch
       if (range > 20) {
         g = Math.round((g - min) / range * 255);
       }
-      
+
       // Clamp
       g = Math.max(0, Math.min(255, g));
-      
+
       // Apply threshold for low-contrast images (binarization)
       if (useThreshold) {
         // Simple Otsu-inspired threshold at 128 after stretch
         g = g > 128 ? 255 : 0;
       }
-      
+
       const idx = i * 4;
       data[idx] = g;
       data[idx + 1] = g;
       data[idx + 2] = g;
       // Keep alpha
     }
-    
+
     ctx.putImageData(imageData, 0, 0);
-    
+
     // Convert to blob for Tesseract
     canvas.toBlob((blob) => {
       resolve(blob);
@@ -4474,7 +4704,7 @@ async function pdfToImage(file) {
     }
     // Fallback: PDF.js not loaded, show error
     throw new Error('PDF.js non chargé. Installez la librairie PDF.js pour analyser les PDF.');
-  } catch(e) {
+  } catch (e) {
     console.warn('PDF conversion error:', e);
     throw e;
   }
@@ -4492,12 +4722,12 @@ function showOCRPreview(file) {
   const previewImg = document.getElementById('ocrPreviewImg');
   const previewPdfLabel = document.getElementById('ocrPreviewPdfLabel');
   if (!file || !preview || !previewImg) return;
-  
+
   // Reset: show img, hide PDF label
   previewImg.style.display = 'block';
   if (previewPdfLabel) previewPdfLabel.style.display = 'none';
   preview.style.display = 'block';
-  
+
   if (file.type.startsWith('image/')) {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -4592,7 +4822,7 @@ async function runOCR() {
 
   try {
     const file = fileInput.files[0];
-    
+
     if (typeof Tesseract === 'undefined') {
       throw new Error('Tesseract.js n\'est pas chargé. Vérifiez votre connexion internet.');
     }
@@ -4609,7 +4839,7 @@ async function runOCR() {
     // Step 2: Preprocess image for better OCR
     out.textContent = '⏳ Optimisation de l\'image…';
     bar.style.width = '10%';
-    
+
     const img = new Image();
     const imageUrl = URL.createObjectURL(imageBlob);
     await new Promise((resolve, reject) => {
@@ -4617,16 +4847,16 @@ async function runOCR() {
       img.onerror = reject;
       img.src = imageUrl;
     });
-    
+
     const processedBlob = await preprocessImage(img);
     URL.revokeObjectURL(imageUrl);
-    
+
     const processedUrl = URL.createObjectURL(processedBlob);
     bar.style.width = '20%';
 
     // Step 3: Run Tesseract with multiple languages
     out.textContent = '⏳ Initialisation de Tesseract…';
-    
+
     const result = await Tesseract.recognize(processedUrl, 'fra+eng', {
       logger: m => {
         if (m.status === 'recognizing text') {
@@ -4650,7 +4880,7 @@ async function runOCR() {
 
     ocrText = result.data.text || '';
     bar.style.width = '100%';
-    
+
     if (ocrText.trim()) {
       out.textContent = ocrText;
       toast('✅ Texte extrait avec succès !');
@@ -4690,31 +4920,31 @@ function detectCategory(text) {
     'Formation': 0,
     'Autre': 0
   };
-  
+
   // Transport keywords
   if (/taxi|uber|essence|carburant|péage|parking|train|avion|billet|transport|voyage|location voiture|gazole|gazoil/.test(lower)) catScores['Transport'] += 3;
   if (/km|kilométr|indemnité km|frais de déplacement|trajet|navette/.test(lower)) catScores['Transport'] += 2;
-  
+
   // Meal keywords
   if (/restaurant|repas|déjeuner|dîner|petit-déjeuner|café|nourriture|plat|menu|addition/.test(lower)) catScores['Repas'] += 3;
   if (/note de restaurant|facture restaurant|boucher|traiteur|sandwich/.test(lower)) catScores['Repas'] += 2;
-  
+
   // Hotel keywords
   if (/hôtel|hotel|hébergement|nuitée|séjour|chambre|logement|auberge|ibis|accor|radisson|riad|gîte/.test(lower)) catScores['Hébergement'] += 3;
   if (/booking|airbnb|expedia/.test(lower)) catScores['Hébergement'] += 2;
-  
+
   // Material keywords
   if (/fourniture|matériel|équipement|achat|article|bureau|informatique|ordinateur|clavier|souris|ecran|imprimante|cartouche/.test(lower)) catScores['Matériel'] += 3;
   if (/papier|stylo|caisse|outil|pièce détachée|consommable/.test(lower)) catScores['Matériel'] += 2;
-  
+
   // Communication keywords
   if (/téléphone|télécom|internet|abonnement|forfait|appel|recharge|wifi|data|sim/.test(lower)) catScores['Communication'] += 3;
   if (/orange|maroc telecom|inwi|iam|moi|facture tel/.test(lower)) catScores['Communication'] += 2;
-  
+
   // Training keywords
   if (/formation|stage|séminaire|conférence|cours|atelier|workshop|certification|learning/.test(lower)) catScores['Formation'] += 3;
   if (/université|école|institut|formation professionnelle/.test(lower)) catScores['Formation'] += 2;
-  
+
   // Find best category
   let bestCat = 'Autre';
   let bestScore = 0;
@@ -4732,7 +4962,7 @@ function extractOCRFields(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   const fullText = text;
   const lower = fullText.toLowerCase();
-  
+
   const result = {
     date: '',
     dateConfidence: 0,
@@ -4745,33 +4975,33 @@ function extractOCRFields(text) {
     vendor: '',
     invoiceNumber: ''
   };
-  
+
   // ─── DATE EXTRACTION ───
   const datePatterns = [
     // DD/MM/YYYY or DD-MM-YYYY
-    { pattern: /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/, parse: (m) => `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/, parse: (m) => `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`, confidence: 0.9 },
     // DD/MM/YY
-    { pattern: /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})(?=\D|$)/, parse: (m) => { const y = parseInt(m[3]) > 30 ? '19'+m[3] : '20'+m[3]; return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; }, confidence: 0.7 },
+    { pattern: /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})(?=\D|$)/, parse: (m) => { const y = parseInt(m[3]) > 30 ? '19' + m[3] : '20' + m[3]; return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`; }, confidence: 0.7 },
     // YYYY-MM-DD
-    { pattern: /(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/, parse: (m) => `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`, confidence: 0.85 },
+    { pattern: /(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/, parse: (m) => `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`, confidence: 0.85 },
     // French text dates: "12 janvier 2024" or "1er janvier 2024"
-    { pattern: /(\d{1,2})(?:er)?[\s]*janvier[\s]*(\d{4})/i, parse: (m) => `${m[2]}-01-${m[1].padStart(2,'0')}`, confidence: 0.9 },
-    { pattern: /(\d{1,2})(?:er)?[\s]*février[\s]*(\d{4})/i, parse: (m) => `${m[2]}-02-${m[1].padStart(2,'0')}`, confidence: 0.9 },
-    { pattern: /(\d{1,2})(?:er)?[\s]*mars[\s]*(\d{4})/i, parse: (m) => `${m[2]}-03-${m[1].padStart(2,'0')}`, confidence: 0.9 },
-    { pattern: /(\d{1,2})(?:er)?[\s]*avril[\s]*(\d{4})/i, parse: (m) => `${m[2]}-04-${m[1].padStart(2,'0')}`, confidence: 0.9 },
-    { pattern: /(\d{1,2})(?:er)?[\s]*mai[\s]*(\d{4})/i, parse: (m) => `${m[2]}-05-${m[1].padStart(2,'0')}`, confidence: 0.9 },
-    { pattern: /(\d{1,2})(?:er)?[\s]*juin[\s]*(\d{4})/i, parse: (m) => `${m[2]}-06-${m[1].padStart(2,'0')}`, confidence: 0.9 },
-    { pattern: /(\d{1,2})(?:er)?[\s]*juillet[\s]*(\d{4})/i, parse: (m) => `${m[2]}-07-${m[1].padStart(2,'0')}`, confidence: 0.9 },
-    { pattern: /(\d{1,2})(?:er)?[\s]*août[\s]*(\d{4})/i, parse: (m) => `${m[2]}-08-${m[1].padStart(2,'0')}`, confidence: 0.9 },
-    { pattern: /(\d{1,2})(?:er)?[\s]*septembre[\s]*(\d{4})/i, parse: (m) => `${m[2]}-09-${m[1].padStart(2,'0')}`, confidence: 0.9 },
-    { pattern: /(\d{1,2})(?:er)?[\s]*octobre[\s]*(\d{4})/i, parse: (m) => `${m[2]}-10-${m[1].padStart(2,'0')}`, confidence: 0.9 },
-    { pattern: /(\d{1,2})(?:er)?[\s]*novembre[\s]*(\d{4})/i, parse: (m) => `${m[2]}-11-${m[1].padStart(2,'0')}`, confidence: 0.9 },
-    { pattern: /(\d{1,2})(?:er)?[\s]*décembre[\s]*(\d{4})/i, parse: (m) => `${m[2]}-12-${m[1].padStart(2,'0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*janvier[\s]*(\d{4})/i, parse: (m) => `${m[2]}-01-${m[1].padStart(2, '0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*février[\s]*(\d{4})/i, parse: (m) => `${m[2]}-02-${m[1].padStart(2, '0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*mars[\s]*(\d{4})/i, parse: (m) => `${m[2]}-03-${m[1].padStart(2, '0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*avril[\s]*(\d{4})/i, parse: (m) => `${m[2]}-04-${m[1].padStart(2, '0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*mai[\s]*(\d{4})/i, parse: (m) => `${m[2]}-05-${m[1].padStart(2, '0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*juin[\s]*(\d{4})/i, parse: (m) => `${m[2]}-06-${m[1].padStart(2, '0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*juillet[\s]*(\d{4})/i, parse: (m) => `${m[2]}-07-${m[1].padStart(2, '0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*août[\s]*(\d{4})/i, parse: (m) => `${m[2]}-08-${m[1].padStart(2, '0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*septembre[\s]*(\d{4})/i, parse: (m) => `${m[2]}-09-${m[1].padStart(2, '0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*octobre[\s]*(\d{4})/i, parse: (m) => `${m[2]}-10-${m[1].padStart(2, '0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*novembre[\s]*(\d{4})/i, parse: (m) => `${m[2]}-11-${m[1].padStart(2, '0')}`, confidence: 0.9 },
+    { pattern: /(\d{1,2})(?:er)?[\s]*décembre[\s]*(\d{4})/i, parse: (m) => `${m[2]}-12-${m[1].padStart(2, '0')}`, confidence: 0.9 },
     // English text dates: "January 12, 2024" or "12 January 2024"
-    { pattern: /(january|february|march|april|may|june|july|august|september|october|november|december)[\s]+(\d{1,2})[,]?[\s]+(\d{4})/i, parse: (m) => { const months={january:'01',february:'02',march:'03',april:'04',may:'05',june:'06',july:'07',august:'08',september:'09',october:'10',november:'11',december:'12'}; return `${m[3]}-${months[m[1].toLowerCase()]}-${m[2].padStart(2,'0')}`; }, confidence: 0.85 },
-    { pattern: /(\d{1,2})[\s]+(january|february|march|april|may|june|july|august|september|october|november|december)[\s]+(\d{4})/i, parse: (m) => { const months={january:'01',february:'02',march:'03',april:'04',may:'05',june:'06',july:'07',august:'08',september:'09',october:'10',november:'11',december:'12'}; return `${m[3]}-${months[m[2].toLowerCase()]}-${m[1].padStart(2,'0')}`; }, confidence: 0.85 }
+    { pattern: /(january|february|march|april|may|june|july|august|september|october|november|december)[\s]+(\d{1,2})[,]?[\s]+(\d{4})/i, parse: (m) => { const months = { january: '01', february: '02', march: '03', april: '04', may: '05', june: '06', july: '07', august: '08', september: '09', october: '10', november: '11', december: '12' }; return `${m[3]}-${months[m[1].toLowerCase()]}-${m[2].padStart(2, '0')}`; }, confidence: 0.85 },
+    { pattern: /(\d{1,2})[\s]+(january|february|march|april|may|june|july|august|september|october|november|december)[\s]+(\d{4})/i, parse: (m) => { const months = { january: '01', february: '02', march: '03', april: '04', may: '05', june: '06', july: '07', august: '08', september: '09', october: '10', november: '11', december: '12' }; return `${m[3]}-${months[m[2].toLowerCase()]}-${m[1].padStart(2, '0')}`; }, confidence: 0.85 }
   ];
-  
+
   // Score dates: prefer dates near "date" or "facture" keywords
   let bestDateScore = 0;
   let bestDate = '';
@@ -4801,7 +5031,7 @@ function extractOCRFields(text) {
     result.date = bestDate;
     result.dateConfidence = Math.round(bestDateScore * 100);
   }
-  
+
   // ─── AMOUNT EXTRACTION ───
   const amountPatterns = [
     // Keywords first: TOTAL TTC, NET A PAYER, etc.
@@ -4815,7 +5045,7 @@ function extractOCRFields(text) {
     // Any decimal number that looks like an amount
     { pattern: /(\d{1,3}(?:[\s.,]?\d{3})*[.,]\d{2})(?!\s*%)(?![\d,])/, score: 1 }
   ];
-  
+
   let bestAmtScore = 0;
   let bestAmt = '';
   for (const ap of amountPatterns) {
@@ -4838,7 +5068,7 @@ function extractOCRFields(text) {
     // Normalize confidence to 0-100
     result.amountConfidence = Math.min(Math.round(bestAmtScore * 20), 100);
   }
-  
+
   // ─── DESCRIPTION EXTRACTION ───
   let bestDesc = '';
   let bestDescScore = 0;
@@ -4851,14 +5081,14 @@ function extractOCRFields(text) {
     // Skip common header/footer keywords
     if (/^(facture|invoice|total|montant|date|client|tva|ht|ttc|ref|n°|email|tel|fax|www|\.com)/i.test(line)) continue;
     if (/^\d{1,3}[\s.,]\d{3}/.test(line)) continue;
-    
+
     // Score by content type
     if (/prestation|service|mission|conseil|étude|analyse|intervention|maintenance|réparation/.test(line)) lineScore += 3;
     if (/transport|taxi|restaurant|hôtel|achat|formation|repas|déplacement|location/.test(line)) lineScore += 2.5;
     if (/^[A-Z]/.test(line) && line.length > 10) lineScore += 2; // Proper sentence
     if (line.length > 15) lineScore += 1.5;
     if (/\d{1,2}[\/\-]\d{1,2}/.test(line)) lineScore -= 1; // Contains a date, skip
-    
+
     if (lineScore > bestDescScore) {
       bestDescScore = lineScore;
       bestDesc = line.substring(0, 100);
@@ -4868,7 +5098,7 @@ function extractOCRFields(text) {
     result.description = bestDesc;
     result.descriptionConfidence = Math.min(Math.round(bestDescScore * 20), 100);
   }
-  
+
   // ─── VENDOR / COMPANY NAME ───
   // Look for common invoice patterns: company name at top
   for (const line of lines) {
@@ -4890,7 +5120,7 @@ function extractOCRFields(text) {
       }
     }
   }
-  
+
   // ─── INVOICE NUMBER ───
   for (const line of lines) {
     const match = line.match(/(?:facture|invoice|n°|nº|no|numéro|ref)\s*[:\s]*(\w[\w\d\/\-]+)/i);
@@ -4899,12 +5129,12 @@ function extractOCRFields(text) {
       break;
     }
   }
-  
+
   // ─── CATEGORY DETECTION ───
   const detectedCategory = detectCategory(fullText);
   result.category = detectedCategory;
   result.categoryConfidence = detectedCategory !== 'Autre' ? 70 : 0;
-  
+
   return result;
 }
 
@@ -4912,16 +5142,16 @@ function extractOCRFields(text) {
 function showExtractedOCRFields(text) {
   const container = document.getElementById('ocrExtractedFields');
   if (!container) return;
-  
+
   const fields = extractOCRFields(text);
-  
+
   container.style.display = 'block';
-  
+
   function confidenceBar(val) {
     const color = val > 70 ? 'var(--green)' : val > 40 ? 'var(--eq-orange)' : 'var(--red)';
     return `<div style="display:flex;align-items:center;gap:6px;"><div style="flex:1;height:4px;background:var(--gray-100);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${val}%;background:${color};border-radius:2px;transition:width .5s;"></div></div><span style="font-size:9px;color:var(--gray-400);font-weight:600;">${val}%</span></div>`;
   }
-  
+
   container.innerHTML = `
     <div style="font-size:11px;font-weight:700;color:var(--gray-500);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
       <span>📊 Données extraites</span>
@@ -4963,7 +5193,7 @@ function showExtractedOCRFields(text) {
       </button>
     </div>
   `;
-  
+
   // Store extracted fields for use by fillFormFromExtracted
   window._ocrExtracted = fields;
 }
@@ -4974,7 +5204,7 @@ function fillFormFromExtracted() {
   if (!fields) {
     return fillFormFromOCR(); // Fallback to old method
   }
-  
+
   let filled = 0;
   if (fields.date) {
     document.getElementById('dateInput').value = fields.date;
@@ -5001,7 +5231,7 @@ function fillFormFromExtracted() {
     }
     filled++;
   }
-  
+
   // Use vendor as mission object if available
   if (fields.vendor) {
     const missionInput = document.getElementById('missionInput');
@@ -5009,10 +5239,10 @@ function fillFormFromExtracted() {
       missionInput.value = fields.vendor;
     }
   }
-  
-  toast(filled > 0 ? 
-    `${filled} champ(s) rempli(s) — Vérifiez les valeurs avant d'ajouter.` : 
-    'Aucun champ détecté. Vérifiez que l\'image contient une facture lisible.', 
+
+  toast(filled > 0 ?
+    `${filled} champ(s) rempli(s) — Vérifiez les valeurs avant d'ajouter.` :
+    'Aucun champ détecté. Vérifiez que l\'image contient une facture lisible.',
     filled > 0 ? 'ok' : 'err'
   );
 }
@@ -5081,9 +5311,9 @@ async function runBatchOCR() {
     const file = files[i];
     const fileProgress = ((i) / totalFiles * 100);
     bar.style.width = fileProgress + '%';
-    
+
     status.textContent = `📄 Traitement ${i + 1}/${totalFiles} : ${file.name}`;
-    
+
     try {
       // Convert PDF to image if needed
       let imageBlob;
@@ -5103,7 +5333,7 @@ async function runBatchOCR() {
         img.onerror = reject;
         img.src = imageUrl;
       });
-      
+
       const processedBlob = await preprocessImage(img);
       URL.revokeObjectURL(imageUrl);
       const processedUrl = URL.createObjectURL(processedBlob);
@@ -5133,12 +5363,12 @@ async function runBatchOCR() {
         fields._fileSize = file.size;
         fields._text = text.substring(0, 300);
         fields._dateAdded = new Date().toISOString();
-        
+
         // Store the file reference for justificatif (only images)
         if (file.type.startsWith('image/')) {
           fields._file = file;
         }
-        
+
         window._batchOCRResults.push(fields);
         successCount++;
       } else {
@@ -5165,13 +5395,13 @@ async function runBatchOCR() {
       });
       errorCount++;
     }
-    
+
     // Tiny delay for UI updates
     await new Promise(r => setTimeout(r, 50));
   }
 
   bar.style.width = '100%';
-  
+
   if (successCount > 0) {
     status.textContent = `✅ Traitement terminé : ${successCount} facture(s) lue(s), ${errorCount} erreur(s)`;
     toast(`✅ ${successCount} facture(s) traitées avec succès !`, 'ok');
@@ -5179,10 +5409,10 @@ async function runBatchOCR() {
     status.textContent = '❌ Aucune facture n\'a pu être lue.';
     toast('Aucune facture n\'a pu être lue.', 'err');
   }
-  
+
   // Render results
   renderBatchResults();
-  
+
   btn.disabled = false;
   btn.textContent = '📚 Traiter toutes les factures';
   setTimeout(() => { progress.style.display = 'none'; bar.style.width = '0%'; }, 2000);
@@ -5194,26 +5424,26 @@ function renderBatchResults() {
   const list = document.getElementById('batchResultsList');
   const countSpan = document.getElementById('batchCount');
   const addAllBtn = document.getElementById('batchAddAllBtn');
-  
+
   if (!results.length) {
     container.style.display = 'none';
     return;
   }
-  
+
   container.style.display = 'block';
   if (countSpan) countSpan.textContent = results.length;
-  
+
   // Check if all results are valid (have at least date OR amount OR description)
   const validCount = results.filter(r => r.date || r.amount || r.description).length;
   if (addAllBtn) {
     addAllBtn.textContent = validCount > 0 ? `➕ Ajouter ${validCount} facture(s) valide(s)` : '➕ Ajouter tout (⚠️ aucune valide)';
     addAllBtn.disabled = validCount === 0;
   }
-  
+
   list.innerHTML = results.map((r, idx) => {
     const isError = r._error;
     const hasData = r.date || r.amount || r.description;
-    
+
     return `
     <div class="batch-result-item ${isError ? 'batch-error' : ''} ${!isError && !hasData ? 'batch-warning' : ''}">
       <div class="batch-result-header">
@@ -5240,13 +5470,13 @@ function renderBatchResults() {
 async function addBatchExpense(idx, skipToast = false) {
   const results = window._batchOCRResults;
   if (idx < 0 || idx >= results.length) return;
-  
+
   const r = results[idx];
   if (!r.date && !r.amount && !r.description) {
     if (!skipToast) toast('Impossible d\'ajouter : aucune donnée extraite.', 'err');
     return false;
   }
-  
+
   // Build expense object
   const exp = {
     id: Date.now() + '_' + Math.random().toString(36).slice(2, 8),
@@ -5263,7 +5493,7 @@ async function addBatchExpense(idx, skipToast = false) {
     justifStorageUrl: null,
     justifStoragePath: null
   };
-  
+
   // If we have the file, try to read it as justificatif
   if (r._file && r._file.type.startsWith('image/')) {
     try {
@@ -5277,7 +5507,7 @@ async function addBatchExpense(idx, skipToast = false) {
         exp.justif = 'Oui';
         exp.justifData = data;
         exp.justifName = r._fileName;
-        
+
         // Try Firebase Storage upload
         if (window.__storage && window.__fbReady) {
           try {
@@ -5296,16 +5526,16 @@ async function addBatchExpense(idx, skipToast = false) {
       console.warn('Error reading justificatif from batch:', e);
     }
   }
-  
+
   await dataAdd(exp);
-  
+
   // Remove from results
   window._batchOCRResults.splice(idx, 1);
   renderBatchResults();
-  
+
   updateKPIs();
   if (activeTab !== 'saisie') switchTab(activeTab); else renderAll();
-  
+
   if (!skipToast) toast('✅ Dépense ajoutée : ' + (r.description || r._fileName), 'ok');
   return true;
 }
@@ -5313,14 +5543,14 @@ async function addBatchExpense(idx, skipToast = false) {
 async function addAllBatchExpenses() {
   const results = window._batchOCRResults;
   if (!results.length) return toast('Aucun résultat à ajouter.', 'err');
-  
+
   const btn = document.getElementById('batchAddAllBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Ajout en cours…';
-  
+
   let added = 0;
   let errors = 0;
-  
+
   // Process in reverse to maintain correct indices after deletion
   for (let i = results.length - 1; i >= 0; i--) {
     const r = results[i];
@@ -5332,14 +5562,14 @@ async function addAllBatchExpenses() {
       errors++;
     }
   }
-  
+
   btn.disabled = false;
   btn.textContent = '➕ Ajouter tout';
-  
+
   renderBatchResults();
   updateKPIs();
   if (activeTab !== 'saisie') switchTab(activeTab); else renderAll();
-  
+
   toast(`✅ ${added} dépense(s) ajoutée(s)${errors > 0 ? ', ' + errors + ' ignorée(s)' : ''}`, 'ok');
 }
 
@@ -5365,7 +5595,7 @@ function clearBatchResults() {
 function getFilteredDataForExport() {
   const allData = dataAll();
   const data = getUserExpenses(allData);
-  
+
   // Detect which tab is active and use corresponding filters
   if (activeTab === 'monthly') {
     // Monthly tab filters
@@ -5373,15 +5603,15 @@ function getFilteredDataForExport() {
     const monthF = document.getElementById('filterMonthSelect')?.value || 'all';
     const userF = document.getElementById('filterMonthUser')?.value || 'all';
     return data.filter(e => {
-      const y = e.date.substring(0,4);
-      const m = e.date.substring(5,7);
+      const y = e.date.substring(0, 4);
+      const m = e.date.substring(5, 7);
       const userMatch = userF === 'all' || e.user === userF;
       return (yearF === 'all' || y === yearF)
         && (monthF === 'all' || m === monthF)
         && userMatch;
     });
   }
-  
+
   // Default: Toutes tab filters
   const yearF = document.getElementById('filterYear')?.value || 'all';
   const monthF = document.getElementById('filterMonth')?.value || 'all';
@@ -5390,8 +5620,8 @@ function getFilteredDataForExport() {
   const search = (document.getElementById('filterSearch')?.value || '').toLowerCase();
 
   return data.filter(e => {
-    const y = e.date.substring(0,4);
-    const m = e.date.substring(5,7);
+    const y = e.date.substring(0, 4);
+    const m = e.date.substring(5, 7);
     const userMatch = userF === 'all' || e.user === userF;
     return (yearF === 'all' || y === yearF)
       && (monthF === 'all' || m === monthF)
@@ -5405,7 +5635,31 @@ function exportExcel() {
   if (!window.XLSX) return toast('Bibliothèque Excel non chargée.', 'err');
   const data = getFilteredDataForExport();
   if (!data.length) return toast('Aucune dépense à exporter avec ces filtres.', 'err');
-  
+
+  if (isComptable) {
+    const employeeRows = [
+      ['DÉPENSES', ''],
+      ['Date d\'export', new Date().toLocaleDateString('fr-FR')],
+      ['Utilisateur connecté', USERS[currentUser]?.label || 'Comptable'],
+      [],
+    ];
+    const headers = ['#', 'Description', 'Catégorie', 'Mission', 'Montant TTC (DH)'];
+    const sorted = [...data].sort((a, b) => b.date.localeCompare(a.date));
+    const dataRows = sorted.map((e, i) => [
+      i + 1, e.desc, e.cat || 'Autre', e.mission || '', e.amount
+    ]);
+    const totalTTC = sorted.reduce((s, e) => s + e.amount, 0);
+    const footerRows = [[], ['', '', '', 'TOTAL', totalTTC]];
+    const allRows = [...employeeRows, headers, ...dataRows, ...footerRows];
+    const ws = XLSX.utils.aoa_to_sheet(allRows);
+    ws['!cols'] = [{ wch: 6 }, { wch: 40 }, { wch: 20 }, { wch: 30 }, { wch: 18 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Dépenses');
+    XLSX.writeFile(wb, `depenses_comptable_${today()}.xlsx`);
+    toast('Export Excel téléchargé !');
+    return;
+  }
+
   const employeeRows = [
     ['NOTE DE FRAIS', ''],
     ['Date d\'export', new Date().toLocaleDateString('fr-FR')],
@@ -5459,7 +5713,7 @@ function exportPDF() {
   doc.rect(0, 28, W, 1.5, 'F');
 
   // Logo
-  try { doc.addImage('logo.PNG', 'PNG', M, 5, 18, 18); } catch(e) {}
+  try { doc.addImage('logo.PNG', 'PNG', M, 5, 18, 18); } catch (e) { }
 
   // Company name
   doc.setFont('helvetica', 'bold');
@@ -5494,9 +5748,13 @@ function exportPDF() {
 
   // ── Info badges row ──
   const badgeH = 10;
-  const badgeW = (W - M * 2 - 8) / 4;
   const rembTotal = sorted.filter(isRembourse).reduce((s, e) => s + (e.amount || 0), 0);
-  const badges = [
+  const badges = isComptable ? [
+    { label: 'Collaborateur', value: userLabel },
+    { label: 'Nombre', value: sorted.length + ' dépense(s)' },
+    { label: 'Total TTC', value: fmtDH(total) },
+    { label: 'Période', value: sorted.length ? (fmtDate(sorted[0].date) + ' — ' + fmtDate(sorted[sorted.length - 1].date)) : '—' }
+  ] : [
     { label: 'Collaborateur', value: userLabel },
     { label: 'Nombre', value: sorted.length + ' dépense(s)' },
     { label: 'Total TTC', value: fmtDH(total) },
@@ -5504,36 +5762,47 @@ function exportPDF() {
     { label: 'Remboursé', value: fmtDH(rembTotal) },
     { label: 'Non remboursé', value: fmtDH(total - rembTotal) }
   ];
+  const badgeW = (W - M * 2 - (badges.length - 1) * 2.5) / badges.length;
   badges.forEach((b, i) => {
     const bx = M + i * (badgeW + 2.5);
-    doc.setFillColor(...(i === 2 ? blue : altRow));
+    doc.setFillColor(...((i === 2) ? blue : altRow));
     doc.roundedRect(bx, y, badgeW, badgeH, 1.5, 1.5, 'F');
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6);
-    doc.setTextColor(...(i === 2 ? [200, 220, 245] : grayLight));
+    doc.setTextColor(...((i === 2) ? [200, 220, 245] : grayLight));
     doc.text(b.label.toUpperCase(), bx + 3, y + 3.5);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(i === 2 ? 8.5 : 7.5);
-    doc.setTextColor(...(i === 2 ? white : dark));
+    doc.setFontSize((i === 2) ? 8.5 : 7.5);
+    doc.setTextColor(...((i === 2) ? white : dark));
     const maxValW = badgeW - 6;
     doc.text(doc.splitTextToSize(b.value, maxValW)[0] || b.value, bx + 3, y + 8);
   });
   y += badgeH + 5;
 
   // ── Table ──
-  const head = [['N°', 'Date', 'Description', 'Catégorie', 'Total TTC (DH)', 'Objet / Mission', 'Commentaires', 'Utilisateur', 'Justif.', 'Remboursé']];
-  const body = sorted.map((e, i) => [
-    String(i + 1),
-    fmtDate(e.date),
-    e.desc,
-    e.cat || 'Autre',
-    fmtDH(e.amount),
-    e.mission || '—',
-    e.comment || '—',
-    USERS[e.user]?.label || e.user,
-    e.justifData ? 'Oui' : 'Non',
-    isRembourse(e) ? 'Oui' : 'Non'
-  ]);
+  const head = isComptable
+    ? [['#', 'Description', 'Catégorie', 'Mission', 'Montant TTC (DH)']]
+    : [['N°', 'Date', 'Description', 'Catégorie', 'Total TTC (DH)', 'Objet / Mission', 'Commentaires', 'Utilisateur', 'Justif.', 'Remboursé']];
+  const body = isComptable
+    ? sorted.map((e, i) => [
+        String(i + 1),
+        e.desc,
+        e.cat || 'Autre',
+        e.mission || '—',
+        fmtDH(e.amount)
+      ])
+    : sorted.map((e, i) => [
+        String(i + 1),
+        fmtDate(e.date),
+        e.desc,
+        e.cat || 'Autre',
+        fmtDH(e.amount),
+        e.mission || '—',
+        e.comment || '—',
+        USERS[e.user]?.label || e.user,
+        e.justifData ? 'Oui' : 'Non',
+        isRembourse(e) ? 'Oui' : 'Non'
+      ]);
   doc.autoTable({
     head, body, startY: y,
     styles: {
@@ -5547,7 +5816,13 @@ function exportPDF() {
       cellPadding: { top: 3.5, bottom: 3.5, left: 3, right: 3 }
     },
     alternateRowStyles: { fillColor: altRow },
-    columnStyles: {
+    columnStyles: isComptable ? {
+      0: { cellWidth: 14, halign: 'center', textColor: gray, fontStyle: 'normal' },
+      1: { cellWidth: 105, halign: 'left' },
+      2: { cellWidth: 45, halign: 'center' },
+      3: { cellWidth: 65, halign: 'left' },
+      4: { cellWidth: 40, halign: 'right', fontStyle: 'bold' }
+    } : {
       0: { cellWidth: 12, halign: 'center', textColor: gray, fontStyle: 'normal' },
       1: { cellWidth: 24, halign: 'center', fontStyle: 'normal' },
       2: { cellWidth: 54, halign: 'left' },
@@ -5565,7 +5840,7 @@ function exportPDF() {
       fontSize: 8.5, cellPadding: 3.5
     },
     margin: { left: M, right: M },
-    didParseCell: function(hookData) {
+    didParseCell: function (hookData) {
       if (hookData.section === 'body' && hookData.column.index === 4) {
         hookData.cell.styles.halign = 'right';
       }
@@ -5582,7 +5857,7 @@ function exportPDF() {
         hookData.cell.styles.textColor = hookData.cell.raw === 'Oui' ? [34, 139, 34] : [180, 83, 9];
       }
     },
-    didDrawPage: function(hookData) {
+    didDrawPage: function (hookData) {
       const pageCount = doc.internal.getNumberOfPages();
       if (pageCount > 1) {
         doc.setFont('helvetica', 'normal');
@@ -5618,76 +5893,76 @@ function getTrimester(m) {
   return 4;
 }
 function getTrimesterLabel(t) {
-  const labels = {1:'T1 · Jan–Mar',2:'T2 · Avr–Juin',3:'T3 · Jui–Sep',4:'T4 · Oct–Déc'};
+  const labels = { 1: 'T1 · Jan–Mar', 2: 'T2 · Avr–Juin', 3: 'T3 · Jui–Sep', 4: 'T4 · Oct–Déc' };
   return labels[t] || `T${t}`;
 }
 function getTrimesterMonths(t) {
-  const m = {1:['01','02','03'],2:['04','05','06'],3:['07','08','09'],4:['10','11','12']};
+  const m = { 1: ['01', '02', '03'], 2: ['04', '05', '06'], 3: ['07', '08', '09'], 4: ['10', '11', '12'] };
   return m[t] || [];
 }
 
 function renderTrimester() {
   safeRender(() => {
-  console.log('\ud83d\udd35 renderTrimester appelé, depth:', __RENDER.depth);
-  const container = document.getElementById('trimesterContent');
-  if (!container) return;
+    console.log('\ud83d\udd35 renderTrimester appelé, depth:', __RENDER.depth);
+    const container = document.getElementById('trimesterContent');
+    if (!container) return;
 
-  const data = getFilteredExpenses();
-  const yearSel = document.getElementById('triYearFilter');
-  const userSel = document.getElementById('triUserFilter');
+    const data = getFilteredExpenses();
+    const yearSel = document.getElementById('triYearFilter');
+    const userSel = document.getElementById('triUserFilter');
 
-  // Save selected values before repopulating
-  const savedYear = yearSel.value;
-  const savedUser = userSel.value;
+    // Save selected values before repopulating
+    const savedYear = yearSel.value;
+    const savedUser = userSel.value;
 
-  // Populate year filter
-  const years = [...new Set(data.map(e=>e.date?.substring(0,4)).filter(Boolean))].sort();
-  yearSel.innerHTML = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
-  if (years.includes(savedYear)) yearSel.value = savedYear;
-  else if (years.length) yearSel.value = years[years.length-1];
+    // Populate year filter
+    const years = [...new Set(data.map(e => e.date?.substring(0, 4)).filter(Boolean))].sort();
+    yearSel.innerHTML = '<option value="">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+    if (years.includes(savedYear)) yearSel.value = savedYear;
+    else if (years.length) yearSel.value = years[years.length - 1];
 
-  // Populate user filter using centralized sorted user list
-  userSel.innerHTML = '<option value="">Tous les collaborateurs</option>' + getSortedUsers().map(([k, u]) => `<option value="${k}">${k === 'admin' ? 'Admin' : esc(u.label)}</option>`).join('');
-  if (savedUser) userSel.value = savedUser;
+    // Populate user filter using centralized sorted user list
+    userSel.innerHTML = '<option value="">Tous les collaborateurs</option>' + getSortedUsers().map(([k, u]) => `<option value="${k}">${k === 'admin' ? 'Admin' : esc(u.label)}</option>`).join('');
+    if (savedUser) userSel.value = savedUser;
 
-  const selectedYear = yearSel.value;
-  const selectedUser = userSel.value;
+    const selectedYear = yearSel.value;
+    const selectedUser = userSel.value;
 
-  let filtered = data;
-  if (selectedYear) filtered = filtered.filter(e => e.date?.substring(0,4) === selectedYear);
-  if (selectedUser) filtered = filtered.filter(e => e.user === selectedUser);
+    let filtered = data;
+    if (selectedYear) filtered = filtered.filter(e => e.date?.substring(0, 4) === selectedYear);
+    if (selectedUser) filtered = filtered.filter(e => e.user === selectedUser);
 
-  if (!filtered.length) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><h3>Aucune dépense</h3><p>Aucune dépense trouvée pour cette période.</p></div>';
-    return;
-  }
+    if (!filtered.length) {
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><h3>Aucune dépense</h3><p>Aucune dépense trouvée pour cette période.</p></div>';
+      return;
+    }
 
-  // Group by trimester
-  const triData = {1: {expenses:[], total:0, count:0}, 2: {expenses:[], total:0, count:0}, 3: {expenses:[], total:0, count:0}, 4: {expenses:[], total:0, count:0}};
-  filtered.forEach(e => {
-    const m = e.date?.substring(5,7);
-    if (!m) return;
-    const t = getTrimester(m);
-    triData[t].expenses.push(e);
-    triData[t].total += parseFloat(e.amount) || 0;
-    triData[t].count++;
-  });
+    // Group by trimester
+    const triData = { 1: { expenses: [], total: 0, count: 0 }, 2: { expenses: [], total: 0, count: 0 }, 3: { expenses: [], total: 0, count: 0 }, 4: { expenses: [], total: 0, count: 0 } };
+    filtered.forEach(e => {
+      const m = e.date?.substring(5, 7);
+      if (!m) return;
+      const t = getTrimester(m);
+      triData[t].expenses.push(e);
+      triData[t].total += parseFloat(e.amount) || 0;
+      triData[t].count++;
+    });
 
-  const grandTotal = Object.values(triData).reduce((s,d) => s + d.total, 0);
-  const maxTotal = Math.max(...Object.values(triData).map(d => d.total), 1);
+    const grandTotal = Object.values(triData).reduce((s, d) => s + d.total, 0);
+    const maxTotal = Math.max(...Object.values(triData).map(d => d.total), 1);
 
-  // Build trimester cards
-  let cardsHtml = '<div class="tri-grid">';
-  [1,2,3,4].forEach(t => {
-    const d = triData[t];
-    const pct = grandTotal > 0 ? ((d.total / grandTotal) * 100).toFixed(1) : 0;
-    cardsHtml += `
+    // Build trimester cards
+    let cardsHtml = '<div class="tri-grid">';
+    [1, 2, 3, 4].forEach(t => {
+      const d = triData[t];
+      const pct = grandTotal > 0 ? ((d.total / grandTotal) * 100).toFixed(1) : 0;
+      cardsHtml += `
       <div class="tri-card">
         <div class="tri-top">
           <div class="tri-icon t${t}">T${t}</div>
           <div>
             <div class="tri-label">${getTrimesterLabel(t)}</div>
-            <div class="tri-count">${d.count} dépense${d.count>1?'s':''}</div>
+            <div class="tri-count">${d.count} dépense${d.count > 1 ? 's' : ''}</div>
           </div>
         </div>
         <div class="tri-amount">${fmtDH(d.total)}</div>
@@ -5696,29 +5971,29 @@ function renderTrimester() {
           <div style="height:100%;width:${pct}%;background:var(--eq-blue);border-radius:4px;transition:width .5s;"></div>
         </div>
       </div>`;
-  });
-  cardsHtml += '</div>';
+    });
+    cardsHtml += '</div>';
 
-  // Build detail table
-  let tableHtml = '<div class="table-wrap"><table class="tri-table"><thead><tr><th>Trimestre</th><th>Mois</th><th>Montant</th><th>Dépenses</th><th>Moy./mois</th></tr></thead><tbody>';
-  [1,2,3,4].forEach(t => {
-    const d = triData[t];
-    if (d.count === 0) return;
-    const months = getTrimesterMonths(t);
-    const monthlyAvg = months.length > 0 ? d.total / months.length : 0;
-    tableHtml += `<tr><td><strong>T${t}</strong><span class="tri-sub">${getTrimesterLabel(t)}</span></td>`;
-    tableHtml += `<td>${months.map(m => {
-      const monthNames = ['Jan','Fév','Mar','Avr','Mai','Juin','Jui','Aoû','Sep','Oct','Nov','Déc'];
-      return monthNames[parseInt(m)-1];
-    }).join(', ')}</td>`;
-    tableHtml += `<td class="td-amount">${fmtDH(d.total)}</td>`;
-    tableHtml += `<td>${d.count}</td>`;
-    tableHtml += `<td class="td-amount">${fmtDH(monthlyAvg)}</td></tr>`;
-  });
-  tableHtml += `</tbody></table></div>`;
-  tableHtml += `<div class="table-footer"><span class="total-info">Total annuel</span><span class="total-amount">${fmtDH(grandTotal)}</span></div>`;
+    // Build detail table
+    let tableHtml = '<div class="table-wrap"><table class="tri-table"><thead><tr><th>Trimestre</th><th>Mois</th><th>Montant</th><th>Dépenses</th><th>Moy./mois</th></tr></thead><tbody>';
+    [1, 2, 3, 4].forEach(t => {
+      const d = triData[t];
+      if (d.count === 0) return;
+      const months = getTrimesterMonths(t);
+      const monthlyAvg = months.length > 0 ? d.total / months.length : 0;
+      tableHtml += `<tr><td><strong>T${t}</strong><span class="tri-sub">${getTrimesterLabel(t)}</span></td>`;
+      tableHtml += `<td>${months.map(m => {
+        const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Jui', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+        return monthNames[parseInt(m) - 1];
+      }).join(', ')}</td>`;
+      tableHtml += `<td class="td-amount">${fmtDH(d.total)}</td>`;
+      tableHtml += `<td>${d.count}</td>`;
+      tableHtml += `<td class="td-amount">${fmtDH(monthlyAvg)}</td></tr>`;
+    });
+    tableHtml += `</tbody></table></div>`;
+    tableHtml += `<div class="table-footer"><span class="total-info">Total annuel</span><span class="total-amount">${fmtDH(grandTotal)}</span></div>`;
 
-  container.innerHTML = cardsHtml + '<div style="margin-top:10px;">' + tableHtml + '</div>';
+    container.innerHTML = cardsHtml + '<div style="margin-top:10px;">' + tableHtml + '</div>';
   }, 'renderTrimester');
 }
 
@@ -5727,94 +6002,94 @@ function renderTrimester() {
 // ════════════════════════════════════════════════════
 function renderComparison() {
   safeRender(() => {
-  console.log('\ud83d\udd35 renderComparison appelé, depth:', __RENDER.depth);
-  const container = document.getElementById('comparisonContent');
-  if (!container) return;
+    console.log('\ud83d\udd35 renderComparison appelé, depth:', __RENDER.depth);
+    const container = document.getElementById('comparisonContent');
+    if (!container) return;
 
-  const data = getFilteredExpenses();
-  const period1 = document.getElementById('cmpPeriod1').value;
-  const period2 = document.getElementById('cmpPeriod2').value;
-  const userF = document.getElementById('cmpUserFilter').value;
+    const data = getFilteredExpenses();
+    const period1 = document.getElementById('cmpPeriod1').value;
+    const period2 = document.getElementById('cmpPeriod2').value;
+    const userF = document.getElementById('cmpUserFilter').value;
 
-  // Populate date selectors FIRST, then read values
-  function populateDates(selId) {
-    const sel = document.getElementById(selId);
-    if (!sel) return;
-    const savedVal = sel.value; // Preserve current selection
-    const p = selId.includes('Date1') ? period1 : period2;
-    const years = [...new Set(data.map(e=>e.date?.substring(0,4)).filter(Boolean))].sort();
-    let options = [];
-    if (p === 'month') {
-      years.forEach(y => {
-        for (let m = 1; m <= 12; m++) {
-          const val = `${y}-${String(m).padStart(2,'0')}`;
-          const monthNames = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-          options.push({val, label: `${monthNames[m-1]} ${y}`});
-        }
-      });
-    } else if (p === 'trimestre') {
-      years.forEach(y => {
-        [1,2,3,4].forEach(t => options.push({val: `${y}-T${t}`, label: `${y} · T${t} (${getTrimesterLabel(t)})`}));
-      });
-    } else {
-      years.forEach(y => options.push({val: y, label: y}));
+    // Populate date selectors FIRST, then read values
+    function populateDates(selId) {
+      const sel = document.getElementById(selId);
+      if (!sel) return;
+      const savedVal = sel.value; // Preserve current selection
+      const p = selId.includes('Date1') ? period1 : period2;
+      const years = [...new Set(data.map(e => e.date?.substring(0, 4)).filter(Boolean))].sort();
+      let options = [];
+      if (p === 'month') {
+        years.forEach(y => {
+          for (let m = 1; m <= 12; m++) {
+            const val = `${y}-${String(m).padStart(2, '0')}`;
+            const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+            options.push({ val, label: `${monthNames[m - 1]} ${y}` });
+          }
+        });
+      } else if (p === 'trimestre') {
+        years.forEach(y => {
+          [1, 2, 3, 4].forEach(t => options.push({ val: `${y}-T${t}`, label: `${y} · T${t} (${getTrimesterLabel(t)})` }));
+        });
+      } else {
+        years.forEach(y => options.push({ val: y, label: y }));
+      }
+      sel.innerHTML = options.map(o => `<option value="${o.val}">${o.label}</option>`).join('');
+      // Restore selection if still available, else pick last
+      const vals = options.map(o => o.val);
+      if (vals.includes(savedVal)) sel.value = savedVal;
+      else if (options.length > 0) sel.value = options[options.length - 1].val;
     }
-    sel.innerHTML = options.map(o => `<option value="${o.val}">${o.label}</option>`).join('');
-    // Restore selection if still available, else pick last
-    const vals = options.map(o => o.val);
-    if (vals.includes(savedVal)) sel.value = savedVal;
-    else if (options.length > 0) sel.value = options[options.length-1].val;
-  }
 
-  populateDates('cmpDate1');
-  populateDates('cmpDate2');
+    populateDates('cmpDate1');
+    populateDates('cmpDate2');
 
-  // Read dates AFTER populating
-  const date1 = document.getElementById('cmpDate1').value;
-  const date2 = document.getElementById('cmpDate2').value;
+    // Read dates AFTER populating
+    const date1 = document.getElementById('cmpDate1').value;
+    const date2 = document.getElementById('cmpDate2').value;
 
-  // Populate user filter using centralized sorted user list (preserve selection)
-  const uSel = document.getElementById('cmpUserFilter');
-  const savedUserFilter = uSel.value;
-  uSel.innerHTML = '<option value="">Tous</option>' + getSortedUsers().map(([k, u]) => `<option value="${k}">${k === 'admin' ? 'Admin' : esc(u.label)}</option>`).join('');
-  if (savedUserFilter) uSel.value = savedUserFilter;
+    // Populate user filter using centralized sorted user list (preserve selection)
+    const uSel = document.getElementById('cmpUserFilter');
+    const savedUserFilter = uSel.value;
+    uSel.innerHTML = '<option value="">Tous</option>' + getSortedUsers().map(([k, u]) => `<option value="${k}">${k === 'admin' ? 'Admin' : esc(u.label)}</option>`).join('');
+    if (savedUserFilter) uSel.value = savedUserFilter;
 
-  if (!date1 || !date2) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📈</div><h3>Sélectionnez deux périodes</h3><p>Choisissez deux périodes à comparer.</p></div>';
-    return;
-  }
+    if (!date1 || !date2) {
+      container.innerHTML = '<div class="empty-state"><div class="empty-icon">📈</div><h3>Sélectionnez deux périodes</h3><p>Choisissez deux périodes à comparer.</p></div>';
+      return;
+    }
 
-  // Filter by period
-  let filteredData = userF ? data.filter(e => e.user === userF) : data;
-  const set1 = _filterByPeriod(filteredData, period1, date1);
-  const set2 = _filterByPeriod(filteredData, period2, date2);
+    // Filter by period
+    let filteredData = userF ? data.filter(e => e.user === userF) : data;
+    const set1 = _filterByPeriod(filteredData, period1, date1);
+    const set2 = _filterByPeriod(filteredData, period2, date2);
 
-  const total1 = set1.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
-  const total2 = set2.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
-  const count1 = set1.length;
-  const count2 = set2.length;
-  const avg1 = count1 > 0 ? total1 / count1 : 0;
-  const avg2 = count2 > 0 ? total2 / count2 : 0;
+    const total1 = set1.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const total2 = set2.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const count1 = set1.length;
+    const count2 = set2.length;
+    const avg1 = count1 > 0 ? total1 / count1 : 0;
+    const avg2 = count2 > 0 ? total2 / count2 : 0;
 
-  function fmtChange(current, previous) {
-    if (previous === 0) return {pct: 'N/A', cls: 'same', arrow: '—'};
-    const chg = ((current - previous) / previous) * 100;
-    const arrow = chg > 0 ? '↑' : chg < 0 ? '↓' : '→';
-    return {pct: `${arrow} ${Math.abs(chg).toFixed(1)}%`, cls: chg > 0 ? 'up' : chg < 0 ? 'down' : 'same', arrow};
-  }
+    function fmtChange(current, previous) {
+      if (previous === 0) return { pct: 'N/A', cls: 'same', arrow: '—' };
+      const chg = ((current - previous) / previous) * 100;
+      const arrow = chg > 0 ? '↑' : chg < 0 ? '↓' : '→';
+      return { pct: `${arrow} ${Math.abs(chg).toFixed(1)}%`, cls: chg > 0 ? 'up' : chg < 0 ? 'down' : 'same', arrow };
+    }
 
-  const totalChg = fmtChange(total2, total1);
-  const countChg = fmtChange(count2, count1);
-  const avgChg = fmtChange(avg2, avg1);
+    const totalChg = fmtChange(total2, total1);
+    const countChg = fmtChange(count2, count1);
+    const avgChg = fmtChange(avg2, avg1);
 
-  // Category breakdown
-  const cats1 = {}, cats2 = {};
-  set1.forEach(e => { const c = e.cat||'Autre'; cats1[c] = (cats1[c]||0) + (parseFloat(e.amount)||0); });
-  set2.forEach(e => { const c = e.cat||'Autre'; cats2[c] = (cats2[c]||0) + (parseFloat(e.amount)||0); });
-  const allCats = [...new Set([...Object.keys(cats1), ...Object.keys(cats2)])];
-  const maxCat = Math.max(...allCats.map(c => Math.max(cats1[c]||0, cats2[c]||0)), 1);
+    // Category breakdown
+    const cats1 = {}, cats2 = {};
+    set1.forEach(e => { const c = e.cat || 'Autre'; cats1[c] = (cats1[c] || 0) + (parseFloat(e.amount) || 0); });
+    set2.forEach(e => { const c = e.cat || 'Autre'; cats2[c] = (cats2[c] || 0) + (parseFloat(e.amount) || 0); });
+    const allCats = [...new Set([...Object.keys(cats1), ...Object.keys(cats2)])];
+    const maxCat = Math.max(...allCats.map(c => Math.max(cats1[c] || 0, cats2[c] || 0)), 1);
 
-  container.innerHTML = `
+    container.innerHTML = `
     <div class="cmp-grid">
       <!-- Carte: Total -->
       <div class="cmp-card">
@@ -5848,14 +6123,14 @@ function renderComparison() {
         <div class="cmp-header"><div class="cmp-icon orange">📂</div> Par catégorie</div>
         <div class="cmp-body">
           ${allCats.map(c => {
-            const v1 = cats1[c]||0, v2 = cats2[c]||0;
-            const chg = fmtChange(v2, v1);
-            return `<div class="cmp-stat">
+      const v1 = cats1[c] || 0, v2 = cats2[c] || 0;
+      const chg = fmtChange(v2, v1);
+      return `<div class="cmp-stat">
               <span class="cmp-stat-label">${c}</span>
               <span class="cmp-stat-val">${fmtDH(v1)} → ${fmtDH(v2)}</span>
               <span class="cmp-stat-chg ${chg.cls}">${chg.pct}</span>
             </div>`;
-          }).join('')}
+    }).join('')}
         </div>
       </div>
 
@@ -5870,11 +6145,11 @@ function renderComparison() {
           <div class="cmp-bar-wrap" style="height:120px;">
             ${allCats.map((c, i) => `
               <div class="cmp-bar-item">
-                <div class="cmp-bar-value">${fmtDH(cats2[c]||0)}</div>
-                <div class="cmp-bar-fill b2" style="height:${((cats2[c]||0)/maxCat*100).toFixed(0)}%;"></div>
-                <div class="cmp-bar-fill b1" style="height:${((cats1[c]||0)/maxCat*100).toFixed(0)}%;"></div>
-                <div class="cmp-bar-value">${fmtDH(cats1[c]||0)}</div>
-                <div class="cmp-bar-label">${c.substring(0,6)}</div>
+                <div class="cmp-bar-value">${fmtDH(cats2[c] || 0)}</div>
+                <div class="cmp-bar-fill b2" style="height:${((cats2[c] || 0) / maxCat * 100).toFixed(0)}%;"></div>
+                <div class="cmp-bar-fill b1" style="height:${((cats1[c] || 0) / maxCat * 100).toFixed(0)}%;"></div>
+                <div class="cmp-bar-value">${fmtDH(cats1[c] || 0)}</div>
+                <div class="cmp-bar-label">${c.substring(0, 6)}</div>
               </div>
             `).join('')}
           </div>
@@ -5887,32 +6162,32 @@ function renderComparison() {
         <div class="cmp-body">
           <div style="font-size:12px;color:var(--gray-700);line-height:1.7;">
             ${total1 > 0
-              ? (total2 > total1
-                  ? `<p>⚠️ Les dépenses ont <strong>augmenté de ${Math.abs(((total2-total1)/total1*100)).toFixed(1)}%</strong> entre les deux périodes.</p>`
-                  : total2 < total1
-                  ? `<p>✅ Les dépenses ont <strong>baissé de ${Math.abs(((total2-total1)/total1*100)).toFixed(1)}%</strong> entre les deux périodes. Bonne tendance !</p>`
-                  : `<p>➡️ Les dépenses sont stables entre les deux périodes.</p>`)
-              : total2 > 0
-                ? `<p>⚠️ Les dépenses ont <strong>augmenté</strong> entre les deux périodes (période précédente à 0).</p>`
-                : `<p>➡️ Les dépenses sont stables entre les deux périodes.</p>`
-            }
+        ? (total2 > total1
+          ? `<p>⚠️ Les dépenses ont <strong>augmenté de ${Math.abs(((total2 - total1) / total1 * 100)).toFixed(1)}%</strong> entre les deux périodes.</p>`
+          : total2 < total1
+            ? `<p>✅ Les dépenses ont <strong>baissé de ${Math.abs(((total2 - total1) / total1 * 100)).toFixed(1)}%</strong> entre les deux périodes. Bonne tendance !</p>`
+            : `<p>➡️ Les dépenses sont stables entre les deux périodes.</p>`)
+        : total2 > 0
+          ? `<p>⚠️ Les dépenses ont <strong>augmenté</strong> entre les deux périodes (période précédente à 0).</p>`
+          : `<p>➡️ Les dépenses sont stables entre les deux périodes.</p>`
+      }
             ${allCats.filter(c => {
-              const v1 = cats1[c]||0, v2 = cats2[c]||0;
-              return v1 > 0 && v2 > v1 * 1.2;
-            }).length > 0
-              ? `<p>🔴 Catégories en hausse : ${allCats.filter(c => { const v1=cats1[c]||0,v2=cats2[c]||0; return v1>0&&v2>v1*1.2; }).join(', ')}</p>`
-              : ''
-            }
+        const v1 = cats1[c] || 0, v2 = cats2[c] || 0;
+        return v1 > 0 && v2 > v1 * 1.2;
+      }).length > 0
+        ? `<p>🔴 Catégories en hausse : ${allCats.filter(c => { const v1 = cats1[c] || 0, v2 = cats2[c] || 0; return v1 > 0 && v2 > v1 * 1.2; }).join(', ')}</p>`
+        : ''
+      }
             ${count1 > 0 && count2 > count1 * 1.2
-              ? `<p>📌 Le nombre de dépenses a augmenté de ${((count2-count1)/count1*100).toFixed(0)}%. Vérifiez si toutes sont justifiées.</p>`
-              : ''
-            }
+        ? `<p>📌 Le nombre de dépenses a augmenté de ${((count2 - count1) / count1 * 100).toFixed(0)}%. Vérifiez si toutes sont justifiées.</p>`
+        : ''
+      }
             ${avg2 > avg1 * 1.1
-              ? `<p>💸 Le montant moyen par dépense a augmenté. Envisagez des plafonds par catégorie.</p>`
-              : avg2 < avg1 * 0.9
-              ? `<p>👍 Le montant moyen par dépense diminue. Les efforts de réduction des coûts portent leurs fruits.</p>`
-              : ''
-            }
+        ? `<p>💸 Le montant moyen par dépense a augmenté. Envisagez des plafonds par catégorie.</p>`
+        : avg2 < avg1 * 0.9
+          ? `<p>👍 Le montant moyen par dépense diminue. Les efforts de réduction des coûts portent leurs fruits.</p>`
+          : ''
+      }
             <p style="margin-top:8px;font-size:11px;color:var(--gray-400);">Analyse générée le ${new Date().toLocaleDateString('fr-FR')}</p>
           </div>
         </div>
@@ -6052,72 +6327,72 @@ function generateRecommendations() {
 // ════════════════════════════════════════════════════
 function exportPDFTrimestre() {
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF('p','mm','a4');
-  
+  const doc = new jsPDF('p', 'mm', 'a4');
+
   // Header with logo
-  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch(e) { /* fallback */ }
-  doc.setFontSize(8); doc.setTextColor(247,147,30); doc.setFont(undefined,'normal');
+  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch (e) { /* fallback */ }
+  doc.setFontSize(8); doc.setTextColor(247, 147, 30); doc.setFont(undefined, 'normal');
   doc.text('Notes de Frais', 38, 22);
-  
-  doc.setFontSize(14); doc.setTextColor(53,61,79); doc.setFont(undefined,'bold');
-  doc.text('Rapport trimestriel', 105, 20, {align:'center'});
-  doc.setFontSize(8); doc.setTextColor(142,151,168); doc.setFont(undefined,'normal');
-  doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${USERS[currentUser]?.label||''}`, 105, 26, {align:'center'});
-  
-  doc.setDrawColor(11,79,158); doc.line(20, 30, 190, 30);
+
+  doc.setFontSize(14); doc.setTextColor(53, 61, 79); doc.setFont(undefined, 'bold');
+  doc.text('Rapport trimestriel', 105, 20, { align: 'center' });
+  doc.setFontSize(8); doc.setTextColor(142, 151, 168); doc.setFont(undefined, 'normal');
+  doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${USERS[currentUser]?.label || ''}`, 105, 26, { align: 'center' });
+
+  doc.setDrawColor(11, 79, 158); doc.line(20, 30, 190, 30);
 
   // Data
   const data = getFilteredExpenses();
   const yearSel = document.getElementById('triYearFilter');
   const year = yearSel?.value || '';
-  let filtered = year ? data.filter(e => e.date?.substring(0,4) === year) : data;
+  let filtered = year ? data.filter(e => e.date?.substring(0, 4) === year) : data;
 
-  const triData = {1:[],2:[],3:[],4:[]};
+  const triData = { 1: [], 2: [], 3: [], 4: [] };
   filtered.forEach(e => {
-    const m = e.date?.substring(5,7);
+    const m = e.date?.substring(5, 7);
     if (!m) return;
     triData[getTrimester(m)].push(e);
   });
 
   let y = 38;
-  [1,2,3,4].forEach(t => {
+  [1, 2, 3, 4].forEach(t => {
     const items = triData[t];
     if (!items.length) return;
-    
-    doc.setFontSize(10); doc.setFont(undefined,'bold');
-    doc.setTextColor(11,79,158);
+
+    doc.setFontSize(10); doc.setFont(undefined, 'bold');
+    doc.setTextColor(11, 79, 158);
     doc.text(`T${t} · ${getTrimesterLabel(t)}`, 20, y);
     y += 5;
 
-    const total = items.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
+    const total = items.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
     const rows = items.map(e => [
-      e.date||'',
-      e.desc?.substring(0,25)||'',
-      e.cat||'',
-      USERS[e.user]?.label?.substring(0,15)||'',
-      (parseFloat(e.amount)||0).toFixed(2)+' DH'
+      e.date || '',
+      e.desc?.substring(0, 25) || '',
+      e.cat || '',
+      USERS[e.user]?.label?.substring(0, 15) || '',
+      (parseFloat(e.amount) || 0).toFixed(2) + ' DH'
     ]);
 
     doc.autoTable({
-      startY: y, head: [['Date','Description','Catégorie','Collaborateur','Montant']],
-      body: rows, margin: {left:20, right:20},
-      theme: 'grid', headStyles: {fillColor: [11,79,158], fontSize:7},
-      bodyStyles: {fontSize:7}, footStyles: {fontSize:7, fontStyle:'bold'},
+      startY: y, head: [['Date', 'Description', 'Catégorie', 'Collaborateur', 'Montant']],
+      body: rows, margin: { left: 20, right: 20 },
+      theme: 'grid', headStyles: { fillColor: [11, 79, 158], fontSize: 7 },
+      bodyStyles: { fontSize: 7 }, footStyles: { fontSize: 7, fontStyle: 'bold' },
       didDrawPage: (d) => { y = d.cursor.y + 4; }
     });
 
-    doc.setFontSize(8); doc.setFont(undefined,'bold');
-    doc.setTextColor(53,61,79);
-    doc.text(`Total T${t} : ${total.toFixed(2)} DH (${items.length} dépense${items.length>1?'s':''})`, 20, y + 2);
+    doc.setFontSize(8); doc.setFont(undefined, 'bold');
+    doc.setTextColor(53, 61, 79);
+    doc.text(`Total T${t} : ${total.toFixed(2)} DH (${items.length} dépense${items.length > 1 ? 's' : ''})`, 20, y + 2);
     y += 10;
   });
 
   // Footer
-  doc.setDrawColor(200,200,200); doc.line(20, y, 190, y);
-  doc.setFontSize(8); doc.setTextColor(142,151,168); doc.setFont(undefined,'normal');
-  doc.text('eqnovia · Notes de Frais', 105, y + 5, {align:'center'});
-  
-  doc.save(`rapport-trimestriel_${year||'all'}_${today()}.pdf`);
+  doc.setDrawColor(200, 200, 200); doc.line(20, y, 190, y);
+  doc.setFontSize(8); doc.setTextColor(142, 151, 168); doc.setFont(undefined, 'normal');
+  doc.text('eqnovia · Notes de Frais', 105, y + 5, { align: 'center' });
+
+  doc.save(`rapport-trimestriel_${year || 'all'}_${today()}.pdf`);
   toast('📄 Rapport trimestriel PDF téléchargé !');
 }
 
@@ -6125,86 +6400,86 @@ function exportExcelTrimestre() {
   const data = getFilteredExpenses();
   const yearSel = document.getElementById('triYearFilter');
   const year = yearSel?.value || '';
-  let filtered = year ? data.filter(e => e.date?.substring(0,4) === year) : data;
+  let filtered = year ? data.filter(e => e.date?.substring(0, 4) === year) : data;
 
   const rows = [['eqnovia · Rapport trimestriel', '', '', '', ''],
-    [`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${USERS[currentUser]?.label||''}`, '', '', '', ''],
-    ['', '', '', '', ''],
-    ['Trimestre', 'Période', 'Montant TTC', 'Nb dépenses', 'Moyenne/mois']
+  [`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${USERS[currentUser]?.label || ''}`, '', '', '', ''],
+  ['', '', '', '', ''],
+  ['Trimestre', 'Période', 'Montant TTC', 'Nb dépenses', 'Moyenne/mois']
   ];
 
-  const triData = {1:[],2:[],3:[],4:[]};
+  const triData = { 1: [], 2: [], 3: [], 4: [] };
   filtered.forEach(e => {
-    const m = e.date?.substring(5,7);
+    const m = e.date?.substring(5, 7);
     if (!m) return;
     triData[getTrimester(m)].push(e);
   });
 
   let grandTotal = 0;
-  [1,2,3,4].forEach(t => {
+  [1, 2, 3, 4].forEach(t => {
     const items = triData[t];
     if (!items.length) return;
-    const total = items.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
+    const total = items.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
     grandTotal += total;
     const months = getTrimesterMonths(t);
-    const monthNames = ['Jan','Fév','Mar','Avr','Mai','Juin','Jui','Aoû','Sep','Oct','Nov','Déc'];
-    rows.push([`T${t}`, months.map(m => monthNames[parseInt(m)-1]).join(', '), total.toFixed(2)+' DH', items.length, (total/months.length).toFixed(2)+' DH']);
+    const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Jui', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+    rows.push([`T${t}`, months.map(m => monthNames[parseInt(m) - 1]).join(', '), total.toFixed(2) + ' DH', items.length, (total / months.length).toFixed(2) + ' DH']);
   });
-  rows.push(['', 'TOTAL', grandTotal.toFixed(2)+' DH', '', '']);
+  rows.push(['', 'TOTAL', grandTotal.toFixed(2) + ' DH', '', '']);
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{wch:14},{wch:18},{wch:14},{wch:14},{wch:16}];
+  ws['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 16 }];
   XLSX.utils.book_append_sheet(wb, ws, 'Trimestres');
-  XLSX.writeFile(wb, `rapport-trimestriel_${year||'all'}_${today()}.xlsx`);
+  XLSX.writeFile(wb, `rapport-trimestriel_${year || 'all'}_${today()}.xlsx`);
   toast('📊 Rapport trimestriel Excel téléchargé !');
 }
 
 function exportPDFComparison() {
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF('p','mm','a4');
-  
+  const doc = new jsPDF('p', 'mm', 'a4');
+
   // Header
-  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch(e) { /* fallback */ }
-  doc.setFontSize(8); doc.setTextColor(247,147,30); doc.setFont(undefined,'normal');
+  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch (e) { /* fallback */ }
+  doc.setFontSize(8); doc.setTextColor(247, 147, 30); doc.setFont(undefined, 'normal');
   doc.text('Notes de Frais', 38, 22);
-  
-  doc.setFontSize(14); doc.setTextColor(53,61,79); doc.setFont(undefined,'bold');
-  doc.text('Comparaison de périodes', 105, 20, {align:'center'});
-  doc.setFontSize(8); doc.setTextColor(142,151,168);
-  doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')}`, 105, 26, {align:'center'});
-  
-  doc.setDrawColor(11,79,158); doc.line(20, 30, 190, 30);
 
-  const p1 = document.getElementById('cmpDate1')?.value||'Période 1';
-  const p2 = document.getElementById('cmpDate2')?.value||'Période 2';
+  doc.setFontSize(14); doc.setTextColor(53, 61, 79); doc.setFont(undefined, 'bold');
+  doc.text('Comparaison de périodes', 105, 20, { align: 'center' });
+  doc.setFontSize(8); doc.setTextColor(142, 151, 168);
+  doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')}`, 105, 26, { align: 'center' });
 
-  doc.setFontSize(11); doc.setFont(undefined,'bold');
-  doc.setTextColor(53,61,79);
+  doc.setDrawColor(11, 79, 158); doc.line(20, 30, 190, 30);
+
+  const p1 = document.getElementById('cmpDate1')?.value || 'Période 1';
+  const p2 = document.getElementById('cmpDate2')?.value || 'Période 2';
+
+  doc.setFontSize(11); doc.setFont(undefined, 'bold');
+  doc.setTextColor(53, 61, 79);
   doc.text(`Comparaison : ${p1} vs ${p2}`, 20, 38);
 
   const data = getFilteredExpenses();
-  const period1 = document.getElementById('cmpPeriod1')?.value||'month';
-  const period2 = document.getElementById('cmpPeriod2')?.value||'month';
+  const period1 = document.getElementById('cmpPeriod1')?.value || 'month';
+  const period2 = document.getElementById('cmpPeriod2')?.value || 'month';
 
   const set1 = _filterByPeriod(data, period1, p1);
   const set2 = _filterByPeriod(data, period2, p2);
-  const t1 = set1.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
-  const t2 = set2.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
+  const t1 = set1.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+  const t2 = set2.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
 
   doc.autoTable({
     startY: 44, head: [['Indicateur', p1, p2, 'Variation']],
     body: [
-      ['Total TTC', t1.toFixed(2)+' DH', t2.toFixed(2)+' DH', t1 ? `${((t2-t1)/t1*100).toFixed(1)}%` : 'N/A'],
-      ['Nb dépenses', String(set1.length), String(set2.length), set1.length ? `${((set2.length-set1.length)/set1.length*100).toFixed(1)}%` : 'N/A'],
+      ['Total TTC', t1.toFixed(2) + ' DH', t2.toFixed(2) + ' DH', t1 ? `${((t2 - t1) / t1 * 100).toFixed(1)}%` : 'N/A'],
+      ['Nb dépenses', String(set1.length), String(set2.length), set1.length ? `${((set2.length - set1.length) / set1.length * 100).toFixed(1)}%` : 'N/A'],
     ],
-    theme: 'grid', headStyles: {fillColor: [11,79,158], fontSize:8},
-    bodyStyles: {fontSize:8}, margin: {left:20, right:20},
+    theme: 'grid', headStyles: { fillColor: [11, 79, 158], fontSize: 8 },
+    bodyStyles: { fontSize: 8 }, margin: { left: 20, right: 20 },
   });
 
   const fy = doc.lastAutoTable.finalY + 6;
-  doc.setFontSize(7); doc.setTextColor(142,151,168);
-  doc.text('eqnovia · Notes de Frais · Analyse comparative', 105, fy, {align:'center'});
+  doc.setFontSize(7); doc.setTextColor(142, 151, 168);
+  doc.text('eqnovia · Notes de Frais · Analyse comparative', 105, fy, { align: 'center' });
   doc.save(`comparaison_${p1}_vs_${p2}_${today()}.pdf`);
   toast('📄 Rapport de comparaison PDF téléchargé !');
 }
@@ -6218,12 +6493,12 @@ function getFilteredExpenses() {
 
 // Shared filter helper for comparison
 function _filterByPeriod(data, periodType, periodValue) {
-  if (periodType === 'month') return data.filter(e => e.date?.substring(0,7) === periodValue);
+  if (periodType === 'month') return data.filter(e => e.date?.substring(0, 7) === periodValue);
   else if (periodType === 'trimestre') {
     const [y, t] = periodValue.split('-T');
     const months = getTrimesterMonths(parseInt(t.replace('T', '')));
-    return data.filter(e => e.date?.substring(0,4) === y && months.includes(e.date?.substring(5,7)));
-  } else return data.filter(e => e.date?.substring(0,4) === periodValue);
+    return data.filter(e => e.date?.substring(0, 4) === y && months.includes(e.date?.substring(5, 7)));
+  } else return data.filter(e => e.date?.substring(0, 4) === periodValue);
 }
 
 // ════════════════════════════════════════════════════
@@ -6236,17 +6511,17 @@ async function loadAdminOM() {
   const container = document.getElementById('adminOMContent');
   if (!container) return;
   container.innerHTML = '<div class="admin-om-loading"><span class="spinner"></span> Chargement des ordres de mission depuis Firebase...</div>';
-  
+
   try {
     // Load from Firebase
     const fbData = (await fbLoadOM()) || [];
     // Also load from localStorage for merge
     const localData = loadOMHistory();
-    
+
     // Merge: combine both sources, deduplicate by _localId
     const seen = new Set();
     const merged = [];
-    
+
     // Add Firebase items first
     fbData.forEach(item => {
       const key = item._localId || item.numero + '_' + item.employe;
@@ -6255,7 +6530,7 @@ async function loadAdminOM() {
         merged.push({ ...item, _source: 'firebase' });
       }
     });
-    
+
     // Add local items not in Firebase
     localData.forEach(item => {
       const key = item._localId || item.numero + '_' + item.employe;
@@ -6268,11 +6543,11 @@ async function loadAdminOM() {
         if (existing) existing._source = 'both';
       }
     });
-    
+
     _adminOMCache = merged;
     populateAdminFilters();
     renderAdminOM();
-  } catch(e) {
+  } catch (e) {
     console.warn('Admin OM load failed:', e);
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><h3>Erreur de chargement</h3><p>Impossible de charger les données depuis Firebase.</p><button class="btn btn-ghost" onclick="loadAdminOM()" style="margin-top:10px;">🔄 Réessayer</button></div>';
   }
@@ -6284,7 +6559,7 @@ function populateAdminFilters() {
   const empSel = document.getElementById('adminOMEmploye');
   if (!yearSel || !empSel) return;
 
-  const years = [...new Set(data.map(o => o.date?.substring(0,4)).filter(Boolean))].sort();
+  const years = [...new Set(data.map(o => o.date?.substring(0, 4)).filter(Boolean))].sort();
   const currentYear = yearSel.value;
   yearSel.innerHTML = '<option value="">Toutes années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
   if (currentYear) yearSel.value = currentYear;
@@ -6298,37 +6573,37 @@ function populateAdminFilters() {
 function renderAdminOM() {
   const container = document.getElementById('adminOMContent');
   if (!container) return;
-  
+
   const search = (document.getElementById('adminOMSearch')?.value || '').toLowerCase();
   const yearFilter = document.getElementById('adminOMYear')?.value || '';
   const employeFilter = document.getElementById('adminOMEmploye')?.value || '';
   const statusFilter = document.getElementById('adminOMStatus')?.value || '';
-  
+
   let data = _adminOMCache;
-  
+
   // Apply filters
-  if (search) data = data.filter(o => 
+  if (search) data = data.filter(o =>
     (o.numero || '').toLowerCase().includes(search) ||
     (o.employe || '').toLowerCase().includes(search) ||
     (o.objet || '').toLowerCase().includes(search) ||
     (o.depart || '').toLowerCase().includes(search) ||
     (o.arrivee || '').toLowerCase().includes(search)
   );
-  if (yearFilter) data = data.filter(o => o.date?.substring(0,4) === yearFilter);
+  if (yearFilter) data = data.filter(o => o.date?.substring(0, 4) === yearFilter);
   if (employeFilter) data = data.filter(o => o.employe === employeFilter);
   if (statusFilter) data = data.filter(o => (o._status || 'pending') === statusFilter);
-  
+
   // Update count
   document.getElementById('adminOMCount').textContent = `${data.length} OM`;
-  
+
   // Store filtered data for exports BEFORE the early return
   _adminOMFiltered = data;
-  
+
   if (!data.length) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Aucun ordre de mission</h3><p>Aucun résultat trouvé pour les filtres actuels.</p></div>';
     return;
   }
-  
+
   // Stats
   const totalOM = data.length;
   const fbCount = data.filter(o => o._source === 'firebase' || o._source === 'both').length;
@@ -6337,7 +6612,7 @@ function renderAdminOM() {
   const pendingCount = data.filter(o => (o._status || 'pending') === 'pending').length;
   const approvedCount = data.filter(o => o._status === 'approved').length;
   const rejectedCount = data.filter(o => o._status === 'rejected').length;
-  
+
   function statusIcon(s) {
     s = s || 'pending';
     if (s === 'approved') return '✅';
@@ -6356,7 +6631,7 @@ function renderAdminOM() {
     if (s === 'rejected') return 'rejected';
     return 'pending';
   }
-  
+
   // Render
   container.innerHTML = `
     <div class="admin-om-stats">
@@ -6373,27 +6648,27 @@ function renderAdminOM() {
       </tr></thead>
       <tbody>
         ${data.slice().reverse().map(o => {
-          const rawKey = o._localId || (o.numero || '') + '_' + (o.employe || '');
-          const key = rawKey.replace(/'/g, "\\'");
-          const s = o._status || 'pending';
-          return `
+    const rawKey = o._localId || (o.numero || '') + '_' + (o.employe || '');
+    const key = rawKey.replace(/'/g, "\\'");
+    const s = o._status || 'pending';
+    return `
           <tr>
             <td><span class="status-badge ${statusClass(s)}">${statusIcon(s)} ${statusLabel(s)}</span></td>
-            <td><strong>${esc(o.numero||'—')}</strong></td>
-            <td>${esc(o.employe||'—')}</td>
-            <td class="td-date">${esc(o.date||'—')}</td>
-            <td style="font-size:10px;">${esc(o.depart||'...')} → ${esc(o.arrivee||'...')}</td>
-            <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(o.objet||'—')}</td>
+            <td><strong>${esc(o.numero || '—')}</strong></td>
+            <td>${esc(o.employe || '—')}</td>
+            <td class="td-date">${esc(o.date || '—')}</td>
+            <td style="font-size:10px;">${esc(o.depart || '...')} → ${esc(o.arrivee || '...')}</td>
+            <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(o.objet || '—')}</td>
             <td>
               <div class="status-actions">
                 ${s !== 'approved' ? `<button class="status-btn approve" onclick="adminOMSetStatus('${key}','approved')" title="Approuver">✅</button>` : ''}
                 ${s !== 'rejected' ? `<button class="status-btn reject" onclick="adminOMSetStatus('${key}','rejected')" title="Rejeter">❌</button>` : ''}
                 ${s !== 'pending' ? `<button class="status-btn pending-btn" onclick="adminOMSetStatus('${key}','pending')" title="Remettre en attente">⏳</button>` : ''}
-                ${o.tel && o.tel !== '—' && o.tel.length > 5 ? `<a class="status-btn" href="${notifyOMByWhatsApp(o, o._status||'pending', o._comment||'')}" target="_blank" title="WhatsApp" style="text-decoration:none;background:var(--green-pale);color:var(--green);">💬</a>` : ''}
+                ${o.tel && o.tel !== '—' && o.tel.length > 5 ? `<a class="status-btn" href="${notifyOMByWhatsApp(o, o._status || 'pending', o._comment || '')}" target="_blank" title="WhatsApp" style="text-decoration:none;background:var(--green-pale);color:var(--green);">💬</a>` : ''}
               </div>
             </td>
           </tr>`;
-        }).join('')}
+  }).join('')}
       </tbody>
     </table>
   `;
@@ -6402,11 +6677,11 @@ function renderAdminOM() {
 function adminOMSetStatus(key, newStatus) {
   const item = _adminOMCache.find(o => (o._localId || (o.numero || '') + '_' + (o.employe || '')) === key);
   if (!item) return;
-  
-  const statusLabel = {approved:'✅ Approuver', rejected:'❌ Rejeter', pending:'⏳ Remettre en attente'}[newStatus] || newStatus;
+
+  const statusLabel = { approved: '✅ Approuver', rejected: '❌ Rejeter', pending: '⏳ Remettre en attente' }[newStatus] || newStatus;
   const comment = prompt(`${statusLabel} — ${esc(item.numero)} (${esc(item.employe)})\n\nSouhaitez-vous ajouter un commentaire pour le collaborateur ?`, '');
   if (comment === null) return; // cancelled
-  
+
   updateOMStatus(key, newStatus, comment || '');
 }
 
@@ -6415,13 +6690,13 @@ function updateOMStatus(key, newStatus, comment) {
   if (!item) return;
   const oldStatus = item._status || 'pending';
   if (oldStatus === newStatus) return;
-  
+
   item._status = newStatus;
   if (comment !== undefined) item._comment = comment;
-  
+
   // Update in localStorage cache
   const localData = loadOMHistory();
-  const localIdx = localData.findIndex(o => 
+  const localIdx = localData.findIndex(o =>
     o._localId === item._localId || (o.numero === item.numero && o.employe === item.employe)
   );
   if (localIdx >= 0) {
@@ -6429,22 +6704,22 @@ function updateOMStatus(key, newStatus, comment) {
     if (comment !== undefined) localData[localIdx]._comment = comment;
     localStorage.setItem(OM_STORAGE_KEY, JSON.stringify(localData));
   }
-  
+
   // Sync to Firebase if item was synced
   if (useFirebase && item._localId) {
     fbDeleteOM(item._localId)
       .then(() => fbAddOM({ ...item, _syncedToFB: true }))
       .catch(e => console.warn('FB status sync failed:', e));
   }
-  
+
   renderAdminOM();
   toast(`✅ OM ${esc(item.numero)} : ${newStatus === 'approved' ? 'Approuvé' : newStatus === 'rejected' ? 'Rejeté' : 'Remis en attente'}`, 'ok');
-  
+
   // Envoyer une notification email si le statut a changé
   if (newStatus === 'approved' || newStatus === 'rejected') {
     notifyOMByEmail(item, newStatus, comment);
   }
-  
+
   // Envoyer une notification WhatsApp si le statut a changé et qu'un téléphone est renseigné
   if ((newStatus === 'approved' || newStatus === 'rejected') && item.tel && item.tel !== '—' && item.tel.length > 5) {
     const waUrl = notifyOMByWhatsApp(item, newStatus, comment);
@@ -6464,44 +6739,44 @@ function updateOMStatus(key, newStatus, comment) {
 function adminOMExportPDF() {
   const data = _adminOMFiltered;
   if (!data.length) { toast('Aucune donnée à exporter.', 'err'); return; }
-  
+
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF('l','mm','a4');
-  
+  const doc = new jsPDF('l', 'mm', 'a4');
+
   // Header with Eqnovia logo
-  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch(e) { /* fallback */ }
-  doc.setFontSize(8); doc.setTextColor(247,147,30); doc.setFont(undefined,'normal');
+  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch (e) { /* fallback */ }
+  doc.setFontSize(8); doc.setTextColor(247, 147, 30); doc.setFont(undefined, 'normal');
   doc.text('Notes de Frais', 38, 22);
-  doc.setFontSize(14); doc.setTextColor(53,61,79); doc.setFont(undefined,'bold');
-  doc.text('Ordres de mission — Admin Global', 148, 20, {align:'center'});
-  doc.setFontSize(8); doc.setTextColor(142,151,168);
-  doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${data.length} OM`, 148, 26, {align:'center'});
-  doc.setDrawColor(11,79,158); doc.line(20, 30, 290, 30);
+  doc.setFontSize(14); doc.setTextColor(53, 61, 79); doc.setFont(undefined, 'bold');
+  doc.text('Ordres de mission — Admin Global', 148, 20, { align: 'center' });
+  doc.setFontSize(8); doc.setTextColor(142, 151, 168);
+  doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${data.length} OM`, 148, 26, { align: 'center' });
+  doc.setDrawColor(11, 79, 158); doc.line(20, 30, 290, 30);
 
   // Build table
   const rows = data.slice().reverse().map(o => [
     o.numero || '—',
     o.employe || '—',
     o.date || '—',
-    (o.depart||'') + ' → ' + (o.arrivee||''),
-    (o.objet||'').substring(0,30),
+    (o.depart || '') + ' → ' + (o.arrivee || ''),
+    (o.objet || '').substring(0, 30),
     o.transport || '—',
-    {approved:'✅ Approuvé', rejected:'❌ Rejeté', pending:'⏳ En attente'}[o._status||'pending'],
-    {firebase:'☁️ FB', local:'💻 Local', both:'✅ Les deux'}[o._source]||'—'
+    { approved: '✅ Approuvé', rejected: '❌ Rejeté', pending: '⏳ En attente' }[o._status || 'pending'],
+    { firebase: '☁️ FB', local: '💻 Local', both: '✅ Les deux' }[o._source] || '—'
   ]);
 
   doc.autoTable({
-    startY: 35, head: [['N° OM','Collaborateur','Date','Trajet','Objet','Transport','Statut','Source']],
-    body: rows, margin: {left:15, right:15},
-    theme: 'grid', headStyles: {fillColor: [11,79,158], fontSize:7},
-    bodyStyles: {fontSize:6}, styles: {cellPadding:2},
+    startY: 35, head: [['N° OM', 'Collaborateur', 'Date', 'Trajet', 'Objet', 'Transport', 'Statut', 'Source']],
+    body: rows, margin: { left: 15, right: 15 },
+    theme: 'grid', headStyles: { fillColor: [11, 79, 158], fontSize: 7 },
+    bodyStyles: { fontSize: 6 }, styles: { cellPadding: 2 },
     didDrawPage: (d) => { /* footer handled below */ }
   });
 
   const fy = doc.lastAutoTable.finalY + 6;
   doc.setDrawColor(200); doc.line(15, fy, 280, fy);
-  doc.setFontSize(7); doc.setTextColor(142,151,168);
-  doc.text('eqnovia · Notes de Frais · Ordres de mission globaux', 148, fy + 4, {align:'center'});
+  doc.setFontSize(7); doc.setTextColor(142, 151, 168);
+  doc.text('eqnovia · Notes de Frais · Ordres de mission globaux', 148, fy + 4, { align: 'center' });
   doc.save(`om_global_${new Date().toISOString().split('T')[0]}.pdf`);
   toast('📄 Export PDF des OM téléchargé !');
 }
@@ -6509,14 +6784,14 @@ function adminOMExportPDF() {
 function adminOMExportExcel() {
   const data = _adminOMFiltered;
   if (!data.length) { toast('Aucune donnée à exporter.', 'err'); return; }
-  
+
   const rows = [
     ['eqnovia · Ordres de mission (Admin Global)', '', '', '', '', '', '', ''],
     [`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${data.length} OM`, '', '', '', '', '', '', ''],
     ['', '', '', '', '', '', '', ''],
     ['N° OM', 'Collaborateur', 'Date', 'Départ', 'Arrivée', 'Objet', 'Statut', 'Source']
   ];
-  
+
   data.slice().reverse().forEach(o => {
     rows.push([
       o.numero || '—',
@@ -6525,14 +6800,14 @@ function adminOMExportExcel() {
       o.depart || '—',
       o.arrivee || '—',
       o.objet || '—',
-      {approved:'Approuvé', rejected:'Rejeté', pending:'En attente'}[o._status||'pending'],
-      {firebase:'Firebase', local:'Local', both:'Les deux'}[o._source]||'—'
+      { approved: 'Approuvé', rejected: 'Rejeté', pending: 'En attente' }[o._status || 'pending'],
+      { firebase: 'Firebase', local: 'Local', both: 'Les deux' }[o._source] || '—'
     ]);
   });
-  
+
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{wch:14},{wch:20},{wch:12},{wch:14},{wch:14},{wch:30},{wch:14},{wch:14}];
+  ws['!cols'] = [{ wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 30 }, { wch: 14 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, ws, 'OM Global');
   XLSX.writeFile(wb, `om_global_${new Date().toISOString().split('T')[0]}.xlsx`);
   toast('📊 Export Excel des OM téléchargé !');
@@ -6571,7 +6846,7 @@ async function dataLoadOM() {
           localStorage.setItem(OM_STORAGE_KEY, JSON.stringify(merged));
         }
       }
-    } catch(e) { console.warn('dataLoadOM error:', e); }
+    } catch (e) { console.warn('dataLoadOM error:', e); }
   }
   renderOMHistory();
 }
@@ -6606,17 +6881,17 @@ async function init() {
     renderAll();
     updateRembNotif();
     notifyNonRembourses();
-    
+
     // Initialize OM history (Firebase + localStorage merge)
     await dataLoadOM();  // also calls renderOMHistory() internally
-    
+
     // Initialize mission orders (new system)
     await dataLoadMissionOrders();
     await dataLoadUserMissionOrders();
-    
+
     // Render dashboard mission orders for non-admin users
     if (!isAdmin) renderDashboardMissionOrders();
-    
+
     // Initialize bottom nav active state
     TABS.forEach(id => {
       document.getElementById(`bnav-${id}`)?.classList.toggle('active', id === activeTab);
@@ -6628,7 +6903,7 @@ async function init() {
 }
 
 // Démarrer l'application
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   // Synchronise les listes déroulantes avec les utilisateurs persistés
   updateLoginUserSelect();
   updateUserSelector();
@@ -6638,12 +6913,18 @@ document.addEventListener('DOMContentLoaded', function() {
     if (lastUser && USERS[lastUser]) {
       document.getElementById('loginUser').value = lastUser;
     }
-  } catch(e) {}
+  } catch (e) { }
 
   // Initialiser les dropdowns utilisateurs personnalisés
   initUserDropdowns();
 
-  document.getElementById('loginOverlay').classList.remove('hidden');
+  // Restaurer la session utilisateur active si déjà connecté (reste connecté après actualisation F5)
+  const restored = restoreAuthSession();
+  if (!restored) {
+    document.documentElement.classList.remove('is-authenticated');
+    document.getElementById('loginOverlay').classList.remove('hidden');
+    document.querySelectorAll('#appContent').forEach(el => el.style.display = 'none');
+  }
 });
 
 // ════════════════════════════════════════════
@@ -6731,6 +7012,8 @@ function initUserDropdowns() {
     onChange: (val) => {
       // Auto-focus password field when user is selected
       if (val) document.getElementById('loginPassword')?.focus();
+      const errEl = document.getElementById('loginError');
+      if (errEl) errEl.style.display = 'none';
     }
   });
 }
@@ -6738,7 +7021,7 @@ function initUserDropdowns() {
 // Service Worker PWA
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').catch(() => { });
   });
 }
 
@@ -6758,10 +7041,10 @@ function getAllJustificatifs() {
         id: e.id + '_' + fi,
         expenseId: e.id,
         date: e.date,
-        desc: e.desc + (files.length > 1 ? ` (justif ${fi+1}/${files.length})` : ''),
+        desc: e.desc + (files.length > 1 ? ` (justif ${fi + 1}/${files.length})` : ''),
         user: e.user,
         justifData: url,
-        justifName: f.name || 'Justificatif ' + (fi+1),
+        justifName: f.name || 'Justificatif ' + (fi + 1),
         amount: e.amount,
         cat: e.cat,
         mission: e.mission

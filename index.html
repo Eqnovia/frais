@@ -1,25 +1,29 @@
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="theme-color" content="#0B4F9E"/>
-  <link rel="manifest" href="manifest.json"/>
-  <link rel="icon" type="image/png" href="logo.PNG"/>
-  <link rel="apple-touch-icon" href="logo.PNG"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0B4F9E" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" href="logo.PNG" />
+  <link rel="apple-touch-icon" href="logo.PNG" />
   <title>Frais — Eqnovia</title>
-  <meta name="description" content="Application de gestion des notes de frais Eqnovia. Saisie, OCR, historique, export PDF/Excel. Base de données Firebase."/>
-  
+  <meta name="description"
+    content="Application de gestion des notes de frais Eqnovia. Saisie, OCR, historique, export PDF/Excel. Base de données Firebase." />
+
   <!-- Security Headers -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' data: blob: https://www.gstatic.com https://firestore.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob: data:; frame-src 'self' https:;"/>
-  <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
-  <meta http-equiv="X-XSS-Protection" content="1; mode=block"/>
-  <meta name="referrer" content="strict-origin-when-cross-origin"/>
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' data: blob: https://www.gstatic.com https://firestore.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob: data:; frame-src 'self' https:;" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
 
   <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
-  
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+
   <!-- Libs -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -28,8 +32,8 @@
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script>if(typeof pdfjsLib!=='undefined'){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
-  
+  <script>if (typeof pdfjsLib !== 'undefined') { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }</script>
+
   <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -75,146 +79,188 @@
       window.__getDownloadURL = getDownloadURL;
       window.__deleteObject = deleteObject;
       window.__fbReady = true;
-    } catch(e) {
+    } catch (e) {
       console.warn('Firebase non configuré, mode local actif.', e);
       window.__fbReady = false;
     }
   </script>
 
   <!-- Styles -->
-  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Session Persistence (évite le flash de login lors du rechargement de page) -->
+  <script>
+    try {
+      if (localStorage.getItem('eqnovia_auth_session_v1')) {
+        document.documentElement.classList.add('is-authenticated');
+      }
+    } catch (e) { }
+  </script>
+  <style>
+    html.is-authenticated #loginOverlay {
+      display: none !important;
+    }
+
+    html.is-authenticated .app-header#appContent {
+      display: flex !important;
+    }
+
+    html.is-authenticated .sidebar#appContent {
+      display: flex !important;
+    }
+
+    html.is-authenticated .content#appContent {
+      display: block !important;
+    }
+  </style>
 
 </head>
+
 <body>
 
-<!-- LOGIN OVERLAY -->
-<div id="loginOverlay">
-  <div class="login-card">
-    <img src="logo.PNG" alt="Eqnovia" class="login-logo"/>
-    <h2>🔐 Accès sécurisé</h2>
-    <p>Veuillez vous authentifier pour accéder à l'application</p>
-    <div class="form-group">
-      <label class="form-label" for="loginUser">Utilisateur</label>
-      <select class="form-input" id="loginUser" style="height:44px;">
-        <option value="admin">Administrateur</option>
-        <option value="user1">Rachid Bayed</option>
-        <option value="user2">Soufiane Laraichi</option>
-        <option value="user3">Bourzgui Fatima Zahra</option>
-        <option value="user4">Larbi Ramzi</option>
-        <option value="user5">Ibrahime</option>
-        <option value="user7">Omar AGUERSIF</option>
-        <option value="comptable">Comptable</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label class="form-label" for="loginPassword">Mot de passe</label>
-      <input type="password" class="form-input" id="loginPassword" placeholder="Entrez le mot de passe" onkeydown="if(event.key==='Enter') login()"/>
-    </div>
-    <button class="btn btn-primary btn-lg" onclick="login()">Se connecter</button>
-    <div class="login-error" id="loginError">❌ Mot de passe incorrect</div>
-  </div>
-</div>
-
-<!-- TOAST -->
-<div id="toast" role="alert" aria-live="polite">
-  <div class="toast-icon ok" id="toastIcon">✓</div>
-  <span id="toastMsg"></span>
-  <div class="toast-bar" id="toastBar"></div>
-</div>
-
-<!-- MODAL (confirm) -->
-<div class="modal-overlay" id="modal" role="dialog" aria-modal="true">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 id="modalTitle">Confirmation</h3>
-      <button class="modal-close" onclick="closeModal()" aria-label="Fermer la fenêtre">✕</button>
-    </div>
-    <div class="modal-body"><p id="modalMsg" style="color:var(--gray-700);"></p></div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
-      <button class="btn btn-danger" id="modalOk">Confirmer</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL (edit expense) -->
-<div class="modal-overlay" id="editModal" role="dialog" aria-modal="true">
-  <div class="modal">
-    <div class="modal-header">
-      <h3>✏️ Modifier la dépense</h3>
-      <button class="modal-close" onclick="closeEditModal()" aria-label="Fermer la fenêtre">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label" for="editDate">Date *</label>
-          <input type="date" class="form-input" id="editDate"/>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="editCat">Type de dépenses</label>
-          <select class="form-select" id="editCat">
-            <option value="Transport">🚗 Transport</option>
-            <option value="Repas">🍽️ Repas</option>
-            <option value="Hébergement">🏨 Hébergement</option>
-            <option value="Matériel">📦 Matériel</option>
-            <option value="Communication">📞 Communication</option>
-            <option value="Formation">🎓 Formation</option>
-            <option value="Autre">📌 Autre</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="editAmount">Total TTC (DH) *</label>
-          <input type="number" class="form-input" id="editAmount" step="0.01" min="0.01" placeholder="0,00"/>
-        </div>
-        <div class="form-group span-2">
-          <label class="form-label" for="editDesc">Description *</label>
-          <input type="text" class="form-input" id="editDesc" placeholder="Description de la dépense" autocomplete="off"/>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="editMission">Objet de la mission</label>
-          <input type="text" class="form-input" id="editMission" placeholder="Ex : Mission client Casablanca" autocomplete="off"/>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="editComment">Commentaires</label>
-          <input type="text" class="form-input" id="editComment" placeholder="Remarques éventuelles..." autocomplete="off"/>
-        </div>
-        <div class="form-group span-2">
-          <label class="form-label" for="editJustifInput">📎 Justificatif (photo/facture)</label>
-          <div id="editJustifCurrent" style="font-size:11px;color:var(--gray-400);margin-bottom:4px;"></div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <input type="file" class="form-input" id="editJustifInput" accept="image/*,.pdf" multiple style="padding:6px 12px;flex:1;min-width:150px;" onchange="previewEditJustificatif(event)"/>
-            <div id="editJustifPreview" style="width:50px;height:50px;border-radius:6px;border:1px solid var(--gray-200);display:none;overflow:hidden;flex-shrink:0;">
-              <img id="editJustifPreviewImg" src="" alt="Aperçu" style="width:100%;height:100%;object-fit:cover;"/>
-            </div>
-            <button type="button" class="btn btn-ghost" id="editJustifClearBtn" style="display:none;height:30px;font-size:10px;padding:0 8px;" onclick="clearEditJustificatif()">✕ Effacer</button>
-          </div>
-          <div id="editJustifFileName" style="font-size:10px;color:var(--gray-400);margin-top:2px;"></div>
+  <!-- LOGIN OVERLAY -->
+  <div id="loginOverlay">
+    <div class="login-card">
+      <img src="logo.PNG" alt="Eqnovia" class="login-logo" />
+      <h2>🔐 Accès sécurisé</h2>
+      <p>Veuillez vous authentifier pour accéder à l'application</p>
+      <div class="form-group">
+        <label class="form-label" for="loginUser">Utilisateur</label>
+        <select class="form-input" id="loginUser" style="height:44px;">
+          <option value="admin">Administrateur</option>
+          <option value="user1">Rachid Bayed</option>
+          <option value="user2">Soufiane Laraichi</option>
+          <option value="user3">Bourzgui Fatimazahra</option>
+          <option value="user4">Larbi Ramzi</option>
+          <option value="user5">Ibrahime</option>
+          <option value="user7">Omar Aguersif</option>
+          <option value="comptable">Comptable</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="loginPassword">Mot de passe</label>
+        <div style="position:relative;display:flex;align-items:center;">
+          <input type="password" class="form-input" id="loginPassword" placeholder="Entrez le mot de passe"
+            onkeydown="if(event.key==='Enter') login()" style="padding-right:42px;" />
+          <button type="button" id="togglePasswordBtn" onclick="togglePasswordVisibility()"
+            aria-label="Afficher ou masquer le mot de passe" title="Afficher / Masquer le mot de passe"
+            style="position:absolute;right:8px;background:none;border:none;cursor:pointer;font-size:18px;color:var(--gray-500);padding:4px;display:flex;align-items:center;justify-content:center;line-height:1;">👁️</button>
         </div>
       </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeEditModal()">Annuler</button>
-      <button class="btn btn-primary" id="editSaveBtn" onclick="saveEdit()">💾 Enregistrer les modifications</button>
+      <button class="btn btn-primary btn-lg" onclick="login()">Se connecter</button>
+      <div class="login-error" id="loginError" style="line-height:1.4;margin-top:10px;">❌ Mot de passe incorrect</div>
     </div>
   </div>
-</div>
 
-<!-- MODAL (justificatif) -->
-<div class="modal-overlay" id="justifModal" role="dialog" aria-modal="true">
-  <div class="modal">
-    <div class="modal-header">
-      <h3>📎 Justificatif de la dépense</h3>
-      <button class="modal-close" onclick="closeJustifModal()" aria-label="Fermer la fenêtre">✕</button>
-    </div>
-    <div class="modal-body" id="justifBody" style="text-align:center;">
-      <p style="color:var(--gray-400);">Aucun justificatif pour cette dépense.</p>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeJustifModal()">Fermer</button>
+  <!-- TOAST -->
+  <div id="toast" role="alert" aria-live="polite">
+    <div class="toast-icon ok" id="toastIcon">✓</div>
+    <span id="toastMsg"></span>
+    <div class="toast-bar" id="toastBar"></div>
+  </div>
+
+  <!-- MODAL (confirm) -->
+  <div class="modal-overlay" id="modal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle">Confirmation</h3>
+        <button class="modal-close" onclick="closeModal()" aria-label="Fermer la fenêtre">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="modalMsg" style="color:var(--gray-700);"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+        <button class="btn btn-danger" id="modalOk">Confirmer</button>
+      </div>
     </div>
   </div>
+
+  <!-- MODAL (edit expense) -->
+  <div class="modal-overlay" id="editModal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>✏️ Modifier la dépense</h3>
+        <button class="modal-close" onclick="closeEditModal()" aria-label="Fermer la fenêtre">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="editDate">Date *</label>
+            <input type="date" class="form-input" id="editDate" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editCat">Type de dépenses</label>
+            <select class="form-select" id="editCat">
+              <option value="Transport">🚗 Transport</option>
+              <option value="Repas">🍽️ Repas</option>
+              <option value="Hébergement">🏨 Hébergement</option>
+              <option value="Matériel">📦 Matériel</option>
+              <option value="Communication">📞 Communication</option>
+              <option value="Formation">🎓 Formation</option>
+              <option value="Autre">📌 Autre</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editAmount">Total TTC (DH) *</label>
+            <input type="number" class="form-input" id="editAmount" step="0.01" min="0.01" placeholder="0,00" />
+          </div>
+          <div class="form-group span-2">
+            <label class="form-label" for="editDesc">Description *</label>
+            <input type="text" class="form-input" id="editDesc" placeholder="Description de la dépense"
+              autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editMission">Objet de la mission</label>
+            <input type="text" class="form-input" id="editMission" placeholder="Ex : Mission client Casablanca"
+              autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editComment">Commentaires</label>
+            <input type="text" class="form-input" id="editComment" placeholder="Remarques éventuelles..."
+              autocomplete="off" />
+          </div>
+          <div class="form-group span-2">
+            <label class="form-label" for="editJustifInput">📎 Justificatif (photo/facture)</label>
+            <div id="editJustifCurrent" style="font-size:11px;color:var(--gray-400);margin-bottom:4px;"></div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <input type="file" class="form-input" id="editJustifInput" accept="image/*,.pdf" multiple
+                style="padding:6px 12px;flex:1;min-width:150px;" onchange="previewEditJustificatif(event)" />
+              <div id="editJustifPreview"
+                style="width:50px;height:50px;border-radius:6px;border:1px solid var(--gray-200);display:none;overflow:hidden;flex-shrink:0;">
+                <img id="editJustifPreviewImg" src="" alt="Aperçu" style="width:100%;height:100%;object-fit:cover;" />
+              </div>
+              <button type="button" class="btn btn-ghost" id="editJustifClearBtn"
+                style="display:none;height:30px;font-size:10px;padding:0 8px;" onclick="clearEditJustificatif()">✕
+                Effacer</button>
+            </div>
+            <div id="editJustifFileName" style="font-size:10px;color:var(--gray-400);margin-top:2px;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeEditModal()">Annuler</button>
+        <button class="btn btn-primary" id="editSaveBtn" onclick="saveEdit()">💾 Enregistrer les modifications</button>
+      </div>
+    </div>
   </div>
-  
+
+  <!-- MODAL (justificatif) -->
+  <div class="modal-overlay" id="justifModal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>📎 Justificatif de la dépense</h3>
+        <button class="modal-close" onclick="closeJustifModal()" aria-label="Fermer la fenêtre">✕</button>
+      </div>
+      <div class="modal-body" id="justifBody" style="text-align:center;">
+        <p style="color:var(--gray-400);">Aucun justificatif pour cette dépense.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeJustifModal()">Fermer</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL (user management) -->
   <div class="modal-overlay" id="userModal" role="dialog" aria-modal="true">
     <div class="modal" style="max-width:600px;">
@@ -224,15 +270,18 @@
       </div>
       <div class="modal-body">
         <div style="margin-bottom:16px;">
-          <h4 style="font-size:13px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">Ajouter un utilisateur</h4>
+          <h4
+            style="font-size:13px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">
+            Ajouter un utilisateur</h4>
           <div class="form-grid">
             <div class="form-group">
               <label class="form-label" for="newUserName">Nom complet</label>
-              <input type="text" class="form-input" id="newUserName" placeholder="Ex: Jean Dupont" autocomplete="off"/>
+              <input type="text" class="form-input" id="newUserName" placeholder="Ex: Jean Dupont" autocomplete="off" />
             </div>
             <div class="form-group">
               <label class="form-label" for="newUserPassword">Mot de passe</label>
-              <input type="text" class="form-input" id="newUserPassword" placeholder="Mot de passe" autocomplete="off"/>
+              <input type="text" class="form-input" id="newUserPassword" placeholder="Mot de passe"
+                autocomplete="off" />
             </div>
             <div class="form-group">
               <label class="form-label" for="newUserRole">Rôle</label>
@@ -247,7 +296,9 @@
           </div>
         </div>
         <div style="border-top:1px solid var(--gray-200);padding-top:16px;">
-          <h4 style="font-size:13px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">Liste des utilisateurs</h4>
+          <h4
+            style="font-size:13px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">
+            Liste des utilisateurs</h4>
           <div id="usersList" style="max-height:300px;overflow-y:auto;"></div>
         </div>
       </div>
@@ -256,924 +307,1060 @@
       </div>
     </div>
   </div>
-    </div>
+  </div>
   </div>
 
   <!-- HEADER (lightweight) -->
-<header class="app-header" id="appContent" style="display:none;">
-  <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()" aria-label="Menu" aria-expanded="false">
-    ☰
-  </button>
-  <div class="logo-wrap"><img src="logo.PNG" alt="Eqnovia" class="app-logo"/></div>
-  <span class="app-header-title">Frais</span>
-  <span class="app-header-subtitle" aria-hidden="true">Saisie & OCR</span>
-  <div class="app-header-right">
-    <div class="db-status db-local" id="dbStatus">
-      <span>⏳</span> <span id="dbStatusText">Connexion…</span>
-    </div>
-    <div class="db-status" id="modeStatus">
-      <span>💻</span> <span id="modeStatusText">Local</span>
-    </div>
-
-    <div class="avatar" id="avatarDisplay">EQ</div>
-  </div>
-</header>
-
-<!-- SIDEBAR OVERLAY -->
-<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
-
-<!-- SIDEBAR -->
-<aside class="sidebar" id="appContent" role="navigation" aria-label="Navigation principale" style="display:none;">
-  <span class="nav-label"><span class="nav-label-icon">📊</span> Tableau de bord</span>
-  <a class="nav-item active" data-tooltip="Saisie & OCR" onclick="switchTab('saisie')" id="nav-saisie">
-    <span class="nav-icon">✏️</span> <span>Saisie & OCR</span>
-  </a>
-  <a class="nav-item" data-tooltip="Remboursement" onclick="switchTab('remboursement')" id="nav-remboursement">
-    <span class="nav-icon">💰</span> <span>Remboursement</span>
-    <span class="remb-notif-dot" id="rembNotifDot" style="display:none;">!</span>
-  </a>
-
-  <span class="nav-label"><span class="nav-label-icon">📁</span> Historique</span>
-  <a class="nav-item" data-tooltip="Toutes" onclick="switchTab('all')" id="nav-all">
-    <span class="nav-icon">📋</span> <span>Toutes</span>
-  </a>
-  <a class="nav-item" data-tooltip="Par mois" onclick="switchTab('monthly')" id="nav-monthly">
-    <span class="nav-icon">📅</span> <span>Par mois</span>
-  </a>
-  <a class="nav-item" data-tooltip="Par année" onclick="switchTab('yearly')" id="nav-yearly">
-    <span class="nav-icon">📆</span> <span>Par année</span>
-  </a>
-  <a class="nav-item" data-tooltip="Par trimestre" onclick="switchTab('trimestre')" id="nav-trimestre">
-    <span class="nav-icon">📊</span> <span>Par trimestre</span>
-  </a>
-  <a class="nav-item" data-tooltip="Comparaison" onclick="switchTab('comparison')" id="nav-comparison">
-    <span class="nav-icon">📈</span> <span>Comparaison</span>
-  </a>
-  <a class="nav-item" data-tooltip="Ordre de mission" onclick="switchTab('mission')" id="nav-mission" style="display:none;">
-    <span class="nav-icon">📝</span> <span>Ordre de mission</span>
-  </a>
-  <a class="nav-item" data-tooltip="Mes ordres de mission" onclick="switchTab('user-missions')" id="nav-user-missions" style="display:none;">
-    <span class="nav-icon">📋</span> <span>Mes OM</span>
-  </a>
-
-  <span class="nav-label"><span class="nav-label-icon">📤</span> Exports</span>
-  <a class="nav-item" data-tooltip="PDF" onclick="exportPDF()">
-    <span class="nav-icon">📄</span> <span>PDF</span>
-  </a>
-  <a class="nav-item" data-tooltip="Excel" onclick="exportExcel()">
-    <span class="nav-icon">📊</span> <span>Excel</span>
-  </a>
-
-  <span class="nav-label" id="adminOnlyBackupLabel"><span class="nav-label-icon">💾</span> Sauvegarde</span>
-  <a class="nav-item" data-tooltip="Sauvegarde" onclick="switchTab('backup')" id="nav-backup">
-    <span class="nav-icon">📦</span> <span>Backup Justificatifs</span>
-  </a>
-
-  <span class="nav-label" id="adminOnlyLabel"><span class="nav-label-icon">⚙️</span> Gestion</span>
-  <a class="nav-item" id="adminUsersBtn" data-tooltip="Gestion utilisateurs" onclick="openUserManager()">
-    <span class="nav-icon">👥</span> <span>Utilisateurs</span>
-  </a>
-  <a class="nav-item" id="adminOMBtn" data-tooltip="Ordres de mission" onclick="switchTab('admin-om')" style="color:var(--eq-blue);">
-    <span class="nav-icon">📋</span> <span>OM Global</span>
-  </a>
-  
-  <span class="nav-label" id="adminOnlyInfoLabel"><span class="nav-label-icon">ℹ️</span> Informations</span>
-  <a class="nav-item" data-tooltip="Conditions" onclick="switchTab('policy')" id="nav-policy">
-    <span class="nav-icon">📜</span> <span>Conditions</span>
-  </a>
-
-  <div class="sidebar-footer">
-    <div class="sidebar-bottom-row">
-      <div class="user-selector">
-        <label>   </label>
-        <select id="userSelector">
-          <option value="admin"> Admin</option>
-          <option value="user1">👤 Rachid Bayed</option>
-          <option value="user2">👤 Soufiane Laraichi</option>
-          <option value="user3">👤 Fatima zahra Bourzgui</option>
-          <option value="user4">👤 Larbi Ramzi</option>
-          <option value="user5">👤 Ibrahime</option>
-          <option value="user7">👤 Omar AGUERSIF</option>
-          <option value="comptable">🧑‍💼 Comptable</option>
-        </select>
-        <span class="user-badge admin" id="userBadge">Admin</span>
+  <header class="app-header" id="appContent" style="display:none;">
+    <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()" aria-label="Menu" aria-expanded="false">
+      ☰
+    </button>
+    <div class="logo-wrap"><img src="logo.PNG" alt="Eqnovia" class="app-logo" /></div>
+    <span class="app-header-title">Frais</span>
+    <span class="app-header-subtitle" aria-hidden="true">Saisie & OCR</span>
+    <div class="app-header-right">
+      <div class="db-status db-local" id="dbStatus">
+        <span>⏳</span> <span id="dbStatusText">Connexion…</span>
       </div>
-      <!-- From Uiverse.io by kennyotsu-monochromia -->
-      <button class="logout-btn" onclick="logout()">
-        <div class="sign"><svg viewBox="0 0 512 512"><path d="M377.9 105.9L500.7 228.7c7.2 7.2 11.3 17.1 11.3 27.3s-4.1 20.1-11.3 27.3L377.9 406.1c-6.4 6.4-15 9.9-24 9.9c-18.7 0-33.9-15.2-33.9-33.9l0-62.1-128 0c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l128 0 0-62.1c0-18.7 15.2-33.9 33.9-33.9c9 0 17.6 3.6 24 9.9zM160 96L96 96c-17.7 0-32 14.3-32 32l0 256c0 17.7 14.3 32 32 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c-53 0-96-43-96-96L0 128C0 75 43 32 96 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32z"></path></svg></div>
-        <div class="text">Déconnexion</div>
-      </button>
+      <div class="db-status" id="modeStatus">
+        <span>💻</span> <span id="modeStatusText">Local</span>
+      </div>
 
-      <p>Eqnovia © 2025</p>
+      <div class="avatar" id="avatarDisplay">EQ</div>
     </div>
-  </div>
-  
-</aside>
+  </header>
 
-<!-- CONTENT -->
-<main class="layout">
-<div class="content" id="appContent" style="display:none;">
+  <!-- SIDEBAR OVERLAY -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 
-  <!-- KPIs -->
-  <div class="stats-grid">
-    <div class="stat-card blue">
-      <div class="stat-icon blue">💰</div>
-      <div class="stat-label">Total général</div>
-      <div class="stat-value" id="kpiTotal">0,00 DH</div>
-      <div class="stat-sub" id="kpiCount">0 dépense(s)</div>
-    </div>
-    <div class="stat-card" style="background:var(--green-pale,#e8f5e9);">
-      <div class="stat-icon" style="background:var(--green,#2e7d32);color:#fff;">✅</div>
-      <div class="stat-label">Frais remboursés</div>
-      <div class="stat-value" id="kpiRemb">0,00 DH</div>
-      <div class="stat-sub">0 dépense(s) remboursée(s)</div>
-    </div>
-    <div class="stat-card" style="background:var(--red-pale,#ffebee);">
-      <div class="stat-icon" style="background:var(--red,#c62828);color:#fff;">⏳</div>
-      <div class="stat-label">Non remboursés</div>
-      <div class="stat-value" id="kpiNonRemb">0,00 DH</div>
-      <div class="stat-sub">0 en attente</div>
-    </div>
-    <div class="stat-card orange">
-      <div class="stat-icon orange">📅</div>
-      <div class="stat-label">Ce mois-ci</div>
-      <div class="stat-value" id="kpiMonth">0,00 DH</div>
-      <div class="stat-sub" id="kpiMonthLabel">—</div>
-    </div>
-  </div>
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="appContent" role="navigation" aria-label="Navigation principale" style="display:none;">
+    <span class="nav-label"><span class="nav-label-icon">📊</span> Tableau de bord</span>
+    <a class="nav-item active" data-tooltip="Saisie & OCR" onclick="switchTab('saisie')" id="nav-saisie">
+      <span class="nav-icon">✏️</span> <span>Saisie & OCR</span>
+    </a>
+    <a class="nav-item" data-tooltip="Remboursement" onclick="switchTab('remboursement')" id="nav-remboursement">
+      <span class="nav-icon">💰</span> <span>Remboursement</span>
+      <span class="remb-notif-dot" id="rembNotifDot" style="display:none;">!</span>
+    </a>
 
-  <!-- PAGE TABS REMOVED: navigation is now exclusively in the right sidebar -->
+    <span class="nav-label"><span class="nav-label-icon">📁</span> Historique</span>
+    <a class="nav-item" data-tooltip="Toutes" onclick="switchTab('all')" id="nav-all">
+      <span class="nav-icon">📋</span> <span>Toutes</span>
+    </a>
+    <a class="nav-item" data-tooltip="Par mois" onclick="switchTab('monthly')" id="nav-monthly">
+      <span class="nav-icon">📅</span> <span>Par mois</span>
+    </a>
+    <a class="nav-item" data-tooltip="Par année" onclick="switchTab('yearly')" id="nav-yearly">
+      <span class="nav-icon">📆</span> <span>Par année</span>
+    </a>
+    <a class="nav-item" data-tooltip="Par trimestre" onclick="switchTab('trimestre')" id="nav-trimestre">
+      <span class="nav-icon">📊</span> <span>Par trimestre</span>
+    </a>
+    <a class="nav-item" data-tooltip="Comparaison" onclick="switchTab('comparison')" id="nav-comparison">
+      <span class="nav-icon">📈</span> <span>Comparaison</span>
+    </a>
+    <a class="nav-item" data-tooltip="Ordre de mission" onclick="switchTab('mission')" id="nav-mission"
+      style="display:none;">
+      <span class="nav-icon">📝</span> <span>Ordre de mission</span>
+    </a>
+    <a class="nav-item" data-tooltip="Mes ordres de mission" onclick="switchTab('user-missions')" id="nav-user-missions"
+      style="display:none;">
+      <span class="nav-icon">📋</span> <span>Mes OM</span>
+    </a>
 
-  <!-- ══ TAB: SAISIE & OCR ══ -->
-  <div id="tab-content-saisie" role="tabpanel" aria-labelledby="tab-saisie">
-    <!-- Mobile Section Header -->
-    <div class="mobile-section-header" style="display:none;">
-      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
-      <span class="section-label">Section :</span>
-      <span class="section-name">Saisie & OCR</span>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" class="input-form-grid">
+    <span class="nav-label"><span class="nav-label-icon">📤</span> Exports</span>
+    <a class="nav-item" data-tooltip="PDF" onclick="exportPDF()">
+      <span class="nav-icon">📄</span> <span>PDF</span>
+    </a>
+    <a class="nav-item" data-tooltip="Excel" onclick="exportExcel()">
+      <span class="nav-icon">📊</span> <span>Excel</span>
+    </a>
 
-      <!-- Saisie -->
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><div class="panel-icon blue">✏️</div> Saisie manuelle</div>
+    <span class="nav-label" id="adminOnlyBackupLabel"><span class="nav-label-icon">💾</span> Sauvegarde</span>
+    <a class="nav-item" data-tooltip="Sauvegarde" onclick="switchTab('backup')" id="nav-backup">
+      <span class="nav-icon">📦</span> <span>Backup Justificatifs</span>
+    </a>
+
+    <span class="nav-label" id="adminOnlyLabel"><span class="nav-label-icon">⚙️</span> Gestion</span>
+    <a class="nav-item" id="adminUsersBtn" data-tooltip="Gestion utilisateurs" onclick="openUserManager()">
+      <span class="nav-icon">👥</span> <span>Utilisateurs</span>
+    </a>
+    <a class="nav-item" id="adminOMBtn" data-tooltip="Ordres de mission" onclick="switchTab('admin-om')"
+      style="color:var(--eq-blue);">
+      <span class="nav-icon">📋</span> <span>OM Global</span>
+    </a>
+
+    <span class="nav-label" id="adminOnlyInfoLabel"><span class="nav-label-icon">ℹ️</span> Informations</span>
+    <a class="nav-item" data-tooltip="Conditions" onclick="switchTab('policy')" id="nav-policy">
+      <span class="nav-icon">📜</span> <span>Conditions</span>
+    </a>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-bottom-row">
+        <div class="user-selector">
+          <label> </label>
+          <select id="userSelector">
+            <option value="admin"> Admin</option>
+            <option value="user1">👤 Rachid Bayed</option>
+            <option value="user2">👤 Soufiane Laraichi</option>
+            <option value="user3">👤 Fatima zahra Bourzgui</option>
+            <option value="user4">👤 Larbi Ramzi</option>
+            <option value="user5">👤 Ibrahime</option>
+            <option value="user7">👤 Omar AGUERSIF</option>
+            <option value="comptable">🧑‍💼 Comptable</option>
+          </select>
+          <span class="user-badge admin" id="userBadge">Admin</span>
         </div>
-        <div class="panel-body">
-          <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label" for="dateInput">Date *</label>
-              <input type="date" class="form-input" id="dateInput"/>
+        <!-- From Uiverse.io by kennyotsu-monochromia -->
+        <button class="logout-btn" onclick="logout()">
+          <div class="sign"><svg viewBox="0 0 512 512">
+              <path
+                d="M377.9 105.9L500.7 228.7c7.2 7.2 11.3 17.1 11.3 27.3s-4.1 20.1-11.3 27.3L377.9 406.1c-6.4 6.4-15 9.9-24 9.9c-18.7 0-33.9-15.2-33.9-33.9l0-62.1-128 0c-17.7 0-32-14.3-32-32l0-64c0-17.7 14.3-32 32-32l128 0 0-62.1c0-18.7 15.2-33.9 33.9-33.9c9 0 17.6 3.6 24 9.9zM160 96L96 96c-17.7 0-32 14.3-32 32l0 256c0 17.7 14.3 32 32 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-64 0c-53 0-96-43-96-96L0 128C0 75 43 32 96 32l64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32z">
+              </path>
+            </svg></div>
+          <div class="text">Déconnexion</div>
+        </button>
+
+        <p>Eqnovia © 2025</p>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- CONTENT -->
+  <main class="layout">
+    <div class="content" id="appContent" style="display:none;">
+
+      <!-- KPIs -->
+      <div class="stats-grid">
+        <div class="stat-card blue">
+          <div class="stat-icon blue">💰</div>
+          <div class="stat-label">Total général</div>
+          <div class="stat-value" id="kpiTotal">0,00 DH</div>
+          <div class="stat-sub" id="kpiCount">0 dépense(s)</div>
+        </div>
+        <div class="stat-card" style="background:var(--green-pale,#e8f5e9);">
+          <div class="stat-icon" style="background:var(--green,#2e7d32);color:#fff;">✅</div>
+          <div class="stat-label">Frais remboursés</div>
+          <div class="stat-value" id="kpiRemb">0,00 DH</div>
+          <div class="stat-sub">0 dépense(s) remboursée(s)</div>
+        </div>
+        <div class="stat-card" style="background:var(--red-pale,#ffebee);">
+          <div class="stat-icon" style="background:var(--red,#c62828);color:#fff;">⏳</div>
+          <div class="stat-label">Non remboursés</div>
+          <div class="stat-value" id="kpiNonRemb">0,00 DH</div>
+          <div class="stat-sub">0 en attente</div>
+        </div>
+        <div class="stat-card orange">
+          <div class="stat-icon orange">📅</div>
+          <div class="stat-label">Ce mois-ci</div>
+          <div class="stat-value" id="kpiMonth">0,00 DH</div>
+          <div class="stat-sub" id="kpiMonthLabel">—</div>
+        </div>
+      </div>
+
+      <!-- PAGE TABS REMOVED: navigation is now exclusively in the right sidebar -->
+
+      <!-- ══ TAB: SAISIE & OCR ══ -->
+      <div id="tab-content-saisie" role="tabpanel" aria-labelledby="tab-saisie">
+        <!-- Mobile Section Header -->
+        <div class="mobile-section-header" style="display:none;">
+          <img src="logo.PNG" alt="Eqnovia" class="mobile-logo" />
+          <span class="section-label">Section :</span>
+          <span class="section-name">Saisie & OCR</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" class="input-form-grid">
+
+          <!-- Saisie -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <div class="panel-icon blue">✏️</div> Saisie manuelle
+              </div>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="catInput">Type de dépenses</label>
-              <select class="form-select" id="catInput">
-                <option value="Transport">🚗 Transport</option>
-                <option value="Repas">🍽️ Repas</option>
-                <option value="Hébergement">🏨 Hébergement</option>
-                <option value="Matériel">📦 Matériel</option>
-                <option value="Communication">📞 Communication</option>
-                <option value="Formation">🎓 Formation</option>
-                <option value="Autre">📌 Autre</option>
+            <div class="panel-body">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label class="form-label" for="dateInput">Date *</label>
+                  <input type="date" class="form-input" id="dateInput" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="catInput">Type de dépenses</label>
+                  <select class="form-select" id="catInput">
+                    <option value="Transport">🚗 Transport</option>
+                    <option value="Repas">🍽️ Repas</option>
+                    <option value="Hébergement">🏨 Hébergement</option>
+                    <option value="Matériel">📦 Matériel</option>
+                    <option value="Communication">📞 Communication</option>
+                    <option value="Formation">🎓 Formation</option>
+                    <option value="Autre">📌 Autre</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="amountInput">Total TTC (DH) *</label>
+                  <input type="number" class="form-input" id="amountInput" step="0.01" min="0.01" placeholder="0,00" />
+                </div>
+                <div class="form-group span-2">
+                  <label class="form-label" for="descInput">Description *</label>
+                  <input type="text" class="form-input" id="descInput" placeholder="Ex : Taxi aéroport, Repas client…"
+                    autocomplete="off" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="missionInput">Objet de la mission</label>
+                  <input type="text" class="form-input" id="missionInput" placeholder="Ex : Mission client…"
+                    autocomplete="off" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="commentInput">Commentaires</label>
+                  <input type="text" class="form-input" id="commentInput" placeholder="Remarques..."
+                    autocomplete="off" />
+                </div>
+                <div class="form-group span-2">
+                  <label class="form-label" for="justifInput">📎 Justificatif (photo/facture PDF)</label>
+                  <div class="upload-zone" id="justifUploadZone" style="cursor:pointer;padding:16px 12px;"
+                    onclick="document.getElementById('justifInput').click()"
+                    ondragover="event.preventDefault();this.classList.add('drag-over');"
+                    ondragleave="this.classList.remove('drag-over');" ondrop="onJustifDrop(event)">
+                    <div style="font-size:24px;margin-bottom:4px;">📤</div>
+                    <p style="font-size:12px;color:var(--gray-500);margin:0;">Cliquez pour ajouter des photos ou PDF</p>
+                    <p style="font-size:10px;color:var(--gray-400);margin:2px 0 0;">JPG, PNG, PDF — Max 5 Mo par fichier
+                    </p>
+                    <input type="file" id="justifInput" accept="image/*,.pdf" multiple
+                      onchange="previewJustificatif(event)" style="display:none;" />
+                  </div>
+                  <div id="justifPreview"
+                    style="width:60px;height:60px;border-radius:8px;border:1px solid var(--gray-200);display:none;overflow:hidden;margin-top:8px;">
+                    <img id="justifPreviewImg" src="" alt="Aperçu" style="width:100%;height:100%;object-fit:cover;" />
+                  </div>
+                  <div id="justifFileName" style="font-size:11px;color:var(--gray-500);margin-top:4px;"></div>
+                  <button type="button" class="btn btn-ghost" id="justifClearBtn"
+                    style="display:none;height:28px;font-size:10px;padding:0 10px;margin-top:4px;"
+                    onclick="clearJustificatif()">✕ Effacer</button>
+                </div>
+              </div>
+              <button class="btn btn-primary btn-lg btn-full" style="margin-top:14px;" onclick="addExpense()"
+                id="addBtn">
+                ➕ Ajouter la dépense
+              </button>
+            </div>
+          </div>
+
+          <!-- OCR -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <div class="panel-icon orange">📸</div> OCR — Lire une facture
+              </div>
+            </div>
+            <div class="panel-body">
+              <p style="font-size:12px;color:var(--gray-400);margin-bottom:10px;">
+                Importez une photo ou un PDF de facture — le moteur OCR extrait automatiquement la date, le montant, la
+                description et la catégorie.
+              </p>
+              <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()"
+                ondragover="handleDragOver(event)" ondragleave="handleDragLeave()" ondrop="handleDrop(event)">
+                <div class="upload-icon">📤</div>
+                <p>Cliquez ou glissez-déposez une image ou un PDF</p>
+                <div class="file-selected" id="fileName">Aucun fichier</div>
+                <input type="file" id="fileInput" accept="image/*,.pdf" onchange="onFileChosen(event)" />
+              </div>
+              <!-- Image preview -->
+              <div id="ocrPreview"
+                style="display:none;margin-top:8px;border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--gray-200);max-height:120px;">
+                <img id="ocrPreviewImg" src="" alt="Aperçu" style="width:100%;height:120px;object-fit:cover;" />
+              </div>
+              <div class="ocr-progress" id="ocrProgress">
+                <div class="ocr-progress-bar" id="ocrBar"></div>
+              </div>
+              <button class="btn btn-orange btn-full" style="margin-top:12px;" onclick="runOCR()" id="ocrBtn">🔍 Lire et
+                extraire</button>
+              <div class="ocr-output" id="ocrOutput">Le texte extrait apparaîtra ici…</div>
+              <!-- Extracted fields preview -->
+              <div id="ocrExtractedFields"
+                style="display:none;margin-top:10px;background:var(--eq-blue-pale);border:1px solid var(--eq-blue-mid);border-radius:var(--radius-md);padding:12px;">
+              </div>
+              <button class="btn btn-ghost btn-full" style="margin-top:8px;" onclick="fillFormFromOCR()">⬅️ Remplir le
+                formulaire</button>
+            </div>
+          </div>
+
+
+        </div>
+
+        <!-- ══ MES ORDRES DE MISSION (DASHBOARD) ══ -->
+        <div id="dashboardMOContainer" style="margin-top:16px;display:none;">
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <div class="panel-icon blue">📋</div> Mes ordres de mission assignés
+              </div>
+              <div class="export-group">
+                <button class="btn btn-pdf" onclick="exportUserMissionsPDF()"
+                  style="height:30px;font-size:10px;padding:0 10px;"><span>📄 </span>PDF</button>
+                <button class="btn btn-ghost" onclick="renderDashboardMissionOrders()"
+                  style="height:30px;font-size:10px;padding:0 10px;">🔄</button>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div id="dashboardMOList">
+                <div class="empty-state">
+                  <div class="empty-icon">📭</div>
+                  <h3>Chargement...</h3>
+                  <p>Vos ordres de mission assignés apparaîtront ici.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ TAB: REMBOURSEMENT ══ -->
+      <div id="tab-content-remboursement" role="tabpanel" aria-labelledby="nav-remboursement" style="display:none;">
+        <!-- Mobile Section Header -->
+        <div class="mobile-section-header" style="display:none;">
+          <img src="logo.PNG" alt="Eqnovia" class="mobile-logo" />
+          <span class="section-label">Section :</span>
+          <span class="section-name">Remboursement</span>
+        </div>
+
+        <!-- Bannière de notification non remboursés -->
+        <div class="remb-alert" id="rembAlert" style="display:none;">
+          <span class="remb-alert-icon">🔔</span>
+          <div class="remb-alert-text">
+            <strong id="rembAlertTitle">0 frais en attente de remboursement</strong>
+            <span id="rembAlertSub">—</span>
+          </div>
+          <button class="btn btn-ghost" style="height:30px;font-size:11px;padding:0 12px;"
+            onclick="filterRembAlert()">Voir la liste</button>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <div class="panel-icon blue">💰</div> Suivi des remboursements
+            </div>
+            <div class="export-group">
+              <select class="form-select" id="filterRembTab" onchange="renderRemboursement()"
+                style="height:30px;font-size:11px;">
+                <option value="all">💰 Tous les frais</option>
+                <option value="remb">✅ Remboursés</option>
+                <option value="non">🔔 Non remboursés</option>
+              </select>
+              <select class="form-select" id="filterRembTabUser" onchange="renderRemboursement()"
+                style="height:30px;font-size:11px;">
+                <option value="all">👤 Toutes les personnes</option>
               </select>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="amountInput">Total TTC (DH) *</label>
-              <input type="number" class="form-input" id="amountInput" step="0.01" min="0.01" placeholder="0,00"/>
-            </div>
-            <div class="form-group span-2">
-              <label class="form-label" for="descInput">Description *</label>
-              <input type="text" class="form-input" id="descInput" placeholder="Ex : Taxi aéroport, Repas client…" autocomplete="off"/>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="missionInput">Objet de la mission</label>
-              <input type="text" class="form-input" id="missionInput" placeholder="Ex : Mission client…" autocomplete="off"/>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="commentInput">Commentaires</label>
-              <input type="text" class="form-input" id="commentInput" placeholder="Remarques..." autocomplete="off"/>
-            </div>
-<div class="form-group span-2">
-  <label class="form-label" for="justifInput">📎 Justificatif (photo/facture PDF)</label>
-  <div class="upload-zone" id="justifUploadZone" style="cursor:pointer;padding:16px 12px;" onclick="document.getElementById('justifInput').click()" ondragover="event.preventDefault();this.classList.add('drag-over');" ondragleave="this.classList.remove('drag-over');" ondrop="onJustifDrop(event)">
-    <div style="font-size:24px;margin-bottom:4px;">📤</div>
-    <p style="font-size:12px;color:var(--gray-500);margin:0;">Cliquez pour ajouter des photos ou PDF</p>
-    <p style="font-size:10px;color:var(--gray-400);margin:2px 0 0;">JPG, PNG, PDF — Max 5 Mo par fichier</p>
-    <input type="file" id="justifInput" accept="image/*,.pdf" multiple onchange="previewJustificatif(event)" style="display:none;"/>
-  </div>
-  <div id="justifPreview" style="width:60px;height:60px;border-radius:8px;border:1px solid var(--gray-200);display:none;overflow:hidden;margin-top:8px;">
-    <img id="justifPreviewImg" src="" alt="Aperçu" style="width:100%;height:100%;object-fit:cover;"/>
-  </div>
-  <div id="justifFileName" style="font-size:11px;color:var(--gray-500);margin-top:4px;"></div>
-  <button type="button" class="btn btn-ghost" id="justifClearBtn" style="display:none;height:28px;font-size:10px;padding:0 10px;margin-top:4px;" onclick="clearJustificatif()">✕ Effacer</button>
-</div>
           </div>
-          <button class="btn btn-primary btn-lg btn-full" style="margin-top:14px;" onclick="addExpense()" id="addBtn">
-            ➕ Ajouter la dépense
-          </button>
-        </div>
-      </div>
-
-      <!-- OCR -->
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><div class="panel-icon orange">📸</div> OCR — Lire une facture</div>
-        </div>
-        <div class="panel-body">
-          <p style="font-size:12px;color:var(--gray-400);margin-bottom:10px;">
-            Importez une photo ou un PDF de facture — le moteur OCR extrait automatiquement la date, le montant, la description et la catégorie.
-          </p>
-          <div class="upload-zone" id="uploadZone"
-               onclick="document.getElementById('fileInput').click()"
-               ondragover="handleDragOver(event)" ondragleave="handleDragLeave()" ondrop="handleDrop(event)">
-            <div class="upload-icon">📤</div>
-            <p>Cliquez ou glissez-déposez une image ou un PDF</p>
-            <div class="file-selected" id="fileName">Aucun fichier</div>
-            <input type="file" id="fileInput" accept="image/*,.pdf" onchange="onFileChosen(event)"/>
+          <div class="panel-body" style="padding-top:12px;">
+            <!-- Récapitulatif par personne -->
+            <div class="remb-persons" id="rembPersons"></div>
           </div>
-          <!-- Image preview -->
-          <div id="ocrPreview" style="display:none;margin-top:8px;border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--gray-200);max-height:120px;">
-            <img id="ocrPreviewImg" src="" alt="Aperçu" style="width:100%;height:120px;object-fit:cover;"/>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>Personne</th>
+                  <th>Montant</th>
+                  <th>Statut</th>
+                  <th>Info</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="rembTbody"></tbody>
+            </table>
           </div>
-          <div class="ocr-progress" id="ocrProgress"><div class="ocr-progress-bar" id="ocrBar"></div></div>
-          <button class="btn btn-orange btn-full" style="margin-top:12px;" onclick="runOCR()" id="ocrBtn">🔍 Lire et extraire</button>
-          <div class="ocr-output" id="ocrOutput">Le texte extrait apparaîtra ici…</div>
-          <!-- Extracted fields preview -->
-          <div id="ocrExtractedFields" style="display:none;margin-top:10px;background:var(--eq-blue-pale);border:1px solid var(--eq-blue-mid);border-radius:var(--radius-md);padding:12px;">
-          </div>
-          <button class="btn btn-ghost btn-full" style="margin-top:8px;" onclick="fillFormFromOCR()">⬅️ Remplir le formulaire</button>
-        </div>
-      </div>
-
-
-    </div>
-
-    <!-- ══ MES ORDRES DE MISSION (DASHBOARD) ══ -->
-    <div id="dashboardMOContainer" style="margin-top:16px;display:none;">
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><div class="panel-icon blue">📋</div> Mes ordres de mission assignés</div>
-          <div class="export-group">
-            <button class="btn btn-pdf" onclick="exportUserMissionsPDF()" style="height:30px;font-size:10px;padding:0 10px;"><span>📄 </span>PDF</button>
-            <button class="btn btn-ghost" onclick="renderDashboardMissionOrders()" style="height:30px;font-size:10px;padding:0 10px;">🔄</button>
-          </div>
-        </div>
-        <div class="panel-body">
-          <div id="dashboardMOList">
-            <div class="empty-state">
-              <div class="empty-icon">📭</div>
-              <h3>Chargement...</h3>
-              <p>Vos ordres de mission assignés apparaîtront ici.</p>
-            </div>
+          <div class="table-footer">
+            <span class="total-info" id="rembRowCount">0 ligne(s)</span>
+            <div class="total-amount" id="rembGrandTotal">💰 Total : <strong>0,00 DH</strong></div>
           </div>
         </div>
       </div>
-    </div>
-  </div>
 
-  <!-- ══ TAB: REMBOURSEMENT ══ -->
-  <div id="tab-content-remboursement" role="tabpanel" aria-labelledby="nav-remboursement" style="display:none;">
-    <!-- Mobile Section Header -->
-    <div class="mobile-section-header" style="display:none;">
-      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
-      <span class="section-label">Section :</span>
-      <span class="section-name">Remboursement</span>
-    </div>
-
-    <!-- Bannière de notification non remboursés -->
-    <div class="remb-alert" id="rembAlert" style="display:none;">
-      <span class="remb-alert-icon">🔔</span>
-      <div class="remb-alert-text">
-        <strong id="rembAlertTitle">0 frais en attente de remboursement</strong>
-        <span id="rembAlertSub">—</span>
-      </div>
-      <button class="btn btn-ghost" style="height:30px;font-size:11px;padding:0 12px;" onclick="filterRembAlert()">Voir la liste</button>
-    </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title"><div class="panel-icon blue">💰</div> Suivi des remboursements</div>
-        <div class="export-group">
-          <select class="form-select" id="filterRembTab" onchange="renderRemboursement()" style="height:30px;font-size:11px;">
-            <option value="all">💰 Tous les frais</option>
-            <option value="remb">✅ Remboursés</option>
-            <option value="non">🔔 Non remboursés</option>
-          </select>
-          <select class="form-select" id="filterRembTabUser" onchange="renderRemboursement()" style="height:30px;font-size:11px;">
-            <option value="all">👤 Toutes les personnes</option>
-          </select>
+      <!-- ══ TAB: TOUTES ══ -->
+      <div id="tab-content-all" role="tabpanel" aria-labelledby="tab-all" style="display:none;">
+        <!-- Mobile Section Header -->
+        <div class="mobile-section-header" style="display:none;">
+          <img src="logo.PNG" alt="Eqnovia" class="mobile-logo" />
+          <span class="section-label">Section :</span>
+          <span class="section-name">Toutes les dépenses</span>
         </div>
-      </div>
-      <div class="panel-body" style="padding-top:12px;">
-        <!-- Récapitulatif par personne -->
-        <div class="remb-persons" id="rembPersons"></div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Date</th>
-              <th>Description</th>
-              <th>Personne</th>
-              <th>Montant</th>
-              <th>Statut</th>
-              <th>Info</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="rembTbody"></tbody>
-        </table>
-      </div>
-      <div class="table-footer">
-        <span class="total-info" id="rembRowCount">0 ligne(s)</span>
-        <div class="total-amount" id="rembGrandTotal">💰 Total : <strong>0,00 DH</strong></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══ TAB: TOUTES ══ -->
-  <div id="tab-content-all" role="tabpanel" aria-labelledby="tab-all" style="display:none;">
-    <!-- Mobile Section Header -->
-    <div class="mobile-section-header" style="display:none;">
-      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
-      <span class="section-label">Section :</span>
-      <span class="section-name">Toutes les dépenses</span>
-    </div>
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title"><div class="panel-icon blue">📋</div> Toutes les dépenses</div>
-        <div class="export-group">
-          <button class="btn btn-pdf" onclick="exportPDF()">📄 <span>PDF</span></button>
-          <button class="btn btn-excel" onclick="exportExcel()">📊 <span>Excel</span></button>
-        </div>
-      </div>
-      <div class="filters-bar">
-        <select class="form-select" id="filterYear" onchange="renderAll()">
-          <option value="all">📅 Années</option>
-        </select>
-        <select class="form-select" id="filterMonth" onchange="renderAll()">
-          <option value="all">🗓️ Mois</option>
-          <option value="01">Jan</option><option value="02">Fév</option>
-          <option value="03">Mar</option><option value="04">Avr</option>
-          <option value="05">Mai</option><option value="06">Jun</option>
-          <option value="07">Jul</option><option value="08">Aoû</option>
-          <option value="09">Sep</option><option value="10">Oct</option>
-          <option value="11">Nov</option><option value="12">Déc</option>
-        </select>
-        <select class="form-select" id="filterCat" onchange="renderAll()">
-          <option value="all">🏷️ Catégories</option>
-          <option value="Transport">🚗 Transport</option>
-          <option value="Repas">🍽️ Repas</option>
-          <option value="Hébergement">🏨 Hébergement</option>
-          <option value="Matériel">📦 Matériel</option>
-          <option value="Communication">📞 Communication</option>
-          <option value="Formation">🎓 Formation</option>
-          <option value="Autre">📌 Autre</option>
-        </select>
-        <select class="form-select" id="filterUser">
-          <option value="all">👤 Tous</option>
-        </select>
-        <select class="form-select" id="filterRemb" onchange="renderAll()">
-          <option value="all">💰 Remboursement : Tous</option>
-          <option value="remb">✅ Remboursés</option>
-          <option value="non">❌ Non remboursés</option>
-        </select>
-        <div class="filter-sep"></div>
-        <input type="text" class="form-input" id="filterSearch" placeholder="🔍 Recherche…" oninput="renderAll()" style="min-width:100px;"/>
-        <button class="btn btn-ghost" style="height:32px;font-size:11px;padding:0 10px;" onclick="resetFilters()">🔄</button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th class="sortable" onclick="sortBy('date')">Date ⇅</th>
-              <th>Description</th>
-              <th>Catégorie</th>
-              <th class="sortable" onclick="sortBy('amount')">Total ⇅</th>
-              <th>Mission</th>
-              <th>Commentaires</th>
-              <th>User</th>
-              <th>Justif</th>
-              <th>Remboursé</th>
-              <th>Créé par</th>
-              <th>Modifié par</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="tbody"></tbody>
-        </table>
-      </div>
-      <div class="table-footer">
-        <span class="total-info" id="rowCount">0 ligne(s)</span>
-        <div class="total-amount" id="grandTotal">💰 Total : <strong>0,00 DH</strong></div>
-      </div>
-    </div>
-    <!-- Recommandations Business Analyst -->
-    <div class="panel" style="margin-top:16px;">
-      <div class="panel-header">
-        <div class="panel-title"><div class="panel-icon blue">💡</div> Recommandations & Analyse</div>
-        <button class="btn btn-primary" onclick="document.getElementById('recContent').innerHTML=generateRecommendations()" style="height:30px;font-size:11px;">🔄 Actualiser</button>
-      </div>
-      <div class="panel-body" id="recContent">
-        <p style="color:var(--gray-400);font-size:12px;">Cliquez sur Actualiser pour générer les recommandations.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══ TAB: PAR MOIS ══ -->
-  <div id="tab-content-monthly" role="tabpanel" aria-labelledby="tab-monthly" style="display:none;">
-    <!-- Mobile Section Header -->
-    <div class="mobile-section-header" style="display:none;">
-      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
-      <span class="section-label">Section :</span>
-      <span class="section-name">Par mois</span>
-    </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <select class="form-select" id="filterYearMonth" onchange="renderMonthly()" style="height:32px;width:auto;font-size:12px;">
-          <option value="all">Toutes années</option>
-        </select>
-        <select class="form-select" id="filterMonthSelect" onchange="renderMonthly()" style="height:32px;width:auto;font-size:12px;">
-          <option value="all">Tous les mois</option>
-          <option value="01">Janvier</option>
-          <option value="02">Février</option>
-          <option value="03">Mars</option>
-          <option value="04">Avril</option>
-          <option value="05">Mai</option>
-          <option value="06">Juin</option>
-          <option value="07">Juillet</option>
-          <option value="08">Août</option>
-          <option value="09">Septembre</option>
-          <option value="10">Octobre</option>
-          <option value="11">Novembre</option>
-          <option value="12">Décembre</option>
-        </select>
-        <select class="form-select" id="filterMonthUser" style="height:32px;width:auto;font-size:12px;">
-          <option value="all">👤 Tous</option>
-        </select>
-      </div>
-    </div>
-    <div id="monthlyGroups"></div>
-  </div>
-
-  <!-- ══ TAB: PAR ANNÉE ══ -->
-  <div id="tab-content-yearly" role="tabpanel" aria-labelledby="tab-yearly" style="display:none;">
-    <!-- Mobile Section Header -->
-    <div class="mobile-section-header" style="display:none;">
-      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
-      <span class="section-label">Section :</span>
-      <span class="section-name">Par année</span>
-    </div>
-    <div id="yearlyGroups"></div>
-  </div>
-
-  <!-- ══ TAB: CONDITIONS & POLITIQUE ══ -->
-  <div id="tab-content-policy" role="tabpanel" aria-labelledby="tab-policy" style="display:none;">
-    <!-- Mobile Section Header -->
-    <div class="mobile-section-header" style="display:none;">
-      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
-      <span class="section-label">Section :</span>
-      <span class="section-name">Conditions</span>
-    </div>
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title"><div class="panel-icon blue">📜</div> Conditions Générales & Politique de Confidentialité</div>
-      </div>
-      <div class="panel-body" style="max-width:900px;">
-        <div style="display:grid;gap:16px;">
-          <div style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);padding:16px 20px;background:var(--white);">
-            <h3 style="font-size:14px;font-weight:700;color:var(--eq-blue);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
-              <span style="font-size:18px;">📋</span> Conditions d'utilisation
-            </h3>
-            <div style="font-size:12.5px;color:var(--gray-700);line-height:1.7;">
-              <p style="margin-bottom:8px;">En utilisant l'application <strong>Eqnovia Notes de Frais</strong>, vous acceptez les présentes conditions d'utilisation :</p>
-              <ul style="padding-left:18px;margin-bottom:8px;">
-                <li style="margin-bottom:4px;">L'application est destinée exclusivement aux employés d'Eqnovia pour la gestion de leurs notes de frais professionnels.</li>
-                <li style="margin-bottom:4px;">Toute dépense enregistrée doit être justifiée par un justificatif valide (facture, ticket de caisse, etc.).</li>
-                <li style="margin-bottom:4px;">Les montants saisis doivent être exacts et correspondre aux documents justificatifs.</li>
-                <li style="margin-bottom:4px;">L'utilisateur est responsable de l'exactitude des informations qu'il saisit.</li>
-                <li style="margin-bottom:4px;">Toute tentative de fraude ou de falsification de données pourra entraîner des sanctions disciplinaires.</li>
-                <li style="margin-bottom:4px;">L'administration se réserve le droit de vérifier et de contrôler les notes de frais soumises.</li>
-              </ul>
-              <p>Les présentes conditions peuvent être modifiées à tout moment. Il est conseillé de les consulter régulièrement.</p>
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <div class="panel-icon blue">📋</div> Toutes les dépenses
+            </div>
+            <div class="export-group">
+              <button class="btn btn-pdf" onclick="exportPDF()">📄 <span>PDF</span></button>
+              <button class="btn btn-excel" onclick="exportExcel()">📊 <span>Excel</span></button>
             </div>
           </div>
-          <div style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);padding:16px 20px;background:var(--white);">
-            <h3 style="font-size:14px;font-weight:700;color:var(--eq-blue);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
-              <span style="font-size:18px;">🔒</span> Politique de confidentialité
-            </h3>
-            <div style="font-size:12.5px;color:var(--gray-700);line-height:1.7;">
-              <p style="margin-bottom:8px;">Eqnovia s'engage à protéger la confidentialité des données personnelles de ses employés :</p>
-              <ul style="padding-left:18px;margin-bottom:8px;">
-                <li style="margin-bottom:4px;"><strong>Données collectées :</strong> nom, prénom, département, dates de dépenses, montants, descriptions, catégories.</li>
-                <li style="margin-bottom:4px;"><strong>Finalité :</strong> gestion comptable des notes de frais et remboursement des employés.</li>
-                <li style="margin-bottom:4px;"><strong>Conservation :</strong> les données sont conservées pendant la durée légale de conservation comptable (10 ans).</li>
-                <li style="margin-bottom:4px;"><strong>Partage :</strong> les données ne sont partagées qu'avec les services habilités (comptabilité, RH, direction).</li>
-                <li style="margin-bottom:4px;"><strong>Sécurité :</strong> les données sont stockées de manière sécurisée (Firebase / localStorage) et protégées contre tout accès non autorisé.</li>
-                <li style="margin-bottom:4px;"><strong>Droits :</strong> vous disposez d'un droit d'accès, de rectification et de suppression de vos données. Contactez le service RH pour exercer ces droits.</li>
-              </ul>
-              <p>Pour toute question relative à la protection des données, contactez le délégué à la protection des données (DPO) d'Eqnovia.</p>
-            </div>
+          <div class="filters-bar">
+            <select class="form-select" id="filterYear" onchange="renderAll()">
+              <option value="all">📅 Années</option>
+            </select>
+            <select class="form-select" id="filterMonth" onchange="renderAll()">
+              <option value="all">🗓️ Mois</option>
+              <option value="01">Jan</option>
+              <option value="02">Fév</option>
+              <option value="03">Mar</option>
+              <option value="04">Avr</option>
+              <option value="05">Mai</option>
+              <option value="06">Jun</option>
+              <option value="07">Jul</option>
+              <option value="08">Aoû</option>
+              <option value="09">Sep</option>
+              <option value="10">Oct</option>
+              <option value="11">Nov</option>
+              <option value="12">Déc</option>
+            </select>
+            <select class="form-select" id="filterCat" onchange="renderAll()">
+              <option value="all">🏷️ Catégories</option>
+              <option value="Transport">🚗 Transport</option>
+              <option value="Repas">🍽️ Repas</option>
+              <option value="Hébergement">🏨 Hébergement</option>
+              <option value="Matériel">📦 Matériel</option>
+              <option value="Communication">📞 Communication</option>
+              <option value="Formation">🎓 Formation</option>
+              <option value="Autre">📌 Autre</option>
+            </select>
+            <select class="form-select" id="filterUser">
+              <option value="all">👤 Tous</option>
+            </select>
+            <select class="form-select" id="filterRemb" onchange="renderAll()">
+              <option value="all">💰 Remboursement : Tous</option>
+              <option value="remb">✅ Remboursés</option>
+              <option value="non">❌ Non remboursés</option>
+            </select>
+            <div class="filter-sep"></div>
+            <input type="text" class="form-input" id="filterSearch" placeholder="🔍 Recherche…" oninput="renderAll()"
+              style="min-width:100px;" />
+            <button class="btn btn-ghost" style="height:32px;font-size:11px;padding:0 10px;"
+              onclick="resetFilters()">🔄</button>
           </div>
-          <div style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);padding:16px 20px;background:var(--eq-blue-pale);">
-            <h3 style="font-size:14px;font-weight:700;color:var(--eq-blue);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
-              <span style="font-size:18px;">📞</span> Contact & Support
-            </h3>
-            <div style="font-size:12.5px;color:var(--gray-700);line-height:1.7;">
-              <p style="margin-bottom:6px;">Pour toute question concernant l'utilisation de l'application ou les notes de frais :</p>
-              <p style="margin-bottom:3px;"><strong>Email :</strong> <a href="fbourzgui@eqnovia.ma" style="color:var(--eq-blue);text-decoration:none;">fbourzgui@eqnovia.ma</a></p>
-              <p style="margin-bottom:3px;"><strong>Téléphone :</strong> +212 5XX-XXXXXX</p>
-              <p><strong>Adresse :</strong> Eqnovia, Casablanca, Maroc</p>
-            </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th class="sortable" onclick="sortBy('date')">Date ⇅</th>
+                  <th>Description</th>
+                  <th>Catégorie</th>
+                  <th class="sortable" onclick="sortBy('amount')">Total ⇅</th>
+                  <th>Mission</th>
+                  <th>Commentaires</th>
+                  <th>User</th>
+                  <th>Justif</th>
+                  <th>Remboursé</th>
+                  <th>Créé par</th>
+                  <th>Modifié par</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+          <div class="table-footer">
+            <span class="total-info" id="rowCount">0 ligne(s)</span>
+            <div class="total-amount" id="grandTotal">💰 Total : <strong>0,00 DH</strong></div>
           </div>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══ TAB: BACKUP ══ -->
-  <div id="tab-content-backup" role="tabpanel" aria-labelledby="tab-backup" style="display:none;">
-    <div class="mobile-section-header" style="display:none;">
-      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
-      <span class="section-label">Section :</span>
-      <span class="section-name">Sauvegarde des justificatifs</span>
-    </div>
-    <div style="padding:20px;">
-      <div class="panel" style="margin-bottom:20px;">
-        <div class="panel-header">
-          <div class="panel-title"><div class="panel-icon green">💾</div> Sauvegarde des justificatifs</div>
-        </div>
-        <div style="padding:20px;">
-          <p style="color:var(--gray-600);font-size:14px;margin-bottom:20px;">
-            Sauvegardez toutes les photos de justificatifs sur trois supports différents pour une sécurité maximale.
-          </p>
-
-          <!-- Status -->
-          <div id="backupStatus" style="margin-bottom:24px;"></div>
-
-          <!-- Backup Actions -->
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;">
-            <!-- Local Backup -->
-            <div class="backup-card">
-              <div class="backup-card-icon local">💻</div>
-              <div class="backup-card-content">
-                <h4 style="font-size:15px;font-weight:700;color:var(--gray-900);margin-bottom:6px;">Sauvegarde locale</h4>
-                <p style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">
-                  Télécharge un fichier ZIP contenant tous les justificatifs avec les métadonnées.
-                </p>
-                <button class="btn btn-primary" onclick="backupLocal()" style="width:100%;">
-                  📦 Télécharger ZIP
-                </button>
-              </div>
+        <!-- Recommandations Business Analyst -->
+        <div class="panel" id="recommendationsPanel" style="margin-top:16px;">
+          <div class="panel-header">
+            <div class="panel-title">
+              <div class="panel-icon blue">💡</div> Recommandations & Analyse
             </div>
-
-            <!-- Firebase Backup -->
-            <div class="backup-card">
-              <div class="backup-card-icon firebase">☁️</div>
-              <div class="backup-card-content">
-                <h4 style="font-size:15px;font-weight:700;color:var(--gray-900);margin-bottom:6px;">Sauvegarde Firebase</h4>
-                <p style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">
-                  Upload les justificatifs vers Firebase Storage pour une sauvegarde cloud.
-                </p>
-                <button class="btn btn-primary" onclick="backupFirebase()" style="width:100%;" id="fbBackupBtn">
-                  ☁️ Sauvegarder sur Firebase
-                </button>
-              </div>
-            </div>
-
-
+            <button class="btn btn-primary"
+              onclick="document.getElementById('recContent').innerHTML=generateRecommendations()"
+              style="height:30px;font-size:11px;">🔄 Actualiser</button>
           </div>
-
-          <!-- Backup All -->
-          <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200);">
-            <button class="btn btn-primary" onclick="backupAll()" style="width:100%;max-width:400px;display:block;margin:0 auto;padding:14px 24px;font-size:15px;">
-              💾 Sauvegarder tous les justificatifs
-            </button>
-            <p style="text-align:center;font-size:12px;color:var(--gray-400);margin-top:10px;">
-              Cette action va sauvegarder sur les 2 supports disponibles.
+          <div class="panel-body" id="recContent">
+            <p style="color:var(--gray-400);font-size:12px;">Cliquez sur Actualiser pour générer les recommandations.
             </p>
           </div>
         </div>
       </div>
-    </div>
-  </div>
 
-
-
-  <!-- ══ TAB: TRIMESTRE ══ -->
-  <div id="tab-content-trimestre" role="tabpanel" aria-labelledby="tab-trimestre" style="display:none;">
-    <div class="mobile-section-header" style="display:none;">
-      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
-      <span class="section-label">Section :</span>
-      <span class="section-name">Rapports trimestriels</span>
-    </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title"><div class="panel-icon blue">📊</div> Synthèse trimestrielle</div>
-        <div class="export-group">
-          <button class="btn btn-pdf" onclick="exportPDFTrimestre()"><span>📄 </span>PDF</button>
-          <button class="btn btn-excel" onclick="exportExcelTrimestre()"><span>📊 </span>Excel</button>
+      <!-- ══ TAB: PAR MOIS ══ -->
+      <div id="tab-content-monthly" role="tabpanel" aria-labelledby="tab-monthly" style="display:none;">
+        <!-- Mobile Section Header -->
+        <div class="mobile-section-header" style="display:none;">
+          <img src="logo.PNG" alt="Eqnovia" class="mobile-logo" />
+          <span class="section-label">Section :</span>
+          <span class="section-name">Par mois</span>
         </div>
-      </div>
-      <div class="panel-body">
-        <div class="filters-bar" style="border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:14px;">
-          <select class="form-select" id="triYearFilter" onchange="renderTrimester()" style="min-width:100px;"></select>
-          <div class="filter-sep"></div>
-          <select class="form-select" id="triUserFilter" style="min-width:100px;">
-            <option value="">Tous les collaborateurs</option>
-          </select>
-        </div>
-        <div id="trimesterContent">
-          <div class="empty-state">
-            <div class="empty-icon">📊</div>
-            <h3>Sélectionnez une année</h3>
-            <p>Les données trimestrielles apparaîtront ici.</p>
+        <div
+          style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <select class="form-select" id="filterYearMonth" onchange="renderMonthly()"
+              style="height:32px;width:auto;font-size:12px;">
+              <option value="all">Toutes années</option>
+            </select>
+            <select class="form-select" id="filterMonthSelect" onchange="renderMonthly()"
+              style="height:32px;width:auto;font-size:12px;">
+              <option value="all">Tous les mois</option>
+              <option value="01">Janvier</option>
+              <option value="02">Février</option>
+              <option value="03">Mars</option>
+              <option value="04">Avril</option>
+              <option value="05">Mai</option>
+              <option value="06">Juin</option>
+              <option value="07">Juillet</option>
+              <option value="08">Août</option>
+              <option value="09">Septembre</option>
+              <option value="10">Octobre</option>
+              <option value="11">Novembre</option>
+              <option value="12">Décembre</option>
+            </select>
+            <select class="form-select" id="filterMonthUser" style="height:32px;width:auto;font-size:12px;">
+              <option value="all">👤 Tous</option>
+            </select>
           </div>
         </div>
+        <div id="monthlyGroups"></div>
       </div>
-    </div>
-  </div>
 
-  <!-- ══ TAB: COMPARAISON ══ -->
-  <div id="tab-content-comparison" role="tabpanel" aria-labelledby="tab-comparison" style="display:none;">
-    <div class="mobile-section-header" style="display:none;">
-      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
-      <span class="section-label">Section :</span>
-      <span class="section-name">Comparaison des périodes</span>
-    </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title"><div class="panel-icon orange">📈</div> Analyse comparative des dépenses</div>
-        <div class="export-group">
-          <button class="btn btn-pdf" onclick="exportPDFComparison()"><span>📄 </span>PDF</button>
+      <!-- ══ TAB: PAR ANNÉE ══ -->
+      <div id="tab-content-yearly" role="tabpanel" aria-labelledby="tab-yearly" style="display:none;">
+        <!-- Mobile Section Header -->
+        <div class="mobile-section-header" style="display:none;">
+          <img src="logo.PNG" alt="Eqnovia" class="mobile-logo" />
+          <span class="section-label">Section :</span>
+          <span class="section-name">Par année</span>
         </div>
+        <div id="yearlyGroups"></div>
       </div>
-      <div class="panel-body">
-        <div class="filters-bar" style="border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:14px;">
-          <select class="form-select" id="cmpPeriod1" onchange="renderComparison()" style="min-width:80px;">
-            <option value="month">Mois</option>
-            <option value="trimestre">Trimestre</option>
-            <option value="year">Année</option>
-          </select>
-          <select class="form-select" id="cmpDate1" onchange="renderComparison()" style="min-width:120px;"></select>
-          <span style="font-size:12px;color:var(--gray-400);font-weight:600;">vs</span>
-          <select class="form-select" id="cmpPeriod2" onchange="renderComparison()" style="min-width:80px;">
-            <option value="month">Mois</option>
-            <option value="trimestre">Trimestre</option>
-            <option value="year">Année</option>
-          </select>
-          <select class="form-select" id="cmpDate2" onchange="renderComparison()" style="min-width:120px;"></select>
-          <div class="filter-sep"></div>
-          <select class="form-select" id="cmpUserFilter" style="min-width:100px;">
-            <option value="">Tous</option>
-          </select>
-          <button class="btn btn-primary" onclick="renderComparison()" style="height:32px;font-size:11px;">🔄 Comparer</button>
-        </div>
-        <div id="comparisonContent">
-          <div class="empty-state">
-            <div class="empty-icon">📈</div>
-            <h3>Sélectionnez deux périodes</h3>
-            <p>Choisissez deux périodes à comparer pour analyser l'évolution des dépenses.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
 
-  <!-- ══ TAB: ADMIN OM (Global) ══ -->
-  <div id="tab-content-admin-om" role="tabpanel" aria-labelledby="tab-admin-om" style="display:none;">
-    <div class="mobile-section-header" style="display:none;">
-      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
-      <span class="section-label">Admin :</span>
-      <span class="section-name">Ordres de mission globaux</span>
-    </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title"><div class="panel-icon blue">📋</div> Tous les ordres de mission (Firebase)</div>
-        <div class="export-group">
-          <button class="btn btn-pdf" onclick="adminOMExportPDF()" style="height:30px;font-size:10px;padding:0 10px;"><span>📄 </span>PDF</button>
-          <button class="btn btn-excel" onclick="adminOMExportExcel()" style="height:30px;font-size:10px;padding:0 10px;"><span>📊 </span>Excel</button>
-          <button class="btn btn-ghost" onclick="loadAdminOM()" style="height:30px;font-size:10px;padding:0 10px;">🔄</button>
+      <!-- ══ TAB: CONDITIONS & POLITIQUE ══ -->
+      <div id="tab-content-policy" role="tabpanel" aria-labelledby="tab-policy" style="display:none;">
+        <!-- Mobile Section Header -->
+        <div class="mobile-section-header" style="display:none;">
+          <img src="logo.PNG" alt="Eqnovia" class="mobile-logo" />
+          <span class="section-label">Section :</span>
+          <span class="section-name">Conditions</span>
         </div>
-      </div>
-      <div class="panel-body">
-        <div class="filters-bar" style="border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:14px;">
-          <input type="text" class="form-input" id="adminOMSearch" placeholder="🔍 Rechercher..." oninput="renderAdminOM()" style="min-width:120px;"/>
-          <div class="filter-sep"></div>
-          <select class="form-select" id="adminOMYear" onchange="renderAdminOM()" style="min-width:90px;">
-            <option value="">Toutes années</option>
-          </select>
-          <select class="form-select" id="adminOMEmploye" style="min-width:120px;">
-            <option value="">Tous collaborateurs</option>
-          </select>
-          <div class="filter-sep"></div>
-          <select class="form-select" id="adminOMStatus" onchange="renderAdminOM()" style="min-width:110px;">
-            <option value="">Tous statuts</option>
-            <option value="pending">⏳ En attente</option>
-            <option value="approved">✅ Approuvé</option>
-            <option value="rejected">❌ Rejeté</option>
-          </select>
-          <span id="adminOMCount" style="font-size:11px;color:var(--gray-400);font-weight:600;margin-left:auto;">0 OM</span>
-        </div>
-        <div class="table-wrap" id="adminOMContent">
-          <div class="empty-state">
-            <div class="empty-icon">📋</div>
-            <h3>Chargement des données...</h3>
-            <p>Les ordres de mission depuis Firebase apparaîtront ici.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══ TAB: USER MISSIONS ══ -->
-  <div id="tab-content-user-missions" role="tabpanel" aria-labelledby="tab-user-missions" style="display:none;">
-    <div class="mobile-section-header" style="display:none;">
-      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
-      <span class="section-label">Section :</span>
-      <span class="section-name">Mes ordres de mission</span>
-    </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title"><div class="panel-icon blue">📋</div> Mes ordres de mission assignés</div>
-        <div class="export-group">
-          <button class="btn btn-pdf" onclick="exportUserMissionsPDF()" style="height:30px;font-size:10px;padding:0 10px;"><span>📄 </span>PDF</button>
-          <button class="btn btn-ghost" onclick="loadUserMissionOrders()" style="height:30px;font-size:10px;padding:0 10px;">🔄</button>
-        </div>
-      </div>
-      <div class="panel-body">
-        <div id="userMOList">
-          <div class="empty-state">
-            <div class="empty-icon">📭</div>
-            <h3>Chargement...</h3>
-            <p>Vos ordres de mission assignés apparaîtront ici.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══ TAB: ORDRE DE MISSION ══ -->
-  <div id="tab-content-mission" role="tabpanel" aria-labelledby="tab-mission" style="display:none;">
-    <!-- Mobile Section Header -->
-    <div class="mobile-section-header" style="display:none;">
-      <img src="logo.PNG" alt="Eqnovia" class="mobile-logo"/>
-      <span class="section-label">Section :</span>
-      <span class="section-name">Ordre de mission</span>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" class="input-form-grid">
-
-      <!-- Formulaire d'ordre de mission -->
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><div class="panel-icon blue">📝</div> Nouvel ordre de mission</div>
-        </div>
-        <div class="panel-body">
-          <div class="form-grid">
-            <div class="form-group">
-              <label class="form-label" for="omNumero">N° d'ordre *</label>
-              <input type="text" class="form-input" id="omNumero" placeholder="Ex : OM-2026-001" autocomplete="off"/>
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <div class="panel-icon blue">📜</div> Conditions Générales & Politique de Confidentialité
             </div>
-            <div class="form-group">
-              <label class="form-label" for="omDate">Date d'émission *</label>
-              <input type="date" class="form-input" id="omDate"/>
+          </div>
+          <div class="panel-body" style="max-width:900px;">
+            <div style="display:grid;gap:16px;">
+              <div
+                style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);padding:16px 20px;background:var(--white);">
+                <h3
+                  style="font-size:14px;font-weight:700;color:var(--eq-blue);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+                  <span style="font-size:18px;">📋</span> Conditions d'utilisation
+                </h3>
+                <div style="font-size:12.5px;color:var(--gray-700);line-height:1.7;">
+                  <p style="margin-bottom:8px;">En utilisant l'application <strong>Eqnovia Notes de Frais</strong>, vous
+                    acceptez les présentes conditions d'utilisation :</p>
+                  <ul style="padding-left:18px;margin-bottom:8px;">
+                    <li style="margin-bottom:4px;">L'application est destinée exclusivement aux employés d'Eqnovia pour
+                      la gestion de leurs notes de frais professionnels.</li>
+                    <li style="margin-bottom:4px;">Toute dépense enregistrée doit être justifiée par un justificatif
+                      valide (facture, ticket de caisse, etc.).</li>
+                    <li style="margin-bottom:4px;">Les montants saisis doivent être exacts et correspondre aux documents
+                      justificatifs.</li>
+                    <li style="margin-bottom:4px;">L'utilisateur est responsable de l'exactitude des informations qu'il
+                      saisit.</li>
+                    <li style="margin-bottom:4px;">Toute tentative de fraude ou de falsification de données pourra
+                      entraîner des sanctions disciplinaires.</li>
+                    <li style="margin-bottom:4px;">L'administration se réserve le droit de vérifier et de contrôler les
+                      notes de frais soumises.</li>
+                  </ul>
+                  <p>Les présentes conditions peuvent être modifiées à tout moment. Il est conseillé de les consulter
+                    régulièrement.</p>
+                </div>
+              </div>
+              <div
+                style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);padding:16px 20px;background:var(--white);">
+                <h3
+                  style="font-size:14px;font-weight:700;color:var(--eq-blue);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+                  <span style="font-size:18px;">🔒</span> Politique de confidentialité
+                </h3>
+                <div style="font-size:12.5px;color:var(--gray-700);line-height:1.7;">
+                  <p style="margin-bottom:8px;">Eqnovia s'engage à protéger la confidentialité des données personnelles
+                    de ses employés :</p>
+                  <ul style="padding-left:18px;margin-bottom:8px;">
+                    <li style="margin-bottom:4px;"><strong>Données collectées :</strong> nom, prénom, département, dates
+                      de dépenses, montants, descriptions, catégories.</li>
+                    <li style="margin-bottom:4px;"><strong>Finalité :</strong> gestion comptable des notes de frais et
+                      remboursement des employés.</li>
+                    <li style="margin-bottom:4px;"><strong>Conservation :</strong> les données sont conservées pendant
+                      la durée légale de conservation comptable (10 ans).</li>
+                    <li style="margin-bottom:4px;"><strong>Partage :</strong> les données ne sont partagées qu'avec les
+                      services habilités (comptabilité, RH, direction).</li>
+                    <li style="margin-bottom:4px;"><strong>Sécurité :</strong> les données sont stockées de manière
+                      sécurisée (Firebase / localStorage) et protégées contre tout accès non autorisé.</li>
+                    <li style="margin-bottom:4px;"><strong>Droits :</strong> vous disposez d'un droit d'accès, de
+                      rectification et de suppression de vos données. Contactez le service RH pour exercer ces droits.
+                    </li>
+                  </ul>
+                  <p>Pour toute question relative à la protection des données, contactez le délégué à la protection des
+                    données (DPO) d'Eqnovia.</p>
+                </div>
+              </div>
+              <div
+                style="border:1px solid var(--gray-200);border-radius:var(--radius-lg);padding:16px 20px;background:var(--eq-blue-pale);">
+                <h3
+                  style="font-size:14px;font-weight:700;color:var(--eq-blue);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+                  <span style="font-size:18px;">📞</span> Contact & Support
+                </h3>
+                <div style="font-size:12.5px;color:var(--gray-700);line-height:1.7;">
+                  <p style="margin-bottom:6px;">Pour toute question concernant l'utilisation de l'application ou les
+                    notes de frais :</p>
+                  <p style="margin-bottom:3px;"><strong>Email :</strong> <a href="fbourzgui@eqnovia.ma"
+                      style="color:var(--eq-blue);text-decoration:none;">fbourzgui@eqnovia.ma</a></p>
+                  <p style="margin-bottom:3px;"><strong>Téléphone :</strong> +212 5XX-XXXXXX</p>
+                  <p><strong>Adresse :</strong> Eqnovia, Casablanca, Maroc</p>
+                </div>
+              </div>
             </div>
-            <div class="form-group span-2">
-              <label class="form-label" for="omEmploye">Nom du collaborateur *</label>
-              <select class="form-select" id="omEmploye">
-                <option value="">-- Sélectionner un membre --</option>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ TAB: BACKUP ══ -->
+      <div id="tab-content-backup" role="tabpanel" aria-labelledby="tab-backup" style="display:none;">
+        <div class="mobile-section-header" style="display:none;">
+          <img src="logo.PNG" alt="Eqnovia" class="mobile-logo" />
+          <span class="section-label">Section :</span>
+          <span class="section-name">Sauvegarde des justificatifs</span>
+        </div>
+        <div style="padding:20px;">
+          <div class="panel" style="margin-bottom:20px;">
+            <div class="panel-header">
+              <div class="panel-title">
+                <div class="panel-icon green">💾</div> Sauvegarde des justificatifs
+              </div>
+            </div>
+            <div style="padding:20px;">
+              <p style="color:var(--gray-600);font-size:14px;margin-bottom:20px;">
+                Sauvegardez toutes les photos de justificatifs sur trois supports différents pour une sécurité maximale.
+              </p>
+
+              <!-- Status -->
+              <div id="backupStatus" style="margin-bottom:24px;"></div>
+
+              <!-- Backup Actions -->
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;">
+                <!-- Local Backup -->
+                <div class="backup-card">
+                  <div class="backup-card-icon local">💻</div>
+                  <div class="backup-card-content">
+                    <h4 style="font-size:15px;font-weight:700;color:var(--gray-900);margin-bottom:6px;">Sauvegarde
+                      locale</h4>
+                    <p style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">
+                      Télécharge un fichier ZIP contenant tous les justificatifs avec les métadonnées.
+                    </p>
+                    <button class="btn btn-primary" onclick="backupLocal()" style="width:100%;">
+                      📦 Télécharger ZIP
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Firebase Backup -->
+                <div class="backup-card">
+                  <div class="backup-card-icon firebase">☁️</div>
+                  <div class="backup-card-content">
+                    <h4 style="font-size:15px;font-weight:700;color:var(--gray-900);margin-bottom:6px;">Sauvegarde
+                      Firebase</h4>
+                    <p style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">
+                      Upload les justificatifs vers Firebase Storage pour une sauvegarde cloud.
+                    </p>
+                    <button class="btn btn-primary" onclick="backupFirebase()" style="width:100%;" id="fbBackupBtn">
+                      ☁️ Sauvegarder sur Firebase
+                    </button>
+                  </div>
+                </div>
+
+
+              </div>
+
+              <!-- Backup All -->
+              <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200);">
+                <button class="btn btn-primary" onclick="backupAll()"
+                  style="width:100%;max-width:400px;display:block;margin:0 auto;padding:14px 24px;font-size:15px;">
+                  💾 Sauvegarder tous les justificatifs
+                </button>
+                <p style="text-align:center;font-size:12px;color:var(--gray-400);margin-top:10px;">
+                  Cette action va sauvegarder sur les 2 supports disponibles.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+
+      <!-- ══ TAB: TRIMESTRE ══ -->
+      <div id="tab-content-trimestre" role="tabpanel" aria-labelledby="tab-trimestre" style="display:none;">
+        <div class="mobile-section-header" style="display:none;">
+          <img src="logo.PNG" alt="Eqnovia" class="mobile-logo" />
+          <span class="section-label">Section :</span>
+          <span class="section-name">Rapports trimestriels</span>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <div class="panel-icon blue">📊</div> Synthèse trimestrielle
+            </div>
+            <div class="export-group">
+              <button class="btn btn-pdf" onclick="exportPDFTrimestre()"><span>📄 </span>PDF</button>
+              <button class="btn btn-excel" onclick="exportExcelTrimestre()"><span>📊 </span>Excel</button>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="filters-bar"
+              style="border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:14px;">
+              <select class="form-select" id="triYearFilter" onchange="renderTrimester()"
+                style="min-width:100px;"></select>
+              <div class="filter-sep"></div>
+              <select class="form-select" id="triUserFilter" style="min-width:100px;">
+                <option value="">Tous les collaborateurs</option>
               </select>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="omDepart">Lieu de départ</label>
-              <input type="text" class="form-input" id="omDepart" placeholder="Ex : Casablanca" autocomplete="off"/>
+            <div id="trimesterContent">
+              <div class="empty-state">
+                <div class="empty-icon">📊</div>
+                <h3>Sélectionnez une année</h3>
+                <p>Les données trimestrielles apparaîtront ici.</p>
+              </div>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="omArrivee">Lieu de destination</label>
-              <input type="text" class="form-input" id="omArrivee" placeholder="Ex : Rabat" autocomplete="off"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ TAB: COMPARAISON ══ -->
+      <div id="tab-content-comparison" role="tabpanel" aria-labelledby="tab-comparison" style="display:none;">
+        <div class="mobile-section-header" style="display:none;">
+          <img src="logo.PNG" alt="Eqnovia" class="mobile-logo" />
+          <span class="section-label">Section :</span>
+          <span class="section-name">Comparaison des périodes</span>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <div class="panel-icon orange">📈</div> Analyse comparative des dépenses
             </div>
-            <div class="form-group">
-              <label class="form-label" for="omDebut">Date de début</label>
-              <input type="date" class="form-input" id="omDebut"/>
+            <div class="export-group">
+              <button class="btn btn-pdf" onclick="exportPDFComparison()"><span>📄 </span>PDF</button>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="omFin">Date de fin</label>
-              <input type="date" class="form-input" id="omFin"/>
-            </div>
-            <div class="form-group span-2">
-              <label class="form-label" for="omObjet">Objet de la mission *</label>
-              <input type="text" class="form-input" id="omObjet" placeholder="Ex : Réunion client, installation…" autocomplete="off"/>
-            </div>
-            <div class="form-group span-2">
-              <label class="form-label" for="omTransport">Mode de transport</label>
-              <select class="form-select" id="omTransport">
-                <option value="Voiture">🚗 Voiture</option>
-                <option value="Train">🚆 Train</option>
-                <option value="Avion">✈️ Avion</option>
-                <option value="Bus">🚌 Bus</option>
-                <option value="Taxi">🚕 Taxi</option>
-                <option value="Autre">📌 Autre</option>
+          </div>
+          <div class="panel-body">
+            <div class="filters-bar"
+              style="border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:14px;">
+              <select class="form-select" id="cmpPeriod1" onchange="renderComparison()" style="min-width:80px;">
+                <option value="month">Mois</option>
+                <option value="trimestre">Trimestre</option>
+                <option value="year">Année</option>
               </select>
+              <select class="form-select" id="cmpDate1" onchange="renderComparison()" style="min-width:120px;"></select>
+              <span style="font-size:12px;color:var(--gray-400);font-weight:600;">vs</span>
+              <select class="form-select" id="cmpPeriod2" onchange="renderComparison()" style="min-width:80px;">
+                <option value="month">Mois</option>
+                <option value="trimestre">Trimestre</option>
+                <option value="year">Année</option>
+              </select>
+              <select class="form-select" id="cmpDate2" onchange="renderComparison()" style="min-width:120px;"></select>
+              <div class="filter-sep"></div>
+              <select class="form-select" id="cmpUserFilter" style="min-width:100px;">
+                <option value="">Tous</option>
+              </select>
+              <button class="btn btn-primary" onclick="renderComparison()" style="height:32px;font-size:11px;">🔄
+                Comparer</button>
             </div>
-            <div class="form-group span-2">
-              <label class="form-label" for="omTel">📱 Téléphone (WhatsApp) <span style="font-weight:400;color:var(--gray-400);text-transform:none;">— pour notification</span></label>
-              <input type="tel" class="form-input" id="omTel" placeholder="Ex : 06 12 34 56 78" autocomplete="off"/>
+            <div id="comparisonContent">
+              <div class="empty-state">
+                <div class="empty-icon">📈</div>
+                <h3>Sélectionnez deux périodes</h3>
+                <p>Choisissez deux périodes à comparer pour analyser l'évolution des dépenses.</p>
+              </div>
             </div>
-            <div class="form-group span-2">
-              <label class="form-label" for="omRemarques">Remarques / instructions</label>
-              <textarea class="form-input" id="omRemarques" rows="3" placeholder="Consignes particulières, hébergement…" style="resize:vertical;"></textarea>
-            </div>
-          </div>
-          <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
-            <button class="btn btn-primary btn-lg" style="flex:1;min-width:140px;" onclick="generateMissionOrder()">📄 Générer la fiche</button>
-            <button class="btn btn-ghost btn-lg" style="flex:1;min-width:140px;" onclick="resetMissionForm()">↺ Réinitialiser</button>
           </div>
         </div>
       </div>
 
-      <!-- Aperçu de la fiche d'ordre de mission -->
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><div class="panel-icon orange">📑</div> Fiche d'ordre de mission</div>
-          <button class="btn btn-pdf no-print" style="font-size:11px;padding:6px 12px;" onclick="printMissionOrder()" id="omPrintBtn" disabled>🖨️ Imprimer / PDF</button>
+      <!-- ══ TAB: ADMIN OM (Global) ══ -->
+      <div id="tab-content-admin-om" role="tabpanel" aria-labelledby="tab-admin-om" style="display:none;">
+        <div class="mobile-section-header" style="display:none;">
+          <img src="logo.PNG" alt="Eqnovia" class="mobile-logo" />
+          <span class="section-label">Admin :</span>
+          <span class="section-name">Ordres de mission globaux</span>
         </div>
-        <div class="panel-body">
-          <div id="omFiche" class="om-fiche">
-            <p style="color:var(--gray-400);font-size:13px;text-align:center;padding:40px 0;">🗒️ Remplissez le formulaire et cliquez sur « Générer la fiche » pour afficher la fiche d'ordre de mission.</p>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <div class="panel-icon blue">📋</div> Tous les ordres de mission (Firebase)
+            </div>
+            <div class="export-group">
+              <button class="btn btn-pdf" onclick="adminOMExportPDF()"
+                style="height:30px;font-size:10px;padding:0 10px;"><span>📄 </span>PDF</button>
+              <button class="btn btn-excel" onclick="adminOMExportExcel()"
+                style="height:30px;font-size:10px;padding:0 10px;"><span>📊 </span>Excel</button>
+              <button class="btn btn-ghost" onclick="loadAdminOM()"
+                style="height:30px;font-size:10px;padding:0 10px;">🔄</button>
+            </div>
           </div>
-          <div id="omHistorySection" class="om-history" style="margin-top:16px;border-top:1px solid var(--gray-100);padding-top:14px;">
-            <h4>📋 Historique des ordres de mission</h4>
-            <div id="omHistoryList"></div>
+          <div class="panel-body">
+            <div class="filters-bar"
+              style="border:1px solid var(--gray-200);border-radius:var(--radius-md);margin-bottom:14px;">
+              <input type="text" class="form-input" id="adminOMSearch" placeholder="🔍 Rechercher..."
+                oninput="renderAdminOM()" style="min-width:120px;" />
+              <div class="filter-sep"></div>
+              <select class="form-select" id="adminOMYear" onchange="renderAdminOM()" style="min-width:90px;">
+                <option value="">Toutes années</option>
+              </select>
+              <select class="form-select" id="adminOMEmploye" style="min-width:120px;">
+                <option value="">Tous collaborateurs</option>
+              </select>
+              <div class="filter-sep"></div>
+              <select class="form-select" id="adminOMStatus" onchange="renderAdminOM()" style="min-width:110px;">
+                <option value="">Tous statuts</option>
+                <option value="pending">⏳ En attente</option>
+                <option value="approved">✅ Approuvé</option>
+                <option value="rejected">❌ Rejeté</option>
+              </select>
+              <span id="adminOMCount" style="font-size:11px;color:var(--gray-400);font-weight:600;margin-left:auto;">0
+                OM</span>
+            </div>
+            <div class="table-wrap" id="adminOMContent">
+              <div class="empty-state">
+                <div class="empty-icon">📋</div>
+                <h3>Chargement des données...</h3>
+                <p>Les ordres de mission depuis Firebase apparaîtront ici.</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
+
+      <!-- ══ TAB: USER MISSIONS ══ -->
+      <div id="tab-content-user-missions" role="tabpanel" aria-labelledby="tab-user-missions" style="display:none;">
+        <div class="mobile-section-header" style="display:none;">
+          <img src="logo.PNG" alt="Eqnovia" class="mobile-logo" />
+          <span class="section-label">Section :</span>
+          <span class="section-name">Mes ordres de mission</span>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <div class="panel-icon blue">📋</div> Mes ordres de mission assignés
+            </div>
+            <div class="export-group">
+              <button class="btn btn-pdf" onclick="exportUserMissionsPDF()"
+                style="height:30px;font-size:10px;padding:0 10px;"><span>📄 </span>PDF</button>
+              <button class="btn btn-ghost" onclick="loadUserMissionOrders()"
+                style="height:30px;font-size:10px;padding:0 10px;">🔄</button>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div id="userMOList">
+              <div class="empty-state">
+                <div class="empty-icon">📭</div>
+                <h3>Chargement...</h3>
+                <p>Vos ordres de mission assignés apparaîtront ici.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ TAB: ORDRE DE MISSION ══ -->
+      <div id="tab-content-mission" role="tabpanel" aria-labelledby="tab-mission" style="display:none;">
+        <!-- Mobile Section Header -->
+        <div class="mobile-section-header" style="display:none;">
+          <img src="logo.PNG" alt="Eqnovia" class="mobile-logo" />
+          <span class="section-label">Section :</span>
+          <span class="section-name">Ordre de mission</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" class="input-form-grid">
+
+          <!-- Formulaire d'ordre de mission -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <div class="panel-icon blue">📝</div> Nouvel ordre de mission
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label class="form-label" for="omNumero">N° d'ordre *</label>
+                  <input type="text" class="form-input" id="omNumero" placeholder="Ex : OM-2026-001"
+                    autocomplete="off" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="omDate">Date d'émission *</label>
+                  <input type="date" class="form-input" id="omDate" />
+                </div>
+                <div class="form-group span-2">
+                  <label class="form-label" for="omEmploye">Nom du collaborateur *</label>
+                  <select class="form-select" id="omEmploye">
+                    <option value="">-- Sélectionner un membre --</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="omDepart">Lieu de départ</label>
+                  <input type="text" class="form-input" id="omDepart" placeholder="Ex : Casablanca"
+                    autocomplete="off" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="omArrivee">Lieu de destination</label>
+                  <input type="text" class="form-input" id="omArrivee" placeholder="Ex : Rabat" autocomplete="off" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="omDebut">Date de début</label>
+                  <input type="date" class="form-input" id="omDebut" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="omFin">Date de fin</label>
+                  <input type="date" class="form-input" id="omFin" />
+                </div>
+                <div class="form-group span-2">
+                  <label class="form-label" for="omObjet">Objet de la mission *</label>
+                  <input type="text" class="form-input" id="omObjet" placeholder="Ex : Réunion client, installation…"
+                    autocomplete="off" />
+                </div>
+                <div class="form-group span-2">
+                  <label class="form-label" for="omTransport">Mode de transport</label>
+                  <select class="form-select" id="omTransport">
+                    <option value="Voiture">🚗 Voiture</option>
+                    <option value="Train">🚆 Train</option>
+                    <option value="Avion">✈️ Avion</option>
+                    <option value="Bus">🚌 Bus</option>
+                    <option value="Taxi">🚕 Taxi</option>
+                    <option value="Autre">📌 Autre</option>
+                  </select>
+                </div>
+                <div class="form-group span-2">
+                  <label class="form-label" for="omTel">📱 Téléphone (WhatsApp) <span
+                      style="font-weight:400;color:var(--gray-400);text-transform:none;">— pour
+                      notification</span></label>
+                  <input type="tel" class="form-input" id="omTel" placeholder="Ex : 06 12 34 56 78"
+                    autocomplete="off" />
+                </div>
+                <div class="form-group span-2">
+                  <label class="form-label" for="omRemarques">Remarques / instructions</label>
+                  <textarea class="form-input" id="omRemarques" rows="3"
+                    placeholder="Consignes particulières, hébergement…" style="resize:vertical;"></textarea>
+                </div>
+              </div>
+              <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+                <button class="btn btn-primary btn-lg" style="flex:1;min-width:140px;"
+                  onclick="generateMissionOrder()">📄 Générer la fiche</button>
+                <button class="btn btn-ghost btn-lg" style="flex:1;min-width:140px;" onclick="resetMissionForm()">↺
+                  Réinitialiser</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Aperçu de la fiche d'ordre de mission -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <div class="panel-icon orange">📑</div> Fiche d'ordre de mission
+              </div>
+              <button class="btn btn-pdf no-print" style="font-size:11px;padding:6px 12px;"
+                onclick="printMissionOrder()" id="omPrintBtn" disabled>🖨️ Imprimer / PDF</button>
+            </div>
+            <div class="panel-body">
+              <div id="omFiche" class="om-fiche">
+                <p style="color:var(--gray-400);font-size:13px;text-align:center;padding:40px 0;">🗒️ Remplissez le
+                  formulaire et cliquez sur « Générer la fiche » pour afficher la fiche d'ordre de mission.</p>
+              </div>
+              <div id="omHistorySection" class="om-history"
+                style="margin-top:16px;border-top:1px solid var(--gray-100);padding-top:14px;">
+                <h4>📋 Historique des ordres de mission</h4>
+                <div id="omHistoryList"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
-  </div>
 
-</div>
+    <!-- BOTTOM NAVIGATION (MOBILE) -->
+    <nav class="bottom-nav" id="bottomNav" aria-label="Navigation rapide">
+      <a class="bottom-nav-item active" onclick="switchTab('saisie')" id="bnav-saisie" role="button"
+        aria-label="Saisie & OCR">
+        <span class="nav-icon" aria-hidden="true">✏️</span>
+        <span>Saisie</span>
+      </a>
+      <a class="bottom-nav-item" tabindex="0" onclick="switchTab('all')" id="bnav-all" role="button"
+        aria-label="Toutes les dépenses">
+        <span class="nav-icon" aria-hidden="true">📋</span>
+        <span>Toutes</span>
+      </a>
+      <a class="bottom-nav-item" tabindex="0" onclick="switchTab('monthly')" id="bnav-monthly" role="button"
+        aria-label="Par mois">
+        <span class="nav-icon" aria-hidden="true">📅</span>
+        <span>Mois</span>
+      </a>
+      <a class="bottom-nav-item" tabindex="0" onclick="switchTab('yearly')" id="bnav-yearly" role="button"
+        aria-label="Par année">
+        <span class="nav-icon" aria-hidden="true">📆</span>
+        <span>Année</span>
+      </a>
+      <a class="bottom-nav-item" tabindex="0" onclick="switchTab('remboursement')" id="bnav-remboursement" role="button"
+        aria-label="Remboursement">
+        <span class="nav-icon" aria-hidden="true">💰</span>
+        <span>Remb.</span>
+        <span class="remb-notif-dot" id="rembNotifDotMobile" style="display:none;">!</span>
+      </a>
+      <a class="bottom-nav-item" tabindex="0" onclick="switchTab('trimestre')" id="bnav-trimestre" role="button"
+        aria-label="Par trimestre">
+        <span class="nav-icon" aria-hidden="true">📊</span>
+        <span>Trimestre</span>
+      </a>
+      <a class="bottom-nav-item" tabindex="0" onclick="switchTab('comparison')" id="bnav-comparison" role="button"
+        aria-label="Comparaison">
+        <span class="nav-icon" aria-hidden="true">📈</span>
+        <span>Comparer</span>
+      </a>
+      <a class="bottom-nav-item" tabindex="0" onclick="switchTab('mission')" id="bnav-mission" role="button"
+        aria-label="Ordre de mission" style="display:none;">
+        <span class="nav-icon" aria-hidden="true">📝</span>
+        <span>Mission</span>
+      </a>
+      <a id="bnav-admin-om" style="display:none;"></a>
+      <a class="bottom-nav-item" tabindex="0" onclick="switchTab('user-missions')" id="bnav-user-missions" role="button"
+        aria-label="Mes ordres de mission" style="display:none;">
+        <span class="nav-icon" aria-hidden="true">📋</span>
+        <span>Mes OM</span>
+      </a>
+      <a class="bottom-nav-item" tabindex="0" onclick="switchTab('policy')" id="bnav-policy" role="button"
+        aria-label="Conditions et informations">
+        <span class="nav-icon" aria-hidden="true">📜</span>
+        <span>Infos</span>
+      </a>
+      <a class="bottom-nav-item" tabindex="0" onclick="switchTab('backup')" id="bnav-backup" role="button"
+        aria-label="Sauvegarde des justificatifs">
+        <span class="nav-icon" aria-hidden="true">💾</span>
+        <span>Backup</span>
+      </a>
+    </nav>
 
-<!-- BOTTOM NAVIGATION (MOBILE) -->
-<nav class="bottom-nav" id="bottomNav" aria-label="Navigation rapide">
-  <a class="bottom-nav-item active" onclick="switchTab('saisie')" id="bnav-saisie" role="button" aria-label="Saisie & OCR">
-    <span class="nav-icon" aria-hidden="true">✏️</span>
-    <span>Saisie</span>
-  </a>
-  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('all')" id="bnav-all" role="button" aria-label="Toutes les dépenses">
-    <span class="nav-icon" aria-hidden="true">📋</span>
-    <span>Toutes</span>
-  </a>
-  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('monthly')" id="bnav-monthly" role="button" aria-label="Par mois">
-    <span class="nav-icon" aria-hidden="true">📅</span>
-    <span>Mois</span>
-  </a>
-  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('yearly')" id="bnav-yearly" role="button" aria-label="Par année">
-    <span class="nav-icon" aria-hidden="true">📆</span>
-    <span>Année</span>
-  </a>
-  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('remboursement')" id="bnav-remboursement" role="button" aria-label="Remboursement">
-    <span class="nav-icon" aria-hidden="true">💰</span>
-    <span>Remb.</span>
-    <span class="remb-notif-dot" id="rembNotifDotMobile" style="display:none;">!</span>
-  </a>
-  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('trimestre')" id="bnav-trimestre" role="button" aria-label="Par trimestre">
-    <span class="nav-icon" aria-hidden="true">📊</span>
-    <span>Trimestre</span>
-  </a>
-  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('comparison')" id="bnav-comparison" role="button" aria-label="Comparaison">
-    <span class="nav-icon" aria-hidden="true">📈</span>
-    <span>Comparer</span>
-  </a>
-  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('mission')" id="bnav-mission" role="button" aria-label="Ordre de mission" style="display:none;">
-    <span class="nav-icon" aria-hidden="true">📝</span>
-    <span>Mission</span>
-  </a>
-  <a id="bnav-admin-om" style="display:none;"></a>
-  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('user-missions')" id="bnav-user-missions" role="button" aria-label="Mes ordres de mission" style="display:none;">
-    <span class="nav-icon" aria-hidden="true">📋</span>
-    <span>Mes OM</span>
-  </a>
-  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('policy')" id="bnav-policy" role="button" aria-label="Conditions et informations">
-    <span class="nav-icon" aria-hidden="true">📜</span>
-    <span>Infos</span>
-  </a>
-  <a class="bottom-nav-item" tabindex="0" onclick="switchTab('backup')" id="bnav-backup" role="button" aria-label="Sauvegarde des justificatifs">
-    <span class="nav-icon" aria-hidden="true">💾</span>
-    <span>Backup</span>
-  </a>
-</nav>
-
-</main>
+  </main>
 
 
   <!-- Script principal -->
   <script src="app.js" defer></script>
 
 </body>
+
 </html>
