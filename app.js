@@ -977,8 +977,12 @@ function updateUserUI() {
 
   // Comptable can see same panels as admin (readonly) but NOT admin-only management tabs
   const showForAdmin = isAdmin; // only full admin gets management/missions/backups
-  const adminOnly = document.querySelectorAll('#adminOnlyLabel, #adminUsersBtn, #adminOMBtn, #tab-admin-om, #nav-mission, #tab-mission, #bnav-mission, #nav-trimestre, #tab-trimestre, #bnav-trimestre, #nav-comparison, #tab-comparison, #bnav-comparison, #adminOnlyBackupLabel, #nav-backup, #tab-backup, #bnav-backup, #adminOnlyInfoLabel, #nav-policy, #tab-policy, #bnav-policy');
+  const adminOnly = document.querySelectorAll('#adminOnlyLabel, #adminUsersBtn, #adminOMBtn, #tab-admin-om, #nav-mission, #tab-mission, #bnav-mission, #adminOnlyBackupLabel, #nav-backup, #tab-backup, #bnav-backup, #adminOnlyInfoLabel, #nav-policy, #tab-policy, #bnav-policy');
   adminOnly.forEach(el => el.style.display = showForAdmin ? '' : 'none');
+
+  // Par trimestre et Comparaison : accessibles à l'administrateur et au profil comptable
+  const statsReports = document.querySelectorAll('#nav-trimestre, #tab-trimestre, #bnav-trimestre, #nav-comparison, #tab-comparison, #bnav-comparison');
+  statsReports.forEach(el => el.style.display = (isAdmin || isComptable) ? '' : 'none');
 
   // Show user missions tab for non-admin users (but not comptable)
   const userMissionsTab = document.getElementById('tab-user-missions');
@@ -6344,8 +6348,11 @@ function exportPDFTrimestre() {
   // Data
   const data = getFilteredExpenses();
   const yearSel = document.getElementById('triYearFilter');
+  const userSel = document.getElementById('triUserFilter');
   const year = yearSel?.value || '';
+  const user = userSel?.value || '';
   let filtered = year ? data.filter(e => e.date?.substring(0, 4) === year) : data;
+  if (user) filtered = filtered.filter(e => e.user === user);
 
   const triData = { 1: [], 2: [], 3: [], 4: [] };
   filtered.forEach(e => {
@@ -6399,8 +6406,11 @@ function exportPDFTrimestre() {
 function exportExcelTrimestre() {
   const data = getFilteredExpenses();
   const yearSel = document.getElementById('triYearFilter');
+  const userSel = document.getElementById('triUserFilter');
   const year = yearSel?.value || '';
+  const user = userSel?.value || '';
   let filtered = year ? data.filter(e => e.date?.substring(0, 4) === year) : data;
+  if (user) filtered = filtered.filter(e => e.user === user);
 
   const rows = [['eqnovia · Rapport trimestriel', '', '', '', ''],
   [`Généré le ${new Date().toLocaleDateString('fr-FR')} · ${USERS[currentUser]?.label || ''}`, '', '', '', ''],
@@ -6461,9 +6471,11 @@ function exportPDFComparison() {
   const data = getFilteredExpenses();
   const period1 = document.getElementById('cmpPeriod1')?.value || 'month';
   const period2 = document.getElementById('cmpPeriod2')?.value || 'month';
+  const userF = document.getElementById('cmpUserFilter')?.value || '';
 
-  const set1 = _filterByPeriod(data, period1, p1);
-  const set2 = _filterByPeriod(data, period2, p2);
+  let filteredData = userF ? data.filter(e => e.user === userF) : data;
+  const set1 = _filterByPeriod(filteredData, period1, p1);
+  const set2 = _filterByPeriod(filteredData, period2, p2);
   const t1 = set1.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
   const t2 = set2.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
 

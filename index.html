@@ -1025,7 +1025,7 @@
               <select class="form-select" id="triYearFilter" onchange="renderTrimester()"
                 style="min-width:100px;"></select>
               <div class="filter-sep"></div>
-              <select class="form-select" id="triUserFilter" style="min-width:100px;">
+              <select class="form-select" id="triUserFilter" onchange="renderTrimester()" style="min-width:100px;">
                 <option value="">Tous les collaborateurs</option>
               </select>
             </div>
@@ -1074,7 +1074,7 @@
               </select>
               <select class="form-select" id="cmpDate2" onchange="renderComparison()" style="min-width:120px;"></select>
               <div class="filter-sep"></div>
-              <select class="form-select" id="cmpUserFilter" style="min-width:100px;">
+              <select class="form-select" id="cmpUserFilter" onchange="renderComparison()" style="min-width:100px;">
                 <option value="">Tous</option>
               </select>
               <button class="btn btn-primary" onclick="renderComparison()" style="height:32px;font-size:11px;">🔄
