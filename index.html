@@ -114,6 +114,9 @@
     }
   </style>
 
+  <!-- [+Guide] Styles du guide d'utilisation (additif) -->
+  <link rel="stylesheet" href="guide.css" />
+
 </head>
 
 <body>
@@ -130,7 +133,7 @@
           <option value="admin">Administrateur</option>
           <option value="user1">Rachid Bayed</option>
           <option value="user2">Soufiane Laraichi</option>
-          <option value="user3">Bourzgui Fatimazahra</option>
+          <option value="user3">Fatimazahra Bourzgui</option>
           <option value="user4">Larbi Ramzi</option>
           <option value="user5">Ibrahime</option>
           <option value="user7">Omar Aguersif</option>
@@ -319,6 +322,11 @@
     <span class="app-header-title">Frais</span>
     <span class="app-header-subtitle" aria-hidden="true">Saisie & OCR</span>
     <div class="app-header-right">
+      <!-- [+Guide] Bouton guide (additif) -->
+      <button type="button" class="guide-header-btn" id="guideBtn" onclick="openGuideModal()"
+        aria-label="Ouvrir le guide d'utilisation" title="Guide d'utilisation">📖
+        <span class="guide-btn-text">Guide</span>
+      </button>
       <div class="db-status db-local" id="dbStatus">
         <span>⏳</span> <span id="dbStatusText">Connexion…</span>
       </div>
@@ -392,6 +400,11 @@
     </a>
 
     <span class="nav-label" id="adminOnlyInfoLabel"><span class="nav-label-icon">ℹ️</span> Informations</span>
+    <!-- [+Guide] Bouton guide dans la sidebar (additif) -->
+    <a class="nav-item guide-nav-item" data-tooltip="Guide d'utilisation" onclick="openGuideModal()"
+      id="guideBtnSidebar" role="button" tabindex="0">
+      <span class="nav-icon">📖</span> <span>Guide</span>
+    </a>
     <a class="nav-item" data-tooltip="Conditions" onclick="switchTab('policy')" id="nav-policy">
       <span class="nav-icon">📜</span> <span>Conditions</span>
     </a>
@@ -422,7 +435,7 @@
           <div class="text">Déconnexion</div>
         </button>
 
-        <p>Eqnovia © 2025</p>
+        <p>Eqnovia © 2026</p>
       </div>
     </div>
 
@@ -1358,8 +1371,29 @@
   </main>
 
 
+  <!-- [+Guide] MODAL GUIDE (additive — n'affecte aucune modal existante) -->
+  <div class="modal-overlay" id="guideModal" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="guideTitle">📘 Guide d'utilisation</h3>
+        <button class="modal-close" id="guideCloseBtn" onclick="closeGuideModal()"
+          aria-label="Fermer le guide">✕</button>
+      </div>
+      <div class="modal-body" id="guideBody">
+        <!-- Le contenu accordéon est généré par guide.js (source unique HTML + PDF) -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeGuideModal()">Fermer</button>
+        <button class="btn btn-primary" onclick="downloadGuidePDF()">📄 Télécharger en PDF</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Script principal -->
   <script src="app.js" defer></script>
+
+  <!-- [+Guide] Logique du guide (additif, chargée après app.js) -->
+  <script src="guide.js" defer></script>
 
 </body>
 

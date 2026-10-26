@@ -275,12 +275,18 @@ function createUserDropdown(selectId, config = {}) {
           ${filtered.map(([key, user]) => {
       // Check active state: match by key OR by label (for selects that use label as value)
       const isActive = key === select.value || user.label === select.value;
+      // Initiales uniquement (ex : "Bourzgui Fatima Zahra" -> "BF", "Comptable" -> "Co")
+      const initials = user.label
+        .split(/\s+/)
+        .filter(Boolean)
+        .map(w => w.substring(0, 1).toUpperCase())
+        .join('')
+        .substring(0, 2);
       return `
-              <div class="ud-item ${isActive ? 'active' : ''} ${key === 'admin' ? 'ud-item-admin' : ''}" data-value="${key}" role="option">
+              <div class="ud-item ${isActive ? 'active' : ''} ${key === 'admin' ? 'ud-item-admin' : ''}" data-value="${key}" role="option" title="${esc(user.label)}${user.email ? ' \u2014 ' + esc(user.email) : ''}">
                 <div class="ud-item-avatar">${user.label.substring(0, 1).toUpperCase()}</div>
                 <div class="ud-item-info">
-                  <div class="ud-item-name">${esc(user.label)}</div>
-                  ${user.email ? `<div class="ud-item-email">${esc(user.email)}</div>` : ''}
+                  <div class="ud-item-name">${esc(initials)}</div>
                 </div>
                 <div class="ud-item-check">\u2713</div>
               </div>
@@ -5784,29 +5790,16 @@ function exportPDF() {
   y += badgeH + 5;
 
   // ── Table ──
-  const head = isComptable
-    ? [['#', 'Description', 'Catégorie', 'Mission', 'Montant TTC (DH)']]
-    : [['N°', 'Date', 'Description', 'Catégorie', 'Total TTC (DH)', 'Objet / Mission', 'Commentaires', 'Utilisateur', 'Justif.', 'Remboursé']];
-  const body = isComptable
-    ? sorted.map((e, i) => [
-        String(i + 1),
-        e.desc,
-        e.cat || 'Autre',
-        e.mission || '—',
-        fmtDH(e.amount)
-      ])
-    : sorted.map((e, i) => [
-        String(i + 1),
-        fmtDate(e.date),
-        e.desc,
-        e.cat || 'Autre',
-        fmtDH(e.amount),
-        e.mission || '—',
-        e.comment || '—',
-        USERS[e.user]?.label || e.user,
-        e.justifData ? 'Oui' : 'Non',
-        isRembourse(e) ? 'Oui' : 'Non'
-      ]);
+  const head = [['N°', 'Date', 'Description', 'Catégorie', 'Total TTC (DH)', 'Objet / Mission', 'Utilisateur']];
+  const body = sorted.map((e, i) => [
+    String(i + 1),
+    fmtDate(e.date),
+    e.desc,
+    e.cat || 'Autre',
+    fmtDH(e.amount),
+    e.mission || '—',
+    USERS[e.user]?.label || e.user
+  ]);
   doc.autoTable({
     head, body, startY: y,
     styles: {
@@ -5820,25 +5813,16 @@ function exportPDF() {
       cellPadding: { top: 3.5, bottom: 3.5, left: 3, right: 3 }
     },
     alternateRowStyles: { fillColor: altRow },
-    columnStyles: isComptable ? {
-      0: { cellWidth: 14, halign: 'center', textColor: gray, fontStyle: 'normal' },
-      1: { cellWidth: 105, halign: 'left' },
-      2: { cellWidth: 45, halign: 'center' },
-      3: { cellWidth: 65, halign: 'left' },
-      4: { cellWidth: 40, halign: 'right', fontStyle: 'bold' }
-    } : {
+    columnStyles: {
       0: { cellWidth: 12, halign: 'center', textColor: gray, fontStyle: 'normal' },
-      1: { cellWidth: 24, halign: 'center', fontStyle: 'normal' },
-      2: { cellWidth: 54, halign: 'left' },
-      3: { cellWidth: 28, halign: 'center' },
-      4: { cellWidth: 28, halign: 'right', fontStyle: 'bold', textColor: blue },
-      5: { cellWidth: 38, halign: 'left' },
-      6: { cellWidth: 38, halign: 'left', textColor: gray },
-      7: { cellWidth: 28, halign: 'center' },
-      8: { cellWidth: 16, halign: 'center' },
-      9: { cellWidth: 20, halign: 'center' }
+      1: { cellWidth: 26, halign: 'center', fontStyle: 'normal' },
+      2: { cellWidth: 80, halign: 'left' },
+      3: { cellWidth: 42, halign: 'center' },
+      4: { cellWidth: 32, halign: 'right', fontStyle: 'bold', textColor: blue },
+      5: { cellWidth: 45, halign: 'left' },
+      6: { cellWidth: 30, halign: 'center' }
     },
-    foot: [['', '', '', 'TOTAL TTC', fmtDH(total), '', '', '', '', '']],
+    foot: [['', '', '', 'TOTAL TTC', fmtDH(total), '', '']],
     footStyles: {
       fillColor: blueLight, fontStyle: 'bold', textColor: blue,
       fontSize: 8.5, cellPadding: 3.5
@@ -5851,14 +5835,6 @@ function exportPDF() {
       if (hookData.section === 'body' && hookData.column.index === 0) {
         hookData.cell.styles.textColor = gray;
         hookData.cell.styles.fontSize = 7;
-      }
-      if (hookData.section === 'body' && hookData.column.index === 8) {
-        hookData.cell.styles.fontStyle = hookData.cell.raw === 'Oui' ? 'bold' : 'normal';
-        hookData.cell.styles.textColor = hookData.cell.raw === 'Oui' ? [34, 139, 34] : gray;
-      }
-      if (hookData.section === 'body' && hookData.column.index === 9) {
-        hookData.cell.styles.fontStyle = 'bold';
-        hookData.cell.styles.textColor = hookData.cell.raw === 'Oui' ? [34, 139, 34] : [180, 83, 9];
       }
     },
     didDrawPage: function (hookData) {

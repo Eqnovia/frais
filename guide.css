@@ -1,0 +1,260 @@
+/* ═══════════════════════════════════════════════════════════════
+   GUIDE D'UTILISATION — Styles 100% additifs (préfixe guide-)
+   Réutilise les classes existantes .modal-overlay / .modal / .btn
+   et les surcharge UNIQUEMENT via le sélecteur #guideModal.
+   Aucune règle de style.css n'est modifiée ici.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ══ Bouton dans le header (style ghost pill, compact) ══ */
+.guide-header-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--gray-700);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 30px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .2s ease, color .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+.guide-header-btn:hover {
+  background: var(--eq-blue-soft, #EAF2FF);
+  color: var(--eq-blue, #0B4F9E);
+  border-color: var(--eq-blue, #0B4F9E);
+}
+.guide-header-btn:focus-visible {
+  outline: 2px solid var(--eq-blue, #0B4F9E);
+  outline-offset: 2px;
+}
+
+/* ══ Item dans la sidebar (hérite de .nav-item existant) ══ */
+.nav-item.guide-nav-item {
+  color: var(--eq-blue, #0B4F9E);
+}
+.nav-item.guide-nav-item:hover {
+  background: var(--eq-blue-soft, #EAF2FF);
+}
+
+/* ══ Modal du guide : réutilise .modal-overlay + .modal ══ */
+#guideModal .modal {
+  max-width: 860px;
+  width: 100%;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#guideModal .modal-header {
+  padding: 16px 20px;
+  background: var(--eq-blue, #0B4F9E);
+  border-bottom: none;
+  border-radius: var(--radius-xl, 16px) var(--radius-xl, 16px) 0 0;
+}
+#guideModal .modal-header h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#guideModal .modal-close {
+  color: rgba(255, 255, 255, .75);
+  font-size: 20px;
+}
+#guideModal .modal-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, .15);
+  border-radius: 8px;
+}
+#guideModal .modal-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px 18px;
+  background: var(--gray-50, #F8FAFC);
+  -webkit-overflow-scrolling: touch;
+}
+#guideModal .modal-footer {
+  border-top: 1px solid var(--gray-100, #E5E9F0);
+  flex-shrink: 0;
+}
+
+/* ══ Bandeau intro du guide ══ */
+.guide-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--eq-blue-soft, #EAF2FF);
+  border: 1px solid rgba(11, 79, 158, .18);
+  border-radius: var(--radius-md, 12px);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--gray-700, #475569);
+  line-height: 1.5;
+}
+.guide-intro .guide-intro-icon { font-size: 20px; line-height: 1.3; }
+
+/* ══ Accordéon natif <details>/<summary> ══ */
+.guide-accordion { display: flex; flex-direction: column; gap: 8px; }
+.guide-section {
+  background: var(--white, #fff);
+  border: 1px solid var(--gray-200, #E2E8F0);
+  border-radius: var(--radius-md, 12px);
+  overflow: hidden;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.guide-section[open] {
+  border-color: var(--eq-blue, #0B4F9E);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(26, 33, 48, .08));
+}
+.guide-section summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-900, #0F172A);
+  transition: background .15s ease;
+}
+.guide-section summary::-webkit-details-marker { display: none; }
+.guide-section summary:hover { background: var(--gray-50, #F8FAFC); }
+.guide-section .guide-sec-icon { font-size: 17px; flex-shrink: 0; }
+.guide-section .guide-sec-title { flex: 1 1 auto; }
+.guide-section .guide-chevron {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--gray-400, #94A3B8);
+  transition: transform .25s ease;
+}
+.guide-section[open] .guide-chevron { transform: rotate(180deg); color: var(--eq-blue, #0B4F9E); }
+.guide-section .guide-sec-body {
+  padding: 4px 14px 14px 14px;
+  border-top: 1px dashed var(--gray-100, #E5E9F0);
+  animation: guideOpen .25s ease;
+}
+@keyframes guideOpen {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ══ Contenu d'une section ══ */
+.guide-sec-body p.guide-lead {
+  font-size: 13px;
+  color: var(--gray-700, #475569);
+  margin: 8px 0 8px 0;
+  line-height: 1.55;
+}
+.guide-sec-body ul {
+  margin: 4px 0 4px 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.guide-sec-body li {
+  font-size: 13px;
+  color: var(--gray-700, #475569);
+  line-height: 1.55;
+}
+.guide-sec-body li::marker { color: var(--eq-blue, #0B4F9E); }
+.guide-sec-body strong { color: var(--gray-900, #0F172A); font-weight: 600; }
+.guide-sec-body .guide-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  background: #FFF8E6;
+  border: 1px solid #F2E3B3;
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: #7A5B10;
+  line-height: 1.5;
+}
+/* Petites balises <kbd> pour les touches / boutons */
+.guide-sec-body kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--gray-800, #1E293B);
+  background: var(--gray-100, #E5E9F0);
+  border: 1px solid var(--gray-200, #E2E8F0);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+/* ══ FAQ : questions en gras dans les items ══ */
+.guide-faq-q { color: var(--eq-blue, #0B4F9E) !important; font-weight: 600; }
+
+/* ══ Bouton flottant "?" (mobile) — ajouté dynamiquement par guide.js ══ */
+.guide-fab {
+  position: fixed;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px)); /* au-dessus de la bottom-nav mobile */
+  right: 14px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: none;
+  background: var(--eq-blue, #0B4F9E);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(11, 79, 158, .35);
+  z-index: 150;
+  display: none; /* visible uniquement sur mobile via media query */
+  align-items: center;
+  justify-content: center;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.guide-fab:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(11, 79, 158, .45); }
+.guide-fab:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* ══ RESPONSIVE MOBILE ══ */
+@media (max-width: 768px) {
+  .guide-fab { display: flex; }
+
+  /* Le texte du bouton header se masque, l'icône reste */
+  .guide-header-btn .guide-btn-text { display: none; }
+  .guide-header-btn { padding: 0 10px; font-size: 14px; }
+
+  #guideModal .modal { max-height: 96vh; border-radius: var(--radius-lg, 14px); }
+  #guideModal .modal-body { padding: 10px; }
+  #guideModal .modal-footer { flex-wrap: wrap; }
+  #guideModal .modal-footer .btn { flex: 1 1 auto; justify-content: center; }
+
+  .guide-section summary { padding: 11px 10px; font-size: 13.5px; }
+  .guide-section .guide-sec-body { padding: 4px 10px 12px 10px; }
+
+  .guide-intro { font-size: 12.5px; padding: 10px 12px; }
+
+  /* Le FAB ne chevauche pas la bottom-nav quand la sidebar est fermée */
+  body.guide-fab-nudged .guide-fab { bottom: 14px; }
+}
+
+/* Très petits écrans : réduction supplémentaire */
+@media (max-width: 380px) {
+  .guide-header-btn { padding: 0 8px; }
+  #guideModal .modal-header h3 { font-size: 14px; }
+}
+
+/* ══ Impression : le guide ne s'imprime que si demandé, jamais en fond de page ══ */
+@media print {
+  #guideModal { display: none !important; }
+  .guide-fab { display: none !important; }
+}
