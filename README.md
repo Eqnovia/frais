@@ -146,7 +146,7 @@ Le bouton d'installation est toujours visible dans l'en-tête de l'application (
 
 ## 📄 Licence
 
-© 2025 **Eqnovia** — Tous droits réservés.
+© 2026 **Eqnovia** — Tous droits réservés.
 
 Ce projet est la propriété d'Eqnovia. Toute reproduction ou distribution sans autorisation est interdite.
 
