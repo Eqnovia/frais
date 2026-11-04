@@ -32,6 +32,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
   <script>if (typeof pdfjsLib !== 'undefined') { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }</script>
 
   <!-- Firebase SDK -->
@@ -117,6 +118,9 @@
   <!-- [+Guide] Styles du guide d'utilisation (additif) -->
   <link rel="stylesheet" href="guide.css" />
 
+  <!-- [+Lot2] Styles des nouveaux modules (additif) -->
+  <link rel="stylesheet" href="lot2.css" />
+
 </head>
 
 <body>
@@ -131,12 +135,12 @@
         <label class="form-label" for="loginUser">Utilisateur</label>
         <select class="form-input" id="loginUser" style="height:44px;">
           <option value="admin">Administrateur</option>
-          <option value="user1">Rachid Bayed</option>
-          <option value="user2">Soufiane Laraichi</option>
-          <option value="user3">Fatimazahra Bourzgui</option>
-          <option value="user4">Larbi Ramzi</option>
+          <option value="user1">Bayed Rachid</option>
+          <option value="user2">Laraichi Soufiane</option>
+          <option value="user3">Bourzgui Fatimazahra</option>
+          <option value="user4">Ramzi Larbi</option>
           <option value="user5">Ibrahime</option>
-          <option value="user7">Omar Aguersif</option>
+          <option value="user7">Aguersif Omar</option>
           <option value="comptable">Comptable</option>
         </select>
       </div>
@@ -318,7 +322,7 @@
     <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()" aria-label="Menu" aria-expanded="false">
       ☰
     </button>
-    <div class="logo-wrap"><img src="logo.PNG" alt="Eqnovia" class="app-logo" /></div>
+    <div class="logo-wrap"><img src="c:/Users/hp/Desktop/frais/icon-192.png" alt="Eqnovia" class="app-logo" /></div>
     <span class="app-header-title">Frais</span>
     <span class="app-header-subtitle" aria-hidden="true">Saisie & OCR</span>
     <div class="app-header-right">
@@ -327,6 +331,8 @@
         aria-label="Ouvrir le guide d'utilisation" title="Guide d'utilisation">📖
         <span class="guide-btn-text">Guide</span>
       </button>
+      <button type="button" id="installBtn" onclick="installPWA()" class="btn btn-download"
+        aria-label="Installer l'application" title="Installer l'application">📲 Installer
       <div class="db-status db-local" id="dbStatus">
         <span>⏳</span> <span id="dbStatusText">Connexion…</span>
       </div>
@@ -398,6 +404,14 @@
       style="color:var(--eq-blue);">
       <span class="nav-icon">📋</span> <span>OM Global</span>
     </a>
+    <a class="nav-item" id="nav-analytics" data-tooltip="Analytics BI" onclick="switchTab('analytics')"
+      style="display:none;">
+      <span class="nav-icon">📊</span> <span>Analytics</span>
+    </a>
+    <a class="nav-item" id="nav-audit" data-tooltip="Journal d'audit" onclick="switchTab('audit')"
+      style="display:none;">
+      <span class="nav-icon">🧾</span> <span>Audit</span>
+    </a>
 
     <span class="nav-label" id="adminOnlyInfoLabel"><span class="nav-label-icon">ℹ️</span> Informations</span>
     <!-- [+Guide] Bouton guide dans la sidebar (additif) -->
@@ -415,12 +429,12 @@
           <label> </label>
           <select id="userSelector">
             <option value="admin"> Admin</option>
-            <option value="user1">👤 Rachid Bayed</option>
-            <option value="user2">👤 Soufiane Laraichi</option>
-            <option value="user3">👤 Fatima zahra Bourzgui</option>
-            <option value="user4">👤 Larbi Ramzi</option>
+            <option value="user1">👤 Bayed Rachid</option>
+            <option value="user2">👤 Laraichi Soufiane</option>
+            <option value="user3">👤 Bourzgui Fatimazahra</option>
+            <option value="user4">👤 Ramzi Larbi</option>
             <option value="user5">👤 Ibrahime</option>
-            <option value="user7">👤 Omar AGUERSIF</option>
+            <option value="user7">👤 AGUERSIF Omar </option>
             <option value="comptable">🧑‍💼 Comptable</option>
           </select>
           <span class="user-badge admin" id="userBadge">Admin</span>
@@ -654,6 +668,9 @@
               <div class="panel-icon blue">💰</div> Suivi des remboursements
             </div>
             <div class="export-group">
+              <button class="btn btn-primary" id="btnSendRembMail" onclick="sendRemboursementEmail()"
+                style="height:30px;font-size:11px;padding:0 12px;display:none;">📧 Envoyer demande de
+                remboursement</button>
               <select class="form-select" id="filterRembTab" onchange="renderRemboursement()"
                 style="height:30px;font-size:11px;">
                 <option value="all">💰 Tous les frais</option>
@@ -1305,6 +1322,28 @@
         </div>
       </div>
 
+      <!-- Analytics Dashboard (Admin only) -->
+      <div id="tab-content-analytics" role="tabpanel" aria-labelledby="nav-analytics" style="display:none;">
+        <div class="section-header">
+          <h3><span>📊</span> ANALYTICS BI - RAPPORTS DÉTAILLÉS</h3>
+        </div>
+        <div id="analyticsDashboard"></div>
+      </div>
+
+      <!-- Audit Trail (Admin only) -->
+      <div id="tab-content-audit" role="tabpanel" aria-labelledby="nav-audit" style="display:none;">
+        <div class="mobile-section-header">
+          <div class="msh-left">
+            <div class="msh-icon">🧾</div>
+            <div class="msh-title">Journal d'audit</div>
+          </div>
+        </div>
+        <div class="section-header">
+          <h3><span>🧾</span> JOURNAL D'AUDIT</h3>
+        </div>
+        <div id="auditTrailContainer"></div>
+      </div>
+
     </div>
 
     <!-- BOTTOM NAVIGATION (MOBILE) -->
@@ -1361,6 +1400,16 @@
         <span class="nav-icon" aria-hidden="true">📜</span>
         <span>Infos</span>
       </a>
+      <a class="bottom-nav-item" tabindex="0" onclick="switchTab('analytics')" id="bnav-analytics" role="button"
+        aria-label="Analytics" style="display:none;">
+        <span class="nav-icon" aria-hidden="true">📊</span>
+        <span>Stats</span>
+      </a>
+      <a class="bottom-nav-item" tabindex="0" onclick="switchTab('audit')" id="bnav-audit" role="button"
+        aria-label="Audit" style="display:none;">
+        <span class="nav-icon" aria-hidden="true">🧾</span>
+        <span>Audit</span>
+      </a>
       <a class="bottom-nav-item" tabindex="0" onclick="switchTab('backup')" id="bnav-backup" role="button"
         aria-label="Sauvegarde des justificatifs">
         <span class="nav-icon" aria-hidden="true">💾</span>
@@ -1383,7 +1432,7 @@
         <!-- Le contenu accordéon est généré par guide.js (source unique HTML + PDF) -->
       </div>
       <div class="modal-footer">
-        <button class="btn btn-ghost" onclick="closeGuideModal()">Fermer</button>
+        <button class="btn btn-ghost" onclick="closeGuideModal()">Ferger</button>
         <button class="btn btn-primary" onclick="downloadGuidePDF()">📄 Télécharger en PDF</button>
       </div>
     </div>
@@ -1394,6 +1443,9 @@
 
   <!-- [+Guide] Logique du guide (additif, chargée après app.js) -->
   <script src="guide.js" defer></script>
+
+  <!-- [+Lot2] Modules Lot 2 : TVA, audit, workflow, IA, notifs, analytics, offline (additif) -->
+  <script src="lot2.js" defer></script>
 
 </body>
 

@@ -61,8 +61,10 @@ note-de-frais/
 |---------|---------------|
 | **Couleurs principales** | Bleu Eqnovia `#0B4F9E`, Orange `#F7931E` |
 | **Typographie** | Inter (300–800) |
-| **Composants** | Panels, badges, modals, toasts, bar charts |
+| **Composants** | Panels, badges, modals, toasts, bar charts, btn-download |
 | **Responsive** | Adapté mobile, tablette et desktop |
+
+| **Bouton d'installation** | `btn-download` — Affiche le bouton « Installer l'app » dans l'en-tête header, visible sur mobile et desktop. Clic → installPWA(). |
 
 ---
 
@@ -107,13 +109,16 @@ node build.js
 3. Activez GitHub Pages dans les paramètres du dépôt (source : branche `main`, dossier `/root`)
 4. L'application sera accessible sur `https://VOTRE_USERNAME.github.io/notes-de-frais/`
 
-### 📲 Installer l'application sur mobile (PWA)
+### 📲 Installer l'application sur mobile et desktop (PWA)
+
 L'application est une **Progressive Web App (PWA)**. Après déploiement :
 
 - **Android** : Ouvrez Chrome → menu → **"Ajouter à l'écran d'accueil"**
 - **iPhone** : Ouvrez Safari → bouton Partager → **"Ajouter à l'écran d'accueil"**
 
-Un bouton **"📲 Installer l'app"** apparaît également dans la barre supérieure lorsque l'installation est disponible.
+- **Desktop** : Cliquez sur le bouton **"📲 Installer l'app"** dans la barre supérieure droite de l'application ( bouton `btn-download` ), ou utilisez le menu du navigateur → **"Installer Eqnovia"**.
+
+Le bouton d'installation est toujours visible dans l'en-tête de l'application (à droite, près des boutons Guide et DB status) et s'affiche sur tous les appareils (mobile, tablette, desktop).
 
 ---
 

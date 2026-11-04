@@ -84,12 +84,12 @@ function withTimeout(promise, ms, label) {
 // Comptes par défaut (utilisés au premier lancement et comme référence)
 const DEFAULT_USERS = {
   admin: { password: 'eqnovia-2026', label: 'Administrateur', isAdmin: true, email: '', tel: '' },
-  user1: { password: 'rachid2026', label: 'Rachid Bayed', isAdmin: false, email: 'rbayed@eqnovia.ma', tel: '0661285981' },
-  user2: { password: 'soufiane2026', label: 'Soufiane Laraichi', isAdmin: false, email: 'slaraichi@eqnovia.ma', tel: '0661376108' },
+  user1: { password: 'rachid2026', label: 'Bayed Rachid', isAdmin: false, email: 'rbayed@eqnovia.ma', tel: '0661285981' },
+  user2: { password: 'soufiane2026', label: 'Laraichi Soufiane', isAdmin: false, email: 'slaraichi@eqnovia.ma', tel: '0661376108' },
   user3: { password: 'fatima2026', label: 'Bourzgui Fatima Zahra', isAdmin: false, email: 'fbourzgui@eqnovia.ma', tel: '0664549777' },
-  user4: { password: 'larbi2026', label: 'Larbi Ramzi', isAdmin: false, email: 'lramzi@eqnovia.ma', tel: '0707088004' },
+  user4: { password: 'larbi2026', label: '  Ramzi Larbi', isAdmin: false, email: 'lramzi@eqnovia.ma', tel: '0707088004' },
   user5: { password: 'ibrahime2026', label: 'Ibrahime', isAdmin: false, email: '', tel: '' },
-  user7: { password: 'aguersif2026', label: 'Omar AGUERSIF', isAdmin: false, email: 'oaguersif@eqnovia.ma', tel: '' },
+  user7: { password: 'aguersif2026', label: 'AGUERSIF Omar ', isAdmin: false, email: 'oaguersif@eqnovia.ma', tel: '' },
   comptable: { password: 'comptable2026', label: 'Comptable', isAdmin: false, isComptable: true, email: '', tel: '' }
 };
 
@@ -780,12 +780,12 @@ function togglePasswordVisibility() {
 function showPasswordResetHelp() {
   const msg = "🔐 Mots de passe par défaut Eqnovia :\n\n" +
     "• Administrateur : eqnovia-2026 (ou \"admin\")\n" +
-    "• Rachid Bayed : rachid2026\n" +
-    "• Soufiane Laraichi : soufiane2026\n" +
+    "• Bayed Rachid : rachid2026\n" +
+    "• Laraichi Soufiane : soufiane2026\n" +
     "• Bourzgui Fatima Zahra : fatima2026\n" +
-    "• Larbi Ramzi : larbi2026\n" +
+    "• Ramzi Larbi : larbi2026\n" +
     "• Ibrahime : ibrahime2026\n" +
-    "• Omar AGUERSIF : aguersif2026\n" +
+    "• AGUERSIF Omar: aguersif2026\n" +
     "• Comptable : comptable2026\n\n" +
     "Voulez-vous réinitialiser tous les mots de passe locaux aux valeurs par défaut ?";
 
@@ -1002,15 +1002,16 @@ function updateUserUI() {
   const dashboardMOContainer = document.getElementById('dashboardMOContainer');
   if (dashboardMOContainer) dashboardMOContainer.style.display = (isAdmin || isComptable) ? 'none' : '';
 
-  // Comptable sees all users' filter (like admin)
+  // Filtre utilisateur masqué pour le comptable
   const filterUser = document.getElementById('filterUser');
   if (filterUser) {
-    filterUser.style.display = (isAdmin || isComptable) ? '' : 'none';
+    filterUser.style.display = isAdmin ? '' : 'none';
   }
 
+  // Filtre mois-utilisateur masqué pour le comptable
   const filterMonthUser = document.getElementById('filterMonthUser');
   if (filterMonthUser) {
-    filterMonthUser.style.display = (isAdmin || isComptable) ? '' : 'none';
+    filterMonthUser.style.display = isAdmin ? '' : 'none';
   }
 
   // Hide/show user selector in sidebar — only admin can switch accounts
@@ -1030,6 +1031,12 @@ function updateUserUI() {
   // If comptable is on saisie tab, switch to all
   if (isComptable && activeTab === 'saisie') {
     switchTab('all');
+  }
+
+  // Afficher/Masquer bouton envoi mail remboursement pour admin
+  var btnMailRemb = document.getElementById('btnSendRembMail');
+  if (btnMailRemb) {
+    btnMailRemb.style.display = (typeof isAdmin !== 'undefined' && isAdmin) ? 'inline-flex' : 'none';
   }
   // Hide the delete-all button for comptable
   const deleteAllBtns = document.querySelectorAll('[onclick*="deleteAllExpenses"], [onclick*="clearAll"]');
@@ -1083,7 +1090,7 @@ function updateUserUI() {
   populateAssignedToDropdown();
 }
 
-// Resolve a user label (e.g. "Rachid Bayed") to its key (e.g. "user1")
+// Resolve a user label (e.g. " Bayed Rachid") to its key (e.g. "user1")
 function resolveUserKey(label) {
   if (!label) return '';
   for (const [key, u] of Object.entries(USERS)) {
@@ -2087,7 +2094,7 @@ function viewJustificatif(id) {
 // ════════════════════════════════════════════
 // TAB SWITCHING
 // ════════════════════════════════════════════
-const TABS = ['saisie', 'all', 'monthly', 'yearly', 'trimestre', 'comparison', 'remboursement', 'mission', 'admin-om', 'user-missions', 'policy', 'backup'];
+const TABS = ['saisie', 'all', 'monthly', 'yearly', 'trimestre', 'comparison', 'remboursement', 'mission', 'admin-om', 'user-missions', 'analytics', 'audit', 'policy', 'backup'];
 function switchTab(t) {
   // Profil comptable : les onglets Remboursement, Par mois, Par année et Saisie n'existent pas → repli sur 'all'
   if (isComptable && (t === 'remboursement' || t === 'monthly' || t === 'yearly' || t === 'saisie')) t = 'all';
@@ -2114,7 +2121,7 @@ function switchTab(t) {
     document.body.style.overflow = '';
   }
   if (t === 'all') renderAll();
-  if (t === 'remboursement') renderRemboursement();
+  if (t === 'remboursement') { renderRemboursement(); setTimeout(function () { var b = document.getElementById('btnSendRembMail'); if (b) b.style.display = (typeof isAdmin !== 'undefined' && isAdmin) ? 'inline-flex' : 'none'; }, 100); }
   if (t === 'monthly') renderMonthly();
   if (t === 'yearly') renderYearly();
   if (t === 'trimestre') renderTrimester();
@@ -2122,6 +2129,8 @@ function switchTab(t) {
   if (t === 'admin-om') loadAdminOM();
   if (t === 'user-missions') renderUserMissionOrders();
   if (t === 'saisie') renderDashboardMissionOrders();
+  if (t === 'analytics') { if (typeof window.renderAnalytics === 'function') window.renderAnalytics(); }
+  if (t === 'audit') { if (typeof window.renderAudit === 'function') window.renderAudit(); }
   if (t === 'backup') renderBackupStatus();
 }
 
@@ -2156,7 +2165,7 @@ function generateMissionOrder() {
   fiche.innerHTML = `
     <!-- EN-TÊTE AVEC LOGO -->
     <div class="om-header">
-      <div class="om-brand"><img src="logo.PNG" alt="Eqnovia" class="om-logo"/></div>
+      <div class="om-brand"><img src="icon-192.png" alt="Eqnovia" class="om-logo"/></div>
       <div class="om-title">ORDRE DE MISSION<small>N° ${esc(numero)}</small></div>
     </div>
 
@@ -2225,7 +2234,6 @@ function generateMissionOrder() {
     <div style="font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">Statut de la mission</div>
     ${statusHtml}
     ${comment ? `<div style="margin-top:10px;padding:10px 16px;background:#fff;border-radius:8px;font-size:11px;color:#666;text-align:left;border-left:3px solid ${status === 'approved' ? '#28a745' : status === 'rejected' ? '#dc3545' : '#ccc'};"><strong>Message de l'administration :</strong><br>${esc(comment)}</div>` : ''}
-    ${telephone && telephone !== '—' ? `<div style="margin-top:12px;" class="no-print"><a class="btn btn-primary" href="https://wa.me/${cleanPhone(telephone)}?text=${encodeURIComponent('Eqnovia - Ordre de mission N° ' + numero + '\n\nCollaborateur : ' + employe + '\nDate : ' + date + '\nTrajet : ' + depart + ' → ' + arrivee + '\nObjet : ' + objet + '\nTransport : ' + transport + '\n' + (remarques !== '—' ? 'Remarques : ' + remarques : ''))}" target="_blank" style="text-decoration:none;font-size:12px;padding:8px 20px;border-radius:20px;">💬 Envoyer par WhatsApp</a></div>` : ''}
   `;
   if (signSection) {
     fiche.insertBefore(statusSection, signSection);
@@ -2411,7 +2419,7 @@ function exportSingleOMPDF(index) {
 
     // ═══ LOGO (centered) ═══
     try {
-      doc.addImage('logo.PNG', 'PNG', cx - 20, y, 40, 14);
+      doc.addImage('icon-192.png', 'PNG', cx - 20, y, 40, 14);
     } catch (e) { /* no logo */ }
     y += 22;
 
@@ -2674,7 +2682,7 @@ function exportUserMissionsPDF() {
   const doc = new jsPDF('l', 'mm', 'a4');
 
   // Header with Eqnovia logo
-  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch (e) { /* fallback */ }
+  try { doc.addImage('icon-192.png', 'PNG', 20, 12, 16, 12); } catch (e) { /* fallback */ }
   doc.setFontSize(8); doc.setTextColor(247, 147, 30); doc.setFont(undefined, 'normal');
   doc.text('Notes de Frais', 38, 22);
   doc.setFontSize(14); doc.setTextColor(53, 61, 79); doc.setFont(undefined, 'bold');
@@ -2742,7 +2750,7 @@ function exportAdminOMPDF(docId) {
     const doc = new jsPDF('p', 'mm', 'a4');
 
     // Logo
-    try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch (e) { /* fallback */ }
+    try { doc.addImage('icon-192.png', 'PNG', 14, 10, 30, 10); } catch (e) { /* fallback */ }
 
     // Title
     doc.setFontSize(16);
@@ -2917,7 +2925,6 @@ function renderUserMissionOrders() {
         <button class="om-h-action pdf" onclick="exportUserOMPDF('${mo._firebaseId || mo._localId}')" title="Télécharger PDF">📄</button>
         <button class="om-h-action" onclick="sendUserMOByEmail('${mo._firebaseId || mo._localId}')" title="Envoyer par Email" style="background:var(--eq-blue-pale);color:var(--eq-blue);">📧</button>
         ${navigator.share ? `<button class="om-h-action" onclick="shareMOByWebShare('${mo._firebaseId || mo._localId}')" title="Partager" style="background:var(--gray-100);color:var(--gray-600);">📤</button>` : ''}
-        ${mo.tel && mo.tel !== '—' && mo.tel.length > 5 ? `<button class="om-h-action" onclick="sendUserMOByWhatsApp('${mo._firebaseId || mo._localId}')" title="WhatsApp" style="background:var(--green-pale);color:var(--green);">💬</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -2959,7 +2966,6 @@ function renderDashboardMissionOrders() {
         <button class="om-h-action pdf" onclick="exportUserOMPDF('${mo._firebaseId || mo._localId}')" title="Télécharger PDF">📄</button>
         <button class="om-h-action" onclick="sendUserMOByEmail('${mo._firebaseId || mo._localId}')" title="Envoyer par Email" style="background:var(--eq-blue-pale);color:var(--eq-blue);">📧</button>
         ${navigator.share ? `<button class="om-h-action" onclick="shareMOByWebShare('${mo._firebaseId || mo._localId}')" title="Partager" style="background:var(--gray-100);color:var(--gray-600);">📤</button>` : ''}
-        ${mo.tel && mo.tel !== '—' && mo.tel.length > 5 ? `<button class="om-h-action" onclick="sendUserMOByWhatsApp('${mo._firebaseId || mo._localId}')" title="WhatsApp" style="background:var(--green-pale);color:var(--green);">💬</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -2991,7 +2997,7 @@ function exportSingleOMPDFByData(mo) {
     let y = 20;
 
     // LOGO (centered)
-    try { doc.addImage('logo.PNG', 'PNG', cx - 20, y, 40, 14); } catch (e) { }
+    try { doc.addImage('icon-192.png', 'PNG', cx - 20, y, 40, 14); } catch (e) { }
     y += 22;
 
     // TITLE (centered)
@@ -3236,7 +3242,7 @@ async function generatePDFBase64(mo) {
       const doc = new jsPDF('p', 'mm', 'a4');
 
       // Logo
-      try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch (e) { /* fallback */ }
+      try { doc.addImage('icon-192.png', 'PNG', 14, 10, 30, 10); } catch (e) { /* fallback */ }
 
       // Title
       doc.setFontSize(16);
@@ -3394,7 +3400,7 @@ async function shareMOByWebShare(docId) {
     const doc = new jsPDF('p', 'mm', 'a4');
 
     // Logo
-    try { doc.addImage('logo.PNG', 'PNG', 14, 10, 30, 10); } catch (e) { /* fallback */ }
+    try { doc.addImage('icon-192.png', 'PNG', 14, 10, 30, 10); } catch (e) { /* fallback */ }
 
     // Title
     doc.setFontSize(16);
@@ -3536,37 +3542,6 @@ async function shareMOByWebShare(docId) {
     }
   }
 }
-
-function sendMOByWhatsApp(docId) {
-  const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
-  if (!mo) return toast('Ordre de mission introuvable.', 'err');
-
-  if (!mo.tel || mo.tel === '—' || mo.tel.length < 5) {
-    return toast('Numéro de téléphone non renseigné pour cet ordre de mission.', 'err');
-  }
-
-  const message = `Eqnovia - Ordre de mission N° ${mo.numero}\n\nCollaborateur : ${mo.employe}\nDate : ${mo.date}\nTrajet : ${mo.depart} → ${mo.arrivee}\nObjet : ${mo.objet}\nTransport : ${mo.transport}\n${mo.remarques !== '—' ? 'Remarques : ' + mo.remarques : ''}`;
-
-  const waUrl = `https://wa.me/${cleanPhone(mo.tel)}?text=${encodeURIComponent(message)}`;
-  window.open(waUrl, '_blank');
-  toast('💬 Ouverture de WhatsApp...', 'ok');
-}
-
-function sendUserMOByWhatsApp(docId) {
-  const mo = missionOrdersCache.find(m => m._firebaseId === docId || m._localId === docId);
-  if (!mo) return toast('Ordre de mission introuvable.', 'err');
-
-  if (!mo.tel || mo.tel === '—' || mo.tel.length < 5) {
-    return toast('Numéro de téléphone non renseigné pour cet ordre de mission.', 'err');
-  }
-
-  const message = `Eqnovia - Ordre de mission N° ${mo.numero}\n\nCollaborateur : ${mo.employe}\nDate : ${mo.date}\nTrajet : ${mo.depart} → ${mo.arrivee}\nObjet : ${mo.objet}\nTransport : ${mo.transport}\n${mo.remarques !== '—' ? 'Remarques : ' + mo.remarques : ''}`;
-
-  const waUrl = `https://wa.me/${cleanPhone(mo.tel)}?text=${encodeURIComponent(message)}`;
-  window.open(waUrl, '_blank');
-  toast('💬 Ouverture de WhatsApp...', 'ok');
-}
-
 // ════════════════════════════════════════════
 // ADD EXPENSE
 // ════════════════════════════════════════════
@@ -3705,6 +3680,11 @@ function editRow(id) {
 
   if (!isAdmin && exp.user !== currentUser) {
     return toast('Vous ne pouvez modifier que vos propres dépenses.', 'err');
+  }
+
+  // 🔒 Note déjà remboursée : non modifiable (sauf admin / comptable)
+  if (!isAdmin && !isComptable && exp.rembourse) {
+    return toast('🔒 Cette note de frais est remboursée — elle ne peut plus être modifiée.', 'err');
   }
 
   editingId = id;
@@ -4334,7 +4314,7 @@ function renderAll() {
       const createdByLabel = e.createdBy ? (USERS[e.createdBy] ? USERS[e.createdBy].label : e.createdBy) : '—';
       const modifiedByLabel = e.modifiedBy ? (USERS[e.modifiedBy] ? USERS[e.modifiedBy].label : e.modifiedBy) : '—';
       const isOwner = e.user === currentUser;
-      const canEdit = isAdmin || (isOwner && !isComptable);
+      const canEdit = isAdmin || (isOwner && !isComptable && !e.rembourse);
       const canDelete = isAdmin;
 
       const remb = isRembourse(e);
@@ -4471,7 +4451,7 @@ function renderMonthly() {
         const createdByLabel = e.createdBy ? (USERS[e.createdBy] ? USERS[e.createdBy].label : e.createdBy) : '—';
         const modifiedByLabel = e.modifiedBy ? (USERS[e.modifiedBy] ? USERS[e.modifiedBy].label : e.modifiedBy) : '—';
         const isOwner = e.user === currentUser;
-        const canEdit = isAdmin || (isOwner && !isComptable);
+        const canEdit = isAdmin || (isOwner && !isComptable && !e.rembourse);
         const canDelete = isAdmin;
 
         return `<tr>
@@ -5600,6 +5580,44 @@ function clearBatchResults() {
 }
 
 // ════════════════════════════════════════════
+// ENVOI DEMANDE REMBOURSEMENT PAR EMAIL (ADMIN)
+// ════════════════════════════════════════════
+function sendRemboursementEmail() {
+  if (typeof isAdmin === 'undefined' || !isAdmin) {
+    if (typeof toast === 'function') toast('Réservé à l\'administrateur', 'err');
+    return;
+  }
+  try {
+    var all = typeof dataAll === 'function' ? dataAll() : [];
+    var unrefunded = all.filter(function (e) { return !e.rembourse; });
+    if (unrefunded.length === 0) {
+      if (typeof toast === 'function') toast('Toutes les notes de frais sont déjà remboursées', 'ok');
+      return;
+    }
+    var byUser = {};
+    var total = 0;
+    unrefunded.forEach(function (e) {
+      var u = e.user || 'inconnu';
+      if (!byUser[u]) byUser[u] = { count: 0, total: 0, label: (typeof USERS !== 'undefined' && USERS && USERS[u] ? USERS[u].label : u) };
+      byUser[u].count++;
+      var amt = parseFloat(e.amount) || 0;
+      byUser[u].total += amt;
+      total += amt;
+    });
+    var lines = Object.keys(byUser).map(function (u) {
+      var bu = byUser[u];
+      return '- ' + bu.label + ' : ' + bu.count + ' note(s) - ' + bu.total.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' DH';
+    }).join('\n');
+    var subject = 'Demande de remboursement - Notes de frais non remboursées (' + unrefunded.length + ')';
+    var body = 'Bonjour,\n\nVeuillez procéder au remboursement des notes de frais suivantes :\n\n' + lines + '\n\nMontant total à rembourser : ' + total.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' DH\n\nDate : ' + new Date().toLocaleDateString('fr-FR') + '\n\nCordialement,\nEqnovia - Gestion des notes de frais';
+    var mailto = 'mailto:slaraichi@eqnovia.ma?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+    window.location.href = mailto;
+    if (typeof toast === 'function') toast('📧 Client mail ouvert pour slaraichi@eqnovia.ma', 'info');
+  } catch (e) { console.error(e); if (typeof toast === 'function') toast('Erreur lors de l\'envoi', 'err'); }
+}
+if (typeof window !== 'undefined') window.sendRemboursementEmail = sendRemboursementEmail;
+
+// ════════════════════════════════════════════
 // EXPORTS (avec filtres actifs)
 // ════════════════════════════════════════════
 function getFilteredDataForExport() {
@@ -5716,116 +5734,78 @@ function exportPDF() {
   const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
   const total = sorted.reduce((s, e) => s + (e.amount || 0), 0);
 
-  // ── Header background ──
-  doc.setFillColor(...blue);
-  doc.rect(0, 0, W, 28, 'F');
-  doc.setFillColor(...blueLight);
-  doc.rect(0, 28, W, 1.5, 'F');
-
-  // Logo
-  try { doc.addImage('logo.PNG', 'PNG', M, 5, 18, 18); } catch (e) { }
-
-  // Company name
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(...white);
-  doc.text('EQNOVIA', 36, 14);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  doc.setTextColor(200, 220, 245);
-  doc.text('Notes de Frais \u2014 Gestion des dépenses', 36, 21);
-
-  // Date on the right
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(200, 220, 245);
-  doc.text(now.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }), W - M, 14, { align: 'right' });
-  doc.setFontSize(7);
-  doc.setTextColor(160, 190, 220);
-  doc.text('Généré le ' + now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }), W - M, 20, { align: 'right' });
+  // ── Header avec logo Eqnovia (en haut du PDF) ──
+  try {
+    doc.addImage('icon-192.png', 'PNG', W / 2 - 20, 6, 40, 14);
+  } catch (e) {
+    try {
+      doc.addImage('icon-192.png', 'PNG', W / 2 - 20, 6, 40, 14);
+    } catch (e2) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(18, 84, 148);
+      doc.text('eqnovia', W / 2 - 22, 12, { align: 'center' });
+    }
+  }
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 110, 120);
+  doc.text('Généré le ' + now.toLocaleDateString('fr-FR'), W - M, 8, { align: 'right' });
+  doc.text(userLabel, W - M, 12, { align: 'right' });
+  doc.setDrawColor(200, 205, 215);
+  doc.setLineWidth(0.4);
+  doc.line(M, 15, W - M, 15);
 
   // ── Title section ──
-  let y = 38;
+  let y = 28;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.setTextColor(...blue);
-  doc.text('Récapitulatif des Dépenses Professionnelles', M, y);
-  y += 4;
-  doc.setDrawColor(...blue);
-  doc.setLineWidth(0.6);
-  doc.line(M, y, W - M, y);
-  y += 5;
+  doc.setFontSize(12);
+  doc.setTextColor(...dark);
+  doc.text('LISTE DES NOTES DE FRAIS', M, y + 4);
+  y += 8;
 
-  // ── Info badges row ──
-  const badgeH = 10;
-  const rembTotal = sorted.filter(isRembourse).reduce((s, e) => s + (e.amount || 0), 0);
-  const badges = isComptable ? [
-    { label: 'Collaborateur', value: userLabel },
-    { label: 'Nombre', value: sorted.length + ' dépense(s)' },
-    { label: 'Total TTC', value: fmtDH(total) },
-    { label: 'Période', value: sorted.length ? (fmtDate(sorted[0].date) + ' — ' + fmtDate(sorted[sorted.length - 1].date)) : '—' }
-  ] : [
-    { label: 'Collaborateur', value: userLabel },
-    { label: 'Nombre', value: sorted.length + ' dépense(s)' },
-    { label: 'Total TTC', value: fmtDH(total) },
-    { label: 'Période', value: sorted.length ? (fmtDate(sorted[0].date) + ' — ' + fmtDate(sorted[sorted.length - 1].date)) : '—' },
-    { label: 'Remboursé', value: fmtDH(rembTotal) },
-    { label: 'Non remboursé', value: fmtDH(total - rembTotal) }
-  ];
-  const badgeW = (W - M * 2 - (badges.length - 1) * 2.5) / badges.length;
-  badges.forEach((b, i) => {
-    const bx = M + i * (badgeW + 2.5);
-    doc.setFillColor(...((i === 2) ? blue : altRow));
-    doc.roundedRect(bx, y, badgeW, badgeH, 1.5, 1.5, 'F');
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6);
-    doc.setTextColor(...((i === 2) ? [200, 220, 245] : grayLight));
-    doc.text(b.label.toUpperCase(), bx + 3, y + 3.5);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize((i === 2) ? 8.5 : 7.5);
-    doc.setTextColor(...((i === 2) ? white : dark));
-    const maxValW = badgeW - 6;
-    doc.text(doc.splitTextToSize(b.value, maxValW)[0] || b.value, bx + 3, y + 8);
-  });
-  y += badgeH + 5;
+  // ── Info line ──
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...gray);
+  doc.text('Période: ' + (sorted.length ? (fmtDate(sorted[0].date) + ' au ' + fmtDate(sorted[sorted.length - 1].date)) : '—') + ' | Nombre: ' + sorted.length + ' | Total TTC: ' + fmtDH(total), M, y);
+  y += 6;
 
   // ── Table ──
-  const head = [['N°', 'Date', 'Description', 'Catégorie', 'Total TTC (DH)', 'Objet / Mission', 'Utilisateur']];
+  const head = [['N°', 'Date', 'Collaborateur', 'Description', 'Catégorie', 'Montant TTC', 'Statut']];
   const body = sorted.map((e, i) => [
     String(i + 1),
     fmtDate(e.date),
-    e.desc,
+    USERS[e.user]?.label || e.user || '—',
+    e.desc || '—',
     e.cat || 'Autre',
     fmtDH(e.amount),
-    e.mission || '—',
-    USERS[e.user]?.label || e.user
+    e.rembourse ? 'Remboursé' : 'Non remboursé'
   ]);
   doc.autoTable({
     head, body, startY: y,
     styles: {
-      font: 'helvetica', fontSize: 8, cellPadding: 3,
-      valign: 'middle', lineColor: [220, 225, 232], lineWidth: 0.3,
-      overflow: 'linebreak'
+      font: 'helvetica', fontSize: 7.5, cellPadding: 2.5,
+      valign: 'middle', lineColor: [210, 215, 225], lineWidth: 0.25
     },
     headStyles: {
-      fillColor: blue, textColor: white,
-      fontStyle: 'bold', fontSize: 8, halign: 'center',
-      cellPadding: { top: 3.5, bottom: 3.5, left: 3, right: 3 }
+      fillColor: [245, 247, 250], textColor: [30, 36, 44],
+      fontStyle: 'bold', fontSize: 7.5, halign: 'center',
+      cellPadding: { top: 3, bottom: 3, left: 2, right: 2 }
     },
-    alternateRowStyles: { fillColor: altRow },
+    alternateRowStyles: { fillColor: [252, 253, 255] },
     columnStyles: {
-      0: { cellWidth: 12, halign: 'center', textColor: gray, fontStyle: 'normal' },
-      1: { cellWidth: 26, halign: 'center', fontStyle: 'normal' },
-      2: { cellWidth: 80, halign: 'left' },
-      3: { cellWidth: 42, halign: 'center' },
-      4: { cellWidth: 32, halign: 'right', fontStyle: 'bold', textColor: blue },
-      5: { cellWidth: 45, halign: 'left' },
-      6: { cellWidth: 30, halign: 'center' }
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 22, halign: 'center' },
+      2: { cellWidth: 38, halign: 'left' },
+      3: { cellWidth: 95, halign: 'left' },
+      4: { cellWidth: 32, halign: 'center' },
+      5: { cellWidth: 32, halign: 'right', fontStyle: 'bold' },
+      6: { cellWidth: 28, halign: 'center' }
     },
-    foot: [['', '', '', 'TOTAL TTC', fmtDH(total), '', '']],
+    foot: [['', '', '', '', 'TOTAL TTC', fmtDH(total), '']],
     footStyles: {
-      fillColor: blueLight, fontStyle: 'bold', textColor: blue,
-      fontSize: 8.5, cellPadding: 3.5
+      fillColor: [245, 247, 250], fontStyle: 'bold', textColor: [30, 36, 44],
+      fontSize: 7.5
     },
     margin: { left: M, right: M },
     didParseCell: function (hookData) {
@@ -5850,14 +5830,14 @@ function exportPDF() {
 
   // ── Footer ──
   const fy = doc.lastAutoTable.finalY + 4;
-  doc.setDrawColor(...blueLight);
+  doc.setDrawColor(200, 205, 215);
   doc.setLineWidth(0.3);
   doc.line(M, fy, W - M, fy);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
-  doc.setTextColor(...grayLight);
-  doc.text('\u00a9 ' + now.getFullYear() + ' EQNOVIA \u2014 Notes de Frais', M, fy + 5);
-  doc.text('Document généré automatiquement', W - M, fy + 5, { align: 'right' });
+  doc.setTextColor(...gray);
+  doc.text('EQNOVIA — Notes de Frais', M, fy + 5);
+  doc.text('Page ' + doc.internal.getNumberOfPages(), W - M, fy + 5, { align: 'right' });
   doc.save('note-de-frais_' + userLabel.replace(/ /g, '_') + '_' + today() + '.pdf');
   toast('Export PDF téléchargé.', 'ok');
 }
@@ -6310,7 +6290,7 @@ function exportPDFTrimestre() {
   const doc = new jsPDF('p', 'mm', 'a4');
 
   // Header with logo
-  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch (e) { /* fallback */ }
+  try { doc.addImage('icon-192.png', 'PNG', 20, 12, 16, 12); } catch (e) { /* fallback */ }
   doc.setFontSize(8); doc.setTextColor(247, 147, 30); doc.setFont(undefined, 'normal');
   doc.text('Notes de Frais', 38, 22);
 
@@ -6426,7 +6406,7 @@ function exportPDFComparison() {
   const doc = new jsPDF('p', 'mm', 'a4');
 
   // Header
-  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch (e) { /* fallback */ }
+  try { doc.addImage('icon-192.png', 'PNG', 20, 12, 16, 12); } catch (e) { /* fallback */ }
   doc.setFontSize(8); doc.setTextColor(247, 147, 30); doc.setFont(undefined, 'normal');
   doc.text('Notes de Frais', 38, 22);
 
@@ -6652,7 +6632,6 @@ function renderAdminOM() {
                 ${s !== 'approved' ? `<button class="status-btn approve" onclick="adminOMSetStatus('${key}','approved')" title="Approuver">✅</button>` : ''}
                 ${s !== 'rejected' ? `<button class="status-btn reject" onclick="adminOMSetStatus('${key}','rejected')" title="Rejeter">❌</button>` : ''}
                 ${s !== 'pending' ? `<button class="status-btn pending-btn" onclick="adminOMSetStatus('${key}','pending')" title="Remettre en attente">⏳</button>` : ''}
-                ${o.tel && o.tel !== '—' && o.tel.length > 5 ? `<a class="status-btn" href="${notifyOMByWhatsApp(o, o._status || 'pending', o._comment || '')}" target="_blank" title="WhatsApp" style="text-decoration:none;background:var(--green-pale);color:var(--green);">💬</a>` : ''}
               </div>
             </td>
           </tr>`;
@@ -6732,7 +6711,7 @@ function adminOMExportPDF() {
   const doc = new jsPDF('l', 'mm', 'a4');
 
   // Header with Eqnovia logo
-  try { doc.addImage('logo.PNG', 'PNG', 20, 12, 16, 12); } catch (e) { /* fallback */ }
+  try { doc.addImage('icon-192.png', 'PNG', 20, 12, 16, 12); } catch (e) { /* fallback */ }
   doc.setFontSize(8); doc.setTextColor(247, 147, 30); doc.setFont(undefined, 'normal');
   doc.text('Notes de Frais', 38, 22);
   doc.setFontSize(14); doc.setTextColor(53, 61, 79); doc.setFont(undefined, 'bold');
@@ -7212,7 +7191,10 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 
 function installPWA() {
-  if (!deferredPrompt) return;
+  if (!deferredPrompt) {
+    toast('Installation non disponible sur ce navigateur.', 'err');
+    return;
+  }
   deferredPrompt.prompt();
   deferredPrompt.userChoice.then((choiceResult) => {
     if (choiceResult.outcome === 'accepted') {
@@ -7222,3 +7204,4 @@ function installPWA() {
     if (installBtn) installBtn.style.display = 'none';
   });
 }
+window.installPWA = installPWA;
